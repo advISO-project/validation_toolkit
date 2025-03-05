@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools >= 61.0",
+            "setuptools_scm[toml] >= 4, <6",
+            "setuptools_scm_git_archive",
+            "wheel >= 0.29.0"
+            ]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+# setuptools_scm obtains the package version number from Git tags so we don't
+# have to have a version number hardcoded in scripts in the package 
+# upon installation, the version is written (from git tag) to this file
+write_to = "TableValidator/version.py"
+git_describe_command = "git describe --dirty --tags --long --match v* --first-parent"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["TableValidator"]
+exclude = []
+namespaces = false
+
+[project]
+name = "TableValidator"
+authors = [
+    {name = "Bruhad Dave", email = "bd8@sanger.ac.uk"},
+]
+description = "Compare (verify/validate) analysis outputs against ISO-in-a-Box standard references."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = [""]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent"
+
+]
+dependencies = [
+    ##TODO: Add as needed
+	"flake8>=7.0.0",
+	"pytest>=6.2.2",
+]
+
+dynamic = ["version"]
+
+[project.scripts]
+table_validator = "TableValidator.cli:main"
