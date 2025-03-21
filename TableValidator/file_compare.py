@@ -61,6 +61,8 @@ class FileCompare():
     def confirm_schema(self):
         """Function to check data types in the query/subject table to ensure it matches the schema inferred from the reference table
         """
+
+        col_name_warnings = 0
         for sample_id, data_value in self.query_table.items():
             for k, v in data_value.items():
                 try:
@@ -70,8 +72,11 @@ class FileCompare():
                     assert field_features
                 except AssertionError:
                     warnings.warn(FieldMismatchWarning(f"Field {k} found in query table but not in schema!"))
+                    col_name_warnings += 1
+                    ## if the number of column mismatches equals the number of columns, this use case likely needs to employ the config.
+                    if col_name_warnings == len(data_value.keys()):
+                        raise Exception(f"No column names seem to match between the schema and the query table. You must provide a config file when column names differ between the reference and query tables.")
                     continue
-
 
                 ## explicitly collect expected types from schema and whether the field is required
                 expected_types = field_features["valid_types"]
