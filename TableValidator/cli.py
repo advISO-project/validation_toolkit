@@ -17,11 +17,12 @@ def collect_args():
     file_compare_mode = subparsers.add_parser("validate")
     file_compare_mode.add_argument("-r", "--ref_table", type=str, required=True, help="Reference tabular dataset.")
     file_compare_mode.add_argument("-q", "--query_table", type=str, required=True, help="Subject tabular dataset to compare.")
-    file_compare_mode.add_argument("-s", "--sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs.")
+    file_compare_mode.add_argument("-rs", "--ref_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the reference table.")
+    file_compare_mode.add_argument("-qs", "--query_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the query table.")
     file_compare_mode.add_argument("-e", "--strict", action = "store_true", required=False, help="Whether to raise warnings as exceptions or not.")
     file_compare_mode.add_argument("-m", "--mode", type=str, required=False, default="quick_compare", help="How to execute comparison. [quick_compare, compare_subset, compare_custom]")
     file_compare_mode.add_argument("-l", "--field_list", type=str, required=False, help="Comma-separated list of column names/fields to compare, required and used ONLY if using mode 'compare_subset'.")
-    file_compare_mode.add_argument("-c", "--custom_config", type=str, required=False, help="Custom config file, required and used ONLY if using mode 'compare_custom'. CURRENTLY NOT IMPLEMENTED")
+    file_compare_mode.add_argument("-c", "--custom_config", type=str, required=False, help="Custom config file containing col_name and value mappings in .yaml format.")
 
     format_convert_mode = subparsers.add_parser("convert_format")
     format_convert_mode.add_argument("-i", "--input_filepath", type=str, required=False, help="File path to read data from for conversion to new format.")
@@ -38,33 +39,39 @@ def main():
     args = collect_args()
 
     try:
-        assert args.mode in ["quick_compare", "compare_subset", "compare_custom"]
+        assert args.mode in ["quick_compare", "compare_subset"]
     except AssertionError:
-        raise ValueError("args.mode should be in [quick_compare, compare_subset, compare_custom]")
+        raise ValueError("args.mode should be in [quick_compare, compare_subset]")
 
     if args.run_mode == "validate":
         r_file = os.path.abspath(args.ref_table)
         q_file = os.path.abspath(args.query_table)
-        r_table = File_IO(input_file=r_file, sample_id_key=args.sampleid_key)
-        q_table = File_IO(input_file=q_file, sample_id_key=args.sampleid_key)
+
+        print("Reading data from files...")
+        if args.custom_config:
+            r_table = File_IO(input_file=r_file, sample_id_key=args.ref_sampleid_key, config=args.custom_config)
+        else:
+            r_table = File_IO(input_file=r_file, sample_id_key=args.ref_sampleid_key)
+        q_table = File_IO(input_file=q_file, sample_id_key=args.query_sampleid_key)
 
         validator = FileCompare(left_data=r_table.data_reader, right_data=q_table.data_reader, strict=args.strict)
+
+        print("Setting up and validating schema...")
         validator.create_schema()
         validator.confirm_schema()
 
         if args.mode == "quick_compare":
+            print("Running quick_compare...")
             validator.compare_values()
 
         elif args.mode == "compare_subset":
+            print("Running compare_subset...")
             if not args.field_list:
-                raise ValueError("Cannot run custom comparison without a list of fields to compare.")
+                raise ValueError("Cannot run subset comparison without a list of fields to compare.")
             fields_to_compare = args.field_list.split(",")
             validator.compare_values(field_names=fields_to_compare)
 
-        elif args.mode == "compare_custom":
-            raise NotImplementedError("This mode has not currently been implemented.")
-            if not args.custom_config:
-                raise ValueError("Cannot run custom comparison without a config file.")
+        print("Success!")
 
     elif args.run_mode == "convert_format":
         ## admin
