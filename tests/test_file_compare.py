@@ -12,6 +12,17 @@ def test_init():
     assert test_object, "A test file_compare object should be built"
     return test_object
 
+@pytest.fixture
+def test_init_config():
+    my_ref_fileio_object = File_IO(input_file="tests/test_data/data_map_test_left.csv", sample_id_key="col_left_1", config="tests/test_data/sample_config.yaml")
+    my_ref_fileio_object_no_config = File_IO(input_file="tests/test_data/data_map_test_left.csv", sample_id_key="col_left_1")
+    my_query_fileio_object = File_IO(input_file="tests/test_data/data_map_test_right.csv", sample_id_key="col_right_1")
+
+    test_object_no_config = FileCompare(left_data=my_ref_fileio_object_no_config.data_reader, right_data=my_query_fileio_object.data_reader)
+    test_object_w_config = FileCompare(left_data=my_ref_fileio_object.data_reader, right_data=my_query_fileio_object.data_reader)
+
+    return test_object_no_config, test_object_w_config
+
 def test_create_schema(test_init):
     test_object = test_init
     test_object.create_schema()
@@ -64,3 +75,15 @@ def test_compare_values_specific_fields():
     ## even though this test uses a value_mismatch test fixture
     ## there should be no warnings as the field in question is not included in the provided list of field names to check
     test_object.compare_values(field_names=["sample_id", "field1", "field3"])
+
+def test_compare_fail_with_no_config(test_init_config):
+    test_object_no_config, _ = test_init_config
+    test_object_no_config.create_schema()
+    with pytest.raises(Exception):
+        test_object_no_config.confirm_schema()
+
+def test_compare_values_config(test_init_config):
+    _, test_object_w_config = test_init_config
+    test_object_w_config.create_schema()
+    test_object_w_config.confirm_schema()
+    test_object_w_config.compare_values()
