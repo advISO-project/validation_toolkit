@@ -36,7 +36,7 @@ def test_confirm_schema_fail():
     test_object_lenient.create_schema()
 
     ## there should be a schema check failure here
-    with pytest.warns(SchemaMismatchWarning, match="Field field2 is of type <class 'bool'>, expected types are {<class 'int'>, <class 'str'>}"):
+    with pytest.warns(SchemaMismatchWarning, match="Field field2 is of type <class 'bool'>, expected types are {<class 'int'>, <class 'str'>}" or "Field field2 is of type <class 'bool'>, expected types are {<class 'str'>, <class 'int'>}"):
         test_object_lenient.confirm_schema()
 
     ## using strict mode, this warning should now be an exception -- pytest.raises needed to catch it
