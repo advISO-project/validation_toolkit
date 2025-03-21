@@ -8,7 +8,7 @@ class File_IO():
     """Read, write and intercovert between a range of file types.
         Currently supports csv, tsv, json, and yaml
     """
-    def __init__(self, input_file: str, sample_id_key: str, data_reader: dict = None):
+    def __init__(self, input_file: str, sample_id_key: str, config: str = None, data_reader: dict = None):
         """Initialising a File_IO object
 
         Args:
@@ -54,6 +54,10 @@ class File_IO():
             ## if json or yaml, pass to serialized file reader function
             else:
                 self.data_reader = read_functions[self.input_file_type](self.full_path_input_file)
+
+            ##TODO: Add this method
+            if config:
+                self.data_reader = self.map_data(data_reader_dict=self.data_reader, config=config)
 
             ## collect a list of fields/column names from the input
             self.fields = []
@@ -299,3 +303,22 @@ class File_IO():
         """
         with open(output_file, "w") as outhandle:
             yaml.dump(self.data_reader, outhandle, indent=4)
+
+    def map_data(self, data_reader_dict, config):
+        with open(config, "rt") as config_handle:
+            config_dict = yaml.safe_load(config_handle)
+
+        col_mappings = {k: v["col_name"] for k, v in config_dict.items()}
+        val_mappings = {k: v["value_map"] for k, v in config_dict.items()}
+
+        mapped = {}
+        for k, v in self.data_reader.items():
+            mapped_vals = {}
+            for val_k, val_v in v.items():
+                if val_mappings[val_k]:
+                    mapped_vals[col_mappings[val_k]] = val_mappings[val_k][val_v]
+                else:
+                    mapped_vals[col_mappings[val_k]] = val_v
+            mapped[k] = mapped_vals
+
+        return mapped
