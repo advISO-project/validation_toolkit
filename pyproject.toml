@@ -37,6 +37,7 @@ dependencies = [
     ##TODO: Add as needed
 	"flake8>=7.0.0",
 	"pytest>=6.2.2",
+    "pyyaml",
 ]
 
 dynamic = ["version"]
