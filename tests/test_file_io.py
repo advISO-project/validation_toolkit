@@ -46,7 +46,6 @@ def test_format_inference():
     my_fileio_object_tsv = File_IO(input_file="tests/test_data/ref_toy_tsv.txt", sample_id_key="sample_id")
     assert my_fileio_object_tsv.input_file_type == "tsv", "Expected to infer as tsv from txt file"
 
-
 def test_format_inference_error():
     with pytest.raises(UnsupportedFileFormatError) as error1_info:
         my_fileio_object_faulty_simple = File_IO(input_file="tests/test_data/test_true_txt_simple.txt", sample_id_key="sample_id")
@@ -63,3 +62,11 @@ def test_infer_types():
     assert my_fileio_object._infer_type(var="3.14") == 3.14, "Float inference fails"
     assert my_fileio_object._infer_type(var="simple_string") == "simple_string", "Inference incorrectly applied to string"
 
+def test_data_mapping():
+    my_ref_fileio_object = File_IO(input_file="tests/test_data/data_map_test_left.csv", sample_id_key="col_left_1", config="tests/test_data/sample_config.yaml")
+    my_ref_fileio_object_no_config = File_IO(input_file="tests/test_data/data_map_test_left.csv", sample_id_key="col_left_1")
+    my_query_fileio_object = File_IO(input_file="tests/test_data/data_map_test_right.csv", sample_id_key="col_right_1")
+
+    assert list(my_ref_fileio_object.data_reader.keys()) == list(my_query_fileio_object.data_reader.keys()), "Config mapping erroneously altered sample_ids"
+    assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
+    assert not sorted(my_ref_fileio_object_no_config.fields) == sorted(my_query_fileio_object.fields), "Column names should not match when config is not used"
