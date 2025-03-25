@@ -101,6 +101,7 @@ def _files_are_identical(file1, file2):
     diff = [i for i in diff]
 
     if diff:
+        print(f"{diff = }")
         return False
     else:
         return True

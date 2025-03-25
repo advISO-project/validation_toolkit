@@ -36,6 +36,6 @@ run_tests:
   script:
     - pip install -r requirements.txt
     - pip install .
-    - pytest
+    - pytest -v
   artifacts:
     expire_in: "5 mins"
