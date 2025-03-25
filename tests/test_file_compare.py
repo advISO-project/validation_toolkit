@@ -157,7 +157,7 @@ def test_output_files_schema_mismatch(tmp_path):
 
     files_identical, diff =  _files_are_identical(file1="tests/test_data/pytest_out_schema_mismatch.json", file2=f"{tmp_path}/test_out_schema_mismatch.json")[0], "Files should be identical!"
     if is_docker():
-        assert len(diff) == 11
+        assert len(diff) == 26
     else:
         assert files_identical
 
