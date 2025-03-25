@@ -4,6 +4,12 @@ from TableValidator.file_io import File_IO
 from TableValidator.file_compare import FileCompare
 from TableValidator.custom_exceptions import SchemaMismatchWarning, ValueMismatchWarning
 
+from pathlib import Path
+
+def is_docker():
+    cgroup = Path("/proc/self/cgroup")
+    return Path("/.dockerenv").is_file() or (cgroup.is_file() and "docker" in cgroup.read_text())
+
 @pytest.fixture
 def test_init():
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
@@ -102,6 +108,7 @@ def _files_are_identical(file1, file2):
 
     if diff:
         print(f"{diff = }")
+        print(len(diff))
         return False
     else:
         return True
