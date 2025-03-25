@@ -20,7 +20,7 @@ def collect_args():
     file_compare_mode.add_argument("-rs", "--ref_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the reference table.")
     file_compare_mode.add_argument("-qs", "--query_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the query table.")
     file_compare_mode.add_argument("-e", "--strict", action = "store_true", required=False, help="Whether to raise warnings as exceptions or not.")
-    file_compare_mode.add_argument("-m", "--mode", type=str, required=False, default="quick_compare", help="How to execute comparison. [quick_compare, compare_subset, compare_custom]")
+    file_compare_mode.add_argument("-m", "--mode", type=str, required=False, default="quick_compare", help="How to execute comparison. [quick_compare, compare_subset]")
     file_compare_mode.add_argument("-l", "--field_list", type=str, required=False, help="Comma-separated list of column names/fields to compare, required and used ONLY if using mode 'compare_subset'.")
     file_compare_mode.add_argument("-c", "--custom_config", type=str, required=False, help="Custom config file containing col_name and value mappings in .yaml format.")
     file_compare_mode.add_argument("-o", "--output_filename", type=str, required=True, help="Path to output file to be written.")
