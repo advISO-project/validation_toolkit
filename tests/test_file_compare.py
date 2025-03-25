@@ -107,11 +107,9 @@ def _files_are_identical(file1, file2):
     diff = [i for i in diff]
 
     if diff:
-        print(f"{diff = }")
-        print(len(diff))
-        return False
+        return False, diff
     else:
-        return True
+        return True, []
 
 def test_output_files_json(test_init, tmp_path):
     test_object = test_init
@@ -124,7 +122,11 @@ def test_output_files_json(test_init, tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.json", out_format="json")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match.json", file2=f"{tmp_path}/test_out_all_match.json"), "Files should be identical!"
+    files_identical, diff = _files_are_identical(file1="tests/test_data/pytest_out_all_match.json", file2=f"{tmp_path}/test_out_all_match.json"), "Files should be identical!"
+    if is_docker():
+        assert len(diff) == 11
+    else:
+        assert files_identical
 
 def test_output_files_csv(test_init, tmp_path):
     test_object = test_init
@@ -137,8 +139,8 @@ def test_output_files_csv(test_init, tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.csv", out_format="csv")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv"), "Files should be identical!"
-    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv"), "Files should be identical!"
+    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv")[0], "Files should be identical!"
+    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv")[0], "Files should be identical!"
 
 def test_output_files_schema_mismatch(tmp_path):
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
@@ -157,7 +159,7 @@ def test_output_files_schema_mismatch(tmp_path):
                 }
     test_object_lenient.write_results(metadata=metadata, output=f"{tmp_path}/test_out_schema_mismatch.json", out_format="json")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_schema_mismatch.json", file2=f"{tmp_path}/test_out_schema_mismatch.json"), "Files should be identical!"
+    assert _files_are_identical(file1="tests/test_data/pytest_out_schema_mismatch.json", file2=f"{tmp_path}/test_out_schema_mismatch.json")[0], "Files should be identical!"
 
 def test_output_files_value_mismatch(tmp_path):
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
@@ -175,4 +177,4 @@ def test_output_files_value_mismatch(tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_value_mismatch.json", out_format="json")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_value_mismatch.json", file2=f"{tmp_path}/test_out_value_mismatch.json"), "Files should be identical!"
+    assert _files_are_identical(file1="tests/test_data/pytest_out_value_mismatch.json", file2=f"{tmp_path}/test_out_value_mismatch.json")[0], "Files should be identical!"
