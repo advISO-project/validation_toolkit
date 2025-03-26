@@ -24,7 +24,7 @@ Using this package, you can compare a known "reference" table to a new "query" t
 To compare two tables that have the same column names and data vocabularies:
 
 ```bash
-table_validator validate \
+table_validator compare \
     -r path/to/reference/data_table \
     -q path/to/query/data_table \
     -rs sample_id_colname \
@@ -34,7 +34,7 @@ table_validator validate \
 
 To compare **a subset of columns** from two tables that have the same column names and data vocabularies:
 ```bash
-table_validator validate \
+table_validator compare \
     -r path/to/reference/data_table \
     -q path/to/query/data_table \
     -m compare_subset \
@@ -46,7 +46,7 @@ table_validator validate \
 
 To compare two tables that have **different** column names and/or data vocabularies:
 ```bash
-table_validator validate \
+table_validator compare \
     -r path/to/reference/data_table \
     -q path/to/query/data_table \
     -l col_name_1,col_name_2,col_name3 \
@@ -94,7 +94,7 @@ This progam can produce outputs in either JSON or CSV formats. If using JSON, th
         "prog": "TableValidator",
         "prog_version": "0.0.1dev",
         "datetime": "2025-03-25 15:52:19",
-        "cli": "path/to/table_validator validate -r tests/test_data/data_map_test_left.csv -q tests/test_data/data_map_test_right.csv -rs col_left_1 -qs col_right_1 -c tests/test_data/sample_config.yaml -m compare_subset -l col_right_2,col_right_3 -o test_out.json -f json",
+        "cli": "path/to/table_validator compare -r tests/test_data/data_map_test_left.csv -q tests/test_data/data_map_test_right.csv -rs col_left_1 -qs col_right_1 -c tests/test_data/sample_config.yaml -m compare_subset -l col_right_2,col_right_3 -o test_out.json -f json",
         "ref": "path/to/ref_table.csv",
         "query": "path/to/query_table.csv"
     },
