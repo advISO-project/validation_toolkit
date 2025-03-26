@@ -14,7 +14,7 @@ def collect_args():
 
     subparsers = parser.add_subparsers(title="subcommands", help="TableValidator sub-commands", dest="run_mode")
 
-    file_compare_mode = subparsers.add_parser("validate")
+    file_compare_mode = subparsers.add_parser("compare")
     file_compare_mode.add_argument("-r", "--ref_table", type=str, required=True, help="Reference tabular dataset.")
     file_compare_mode.add_argument("-q", "--query_table", type=str, required=True, help="Subject tabular dataset to compare.")
     file_compare_mode.add_argument("-rs", "--ref_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the reference table.")
@@ -51,18 +51,15 @@ def main():
     args = collect_args()
 
     ## confirm accepted mode
-    try:
-        assert args.mode in ["quick_compare", "compare_subset"]
-    except AssertionError:
+    if args.mode not in ["quick_compare", "compare_subset"]:
         raise ValueError("args.mode should be in [quick_compare, compare_subset]")
 
     ## set up output file
     ## if file with given name exists, use timestamp to prevent overwriting
     if args.write_format == "json":
-        try:
-            assert not os.path.exists(args.output_filename)
+        if not os.path.exists(args.output_filename):
             validator_output_file = args.output_filename
-        except AssertionError:
+        else:
             print(f"Path: {args.output_filename} already exists. Using timestamp to prevent overwriting.")
             validator_output_file = args.output_filename.strip(f".json") + "_" + ".".join(NOW.split(" ")[1].split(":")) + ".json"
 
@@ -70,17 +67,16 @@ def main():
     elif args.write_format == "csv":
         base = args.output_filename.strip(f".csv")
         files_to_check = [f"{base}_schema_check.csv", f"{base}_value_check.csv"]
-        try:
-            for file in files_to_check:
-                assert not os.path.exists(file)
+        files_exist = any(os.path.exists(file) for file in files_to_check)
+        if not files_exist:
             validator_output_file = args.output_filename
-        except AssertionError:
+        else:
             print(f"Paths using basename: {base} already exist. Using timestamp to prevent overwriting.")
             validator_output_file = f"{base}_" + ".".join(NOW.split(" ")[1].split(":")) + ".csv"
             print(validator_output_file)
 
-    ## when run_mode is to validate, collect ref and query filepaths
-    if args.run_mode == "validate":
+    ## when run_mode is to compare, collect ref and query filepaths
+    if args.run_mode == "compare":
         r_file = os.path.abspath(args.ref_table)
         q_file = os.path.abspath(args.query_table)
 
@@ -100,9 +96,8 @@ def main():
         ## if custom config given, use it to map colnames and values onto reference file
         ## colnames and values in ref should now match representations in the query
         if args.custom_config:
-            r_table = File_IO(input_file=r_file, sample_id_key=r_key, config=args.custom_config)
-        else:
-            r_table = File_IO(input_file=r_file, sample_id_key=r_key)
+            print("Custom config found...")
+        r_table = File_IO(input_file=r_file, sample_id_key=r_key, config=args.custom_config)
         q_table = File_IO(input_file=q_file, sample_id_key=q_key)
 
         ## initialise validator object
@@ -140,14 +135,11 @@ def main():
         output_dir = os.path.abspath(args.output_dir)
         output_file = os.path.join(output_dir, args.output_filepath)
         reader_object = File_IO(input_file=input_file, sample_id_key=args.sampleid_key)
-        if args.write_format == "csv":
-            reader_object.write_to_csv(output_file=output_file)
-        if args.write_format == "tsv":
-            reader_object.write_to_tsv(output_file=output_file)
-        if args.write_format == "json":
-            reader_object.write_to_json(output_file=output_file)
-        if args.write_format == "yaml":
-            reader_object.write_to_yaml(output_file=output_file)
+        match args.write_format:
+            case "csv": reader_object.write_to_csv(output_file=output_file)
+            case "tsv": reader_object.write_to_tsv(output_file=output_file)
+            case "json": reader_object.write_to_json(output_file=output_file)
+            case "yaml": reader_object.write_to_yaml(output_file=output_file)
 
 if __name__ == "main":
     main()
