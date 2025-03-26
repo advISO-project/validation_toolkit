@@ -153,11 +153,9 @@ class File_IO():
                     key: field/column name
                     value: field/column value
         """
-        try:
-            ## first make sure the file_type is csv or tsv
+        ## first make sure the file_type is csv or tsv
             ## this is a redundant check and should never evaluate to False
-            assert self.input_file_type in ["csv", "tsv"]
-        except AssertionError as ae:
+        if not self.input_file_type in ["csv", "tsv"]:
             raise UnexpectedFileFormatError("Found unexpected file format. Supported formats are: [csv, tsv]")
 
         ## use the file type to read file in with the correct delimiter
@@ -186,11 +184,9 @@ class File_IO():
         Returns:
             serial_reader (dict): The serialized data, which is already expected to be in the required structure
         """
-        try:
-            ## first make sure the file_type is json or yaml
-            ## this is a redundant check and should never evaluate to False
-            assert self.input_file_type in ["json", "yaml"]
-        except AssertionError as ae:
+        ## first make sure the file_type is json or yaml
+        ## this is a redundant check and should never evaluate to False
+        if not self.input_file_type in ["json", "yaml"]:
             raise UnexpectedFileFormatError("Found unexpected file format. Supported formats are: [json, yaml]")
 
         with open(json_or_yaml_file, "rt") as in_json_to_yaml_handle:

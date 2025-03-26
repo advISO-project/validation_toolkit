@@ -70,12 +70,10 @@ class FileCompare():
         for sample_id, data_value in self.query_table.items():
             self.schema_errors[sample_id] = {"sample_id": sample_id}
             for k, v in data_value.items():
-                try:
-                    ## first check if a given field exists in the schema
-                    ## throw a warning if not
-                    field_features = self.sample_schema.get(k, {})
-                    assert field_features
-                except AssertionError:
+                ## first check if a given field exists in the schema
+                ## throw a warning if not
+                field_features = self.sample_schema.get(k, {})
+                if not field_features:
                     warnings.warn(FieldMismatchWarning(f"Field {k} found in query table but not in schema!"))
                     col_name_warnings += 1
                     ## if the number of column mismatches equals the number of columns, this use case likely needs to employ the config.
@@ -90,12 +88,9 @@ class FileCompare():
                 ## also collect the type of the data in the query/subject
                 ## and check if that type is expected
                 type_found = type(v)
-                try:
-                    assert type_found in expected_types
+                if type_found in expected_types:
                     self.schema_errors[sample_id].update({k: "SchemaMatch"})
-                except AssertionError:
-                    ## if this assertion fails, check if this field is required
-                    ## if not then it's fine to print a warning but not have it be a formal "warning"
+                else:
                     if field_required:
                         warnings.warn(SchemaMismatchWarning(f"Field {k} is of type {type_found}, expected types are {expected_types}"))
                         self.schema_errors[sample_id].update({k: f"SchemaMismatch. Expected {expected_types} Found {type_found}"})
@@ -115,9 +110,7 @@ class FileCompare():
             raise NotImplementedError("Operation mode that uses this argument is not yet implemented.")
 
         ## first check if reference and query tables have the same set of sample IDs, raise warning if not
-        try:
-            assert sorted(list(self.ref_table.keys())) == sorted(list(self.query_table.keys()))
-        except AssertionError:
+        if not sorted(list(self.ref_table.keys())) == sorted(list(self.query_table.keys())):
             warnings.warn(KeyMismatchWarning("Sample IDs do not match between the two given datasets."))
 
         ## now on a per sample basis, compare values for each field
@@ -135,11 +128,9 @@ class FileCompare():
                         self.value_mismatches[sample_id].update({k: f"Field not checked"})
                         continue
                     else:
-                        try:
-                            ## compare data values, raise warnings on mismatch
-                            assert v == query_data_dict[k]
+                        if v == query_data_dict[k]:
                             self.value_mismatches[sample_id].update({k: "ValueMatch"})
-                        except AssertionError:
+                        else:
                             self.value_mismatches[sample_id].update({k: f"ValueMismatch. Expected {v} Found {query_data_dict[k]}"})
                             warnings.warn(ValueMismatchWarning(f"Mismatch in value of field {k} for sample {sample_id}. Expected: {v} Found: {query_data_dict[k]}"))
                             continue
