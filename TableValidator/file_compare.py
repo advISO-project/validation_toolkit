@@ -140,6 +140,62 @@ class FileCompare():
                 warnings.warn(MissingSampleWarning(f"Sample ID {sample_id} not found in query table."))
                 self.value_mismatches[sample_id].append({k: f"Missing field"})
 
+    def _format_csv_output(self, metadata: dict, output: str):
+        """Format output data into CSV format. When CSV is used as the output file type,
+            two files are produced, using the basename of the output file provided:
+                {basename}_schema_check.csv: contains results of schema comparison
+                {basename}_value_check.csv: contains results of value comparison
+            NB: metadata is written as comments starting with "##" to both of the above files.
+
+        Args:
+            metadata (dict): Metadata dict containing info on comparison run
+            output (str): Path to output file path
+        """
+        metadata_lines = []
+        schema_lines = []
+        value_lines = []
+
+        for k, v in metadata.items():
+            metadata_lines.append(f"## {k}: {v}\n")
+
+        example_key = min([k for k in self.schema_errors.keys()])
+        example_val = self.schema_errors[example_key]
+        header = ",".join([k for k in example_val.keys()])+"\n"
+
+        schema_lines.append(header)
+        for k, v in self.schema_errors.items():
+            line = []
+            for val_v in v.values():
+                line.append(val_v)
+            schema_lines.append(",".join(line)+"\n")
+
+        value_lines.append(header)
+        for k, v in self.value_mismatches.items():
+            line = []
+            for val_v in v.values():
+                line.append(val_v)
+            value_lines.append(",".join(line)+"\n")
+
+        ## set up output files
+        schema_out = output.strip(".csv") + "_schema_check" + ".csv"
+        value_out = output.strip(".csv") + "_value_check" + ".csv"
+
+        with open(schema_out, "w") as schema_outhandle:
+            for line in metadata_lines:
+                schema_outhandle.write(line)
+            for line in schema_lines:
+                schema_outhandle.write(line)
+
+        schema_outhandle.close()
+
+        with open(value_out, "w") as value_outhandle:
+            for line in metadata_lines:
+                value_outhandle.write(line)
+            for line in value_lines:
+                value_outhandle.write(line)
+
+        value_outhandle.close()
+
     def write_results(self, metadata: dict, output: str, out_format: str = "json"):
         """Function to write comparison outputs to file
 
@@ -166,47 +222,4 @@ class FileCompare():
         ## write metadata and schema results to {output_basename}_schema_check.csv
         ## write metadata (again) and schema results to {output_basename}_value_check.csv
         elif out_format == "csv":
-            metadata_lines = []
-            schema_lines = []
-            value_lines = []
-
-            for k, v in metadata.items():
-                metadata_lines.append(f"## {k}: {v}\n")
-
-            example_key = min([k for k in self.schema_errors.keys()])
-            example_val = self.schema_errors[example_key]
-            header = ",".join([k for k in example_val.keys()])+"\n"
-
-            schema_lines.append(header)
-            for k, v in self.schema_errors.items():
-                line = []
-                for val_v in v.values():
-                    line.append(val_v)
-                schema_lines.append(",".join(line)+"\n")
-
-            value_lines.append(header)
-            for k, v in self.value_mismatches.items():
-                line = []
-                for val_v in v.values():
-                    line.append(val_v)
-                value_lines.append(",".join(line)+"\n")
-
-            ## set up output files
-            schema_out = output.strip(".csv") + "_schema_check" + ".csv"
-            value_out = output.strip(".csv") + "_value_check" + ".csv"
-
-            with open(schema_out, "w") as schema_outhandle:
-                for line in metadata_lines:
-                    schema_outhandle.write(line)
-                for line in schema_lines:
-                    schema_outhandle.write(line)
-
-            schema_outhandle.close()
-
-            with open(value_out, "w") as value_outhandle:
-                for line in metadata_lines:
-                    value_outhandle.write(line)
-                for line in value_lines:
-                    value_outhandle.write(line)
-
-            value_outhandle.close()
+            self._format_csv_output(metadata=metadata, output=output)
