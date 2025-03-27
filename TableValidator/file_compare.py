@@ -1,4 +1,6 @@
 import warnings
+import json
+from collections import defaultdict
 from TableValidator.custom_exceptions import KeyMismatchWarning, SchemaMismatchWarning, FieldMismatchWarning, ValueMismatchWarning, MissingSampleWarning
 
 class FileCompare():
@@ -12,6 +14,8 @@ class FileCompare():
         """
         self.ref_table = left_data
         self.query_table = right_data
+        self.schema_errors = defaultdict(dict)
+        self.value_mismatches = defaultdict(dict)
 
         ## if strict, ask warnings to be elevated to terminating exceptions
         if strict:
@@ -61,17 +65,21 @@ class FileCompare():
     def confirm_schema(self):
         """Function to check data types in the query/subject table to ensure it matches the schema inferred from the reference table
         """
-        for sample_id, data_value in self.query_table.items():
-            for k, v in data_value.items():
-                try:
-                    ## first check if a given field exists in the schema
-                    ## throw a warning if not
-                    field_features = self.sample_schema.get(k, {})
-                    assert field_features
-                except AssertionError:
-                    warnings.warn(FieldMismatchWarning(f"Field {k} found in query table but not in schema!"))
-                    continue
 
+        col_name_warnings = 0
+        for sample_id, data_value in self.query_table.items():
+            self.schema_errors[sample_id] = {"sample_id": sample_id}
+            for k, v in data_value.items():
+                ## first check if a given field exists in the schema
+                ## throw a warning if not
+                field_features = self.sample_schema.get(k, {})
+                if not field_features:
+                    warnings.warn(FieldMismatchWarning(f"Field {k} found in query table but not in schema!"))
+                    col_name_warnings += 1
+                    ## if the number of column mismatches equals the number of columns, this use case likely needs to employ the config.
+                    if col_name_warnings == len(data_value.keys()):
+                        raise Exception(f"No column names seem to match between the schema and the query table. You must provide a config file when column names differ between the reference and query tables.")
+                    continue
 
                 ## explicitly collect expected types from schema and whether the field is required
                 expected_types = field_features["valid_types"]
@@ -80,16 +88,15 @@ class FileCompare():
                 ## also collect the type of the data in the query/subject
                 ## and check if that type is expected
                 type_found = type(v)
-                try:
-                    assert type_found in expected_types
-                except AssertionError:
-                    ## if this assertion fails, check if this field is required
-                    ## if not then it's fine to print a warning but not have it be a formal "warning"
+                if type_found in expected_types:
+                    self.schema_errors[sample_id].update({k: "SchemaMatch"})
+                else:
                     if field_required:
                         warnings.warn(SchemaMismatchWarning(f"Field {k} is of type {type_found}, expected types are {expected_types}"))
+                        self.schema_errors[sample_id].update({k: f"SchemaMismatch. Expected {expected_types} Found {type_found}"})
                         continue
                     else:
-                        print(f"Field {k} not found for sample ID {sample_id}. Skipping as this field is specified as optional")
+                        self.schema_errors[sample_id].append({k: f"SchemaMismatch (optional field). Expected {expected_types} Found {type_found}"})
                         continue
 
     def compare_values(self, field_names: list = None, col_maps: dict = None):
@@ -103,13 +110,12 @@ class FileCompare():
             raise NotImplementedError("Operation mode that uses this argument is not yet implemented.")
 
         ## first check if reference and query tables have the same set of sample IDs, raise warning if not
-        try:
-            assert sorted(list(self.ref_table.keys())) == sorted(list(self.query_table.keys()))
-        except AssertionError:
+        if not sorted(list(self.ref_table.keys())) == sorted(list(self.query_table.keys())):
             warnings.warn(KeyMismatchWarning("Sample IDs do not match between the two given datasets."))
 
         ## now on a per sample basis, compare values for each field
         for sample_id in self.ref_table:
+            self.value_mismatches[sample_id] = {"sample_id": sample_id}
             ref_data_dict = self.ref_table.get(sample_id, {})
             query_data_dict = self.query_table.get(sample_id, {})
 
@@ -119,15 +125,102 @@ class FileCompare():
                 for k, v in ref_data_dict.items():
                     ## only check fields specified in field_names IF this arg is provided
                     if field_names and k not in field_names:
+                        self.value_mismatches[sample_id].update({k: f"Field not checked"})
                         continue
                     else:
-                        try:
-                            ## compare data values, raise warnings on mismatch
-                            assert v == query_data_dict[k]
-                        except AssertionError:
+                        if v == query_data_dict[k]:
+                            self.value_mismatches[sample_id].update({k: "ValueMatch"})
+                        else:
+                            self.value_mismatches[sample_id].update({k: f"ValueMismatch. Expected {v} Found {query_data_dict[k]}"})
                             warnings.warn(ValueMismatchWarning(f"Mismatch in value of field {k} for sample {sample_id}. Expected: {v} Found: {query_data_dict[k]}"))
                             continue
             ## if for given sample ID, data from either reference or query/subject is not found, throw a warning
             ## practically this code should never be accessed if using strict mode as there will be a failure in the sample_id matching try/assert block above
             else:
                 warnings.warn(MissingSampleWarning(f"Sample ID {sample_id} not found in query table."))
+                self.value_mismatches[sample_id].append({k: f"Missing field"})
+
+    def _format_csv_output(self, metadata: dict, output: str):
+        """Format output data into CSV format. When CSV is used as the output file type,
+            two files are produced, using the basename of the output file provided:
+                {basename}_schema_check.csv: contains results of schema comparison
+                {basename}_value_check.csv: contains results of value comparison
+            NB: metadata is written as comments starting with "##" to both of the above files.
+
+        Args:
+            metadata (dict): Metadata dict containing info on comparison run
+            output (str): Path to output file path
+        """
+        metadata_lines = []
+        schema_lines = []
+        value_lines = []
+
+        for k, v in metadata.items():
+            metadata_lines.append(f"## {k}: {v}\n")
+
+        example_key = min([k for k in self.schema_errors.keys()])
+        example_val = self.schema_errors[example_key]
+        header = ",".join([k for k in example_val.keys()])+"\n"
+
+        schema_lines.append(header)
+        for k, v in self.schema_errors.items():
+            line = []
+            for val_v in v.values():
+                line.append(val_v)
+            schema_lines.append(",".join(line)+"\n")
+
+        value_lines.append(header)
+        for k, v in self.value_mismatches.items():
+            line = []
+            for val_v in v.values():
+                line.append(val_v)
+            value_lines.append(",".join(line)+"\n")
+
+        ## set up output files
+        schema_out = output.strip(".csv") + "_schema_check" + ".csv"
+        value_out = output.strip(".csv") + "_value_check" + ".csv"
+
+        with open(schema_out, "w") as schema_outhandle:
+            for line in metadata_lines:
+                schema_outhandle.write(line)
+            for line in schema_lines:
+                schema_outhandle.write(line)
+
+        schema_outhandle.close()
+
+        with open(value_out, "w") as value_outhandle:
+            for line in metadata_lines:
+                value_outhandle.write(line)
+            for line in value_lines:
+                value_outhandle.write(line)
+
+        value_outhandle.close()
+
+    def write_results(self, metadata: dict, output: str, out_format: str = "json"):
+        """Function to write comparison outputs to file
+
+        Args:
+            metadata (dict): Dict containing metadata of the current comparison run
+            output (str): Path to output file
+            out_format (str, optional): Format to write outputs to ['json', 'csv']. Defaults to "json".
+                                        if 'csv' is provided, two files are produced,
+                                            {output_basename}_schema_check.csv: contains results of schema comparison
+                                            {output_basename}_value_check.csv: contains results of value comparison
+                                        NB: metadata is written as comments starting with "##" to both of the above files.
+        """
+        ## if output format is json, format all dicts in a single one and write to file
+        if out_format == "json":
+            out_dict = {
+                        "metadata": metadata,
+                        "schema_check": self.schema_errors,
+                        "value_check": self.value_mismatches
+                        }
+
+            with open(output, "w") as outhandle:
+                json.dump(out_dict, outhandle, indent=4)
+
+        ## if output format is csv, convert data from all 3 dicts to lines
+        ## write metadata and schema results to {output_basename}_schema_check.csv
+        ## write metadata (again) and schema results to {output_basename}_value_check.csv
+        elif out_format == "csv":
+            self._format_csv_output(metadata=metadata, output=output)
