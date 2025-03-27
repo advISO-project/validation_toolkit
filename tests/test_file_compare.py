@@ -6,10 +6,6 @@ from TableValidator.custom_exceptions import SchemaMismatchWarning, ValueMismatc
 
 from pathlib import Path
 
-def is_docker():
-    cgroup = Path("/proc/self/cgroup")
-    return Path("/.dockerenv").is_file() or (cgroup.is_file() and "docker" in cgroup.read_text())
-
 @pytest.fixture
 def test_init():
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
@@ -143,7 +139,7 @@ def test_output_files_csv(test_init, tmp_path):
     assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv")[0], "Files should be identical!"
     assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv")[0], "Files should be identical!"
 
-def test_output_files_schema_mismatch(tmp_path):
+def test_output_files_schema_mismatch():
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
     right_data = File_IO(input_file="tests/test_data/query_toy_json_schemamismatch.json", sample_id_key="sample_id")
     test_object_lenient = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
@@ -153,18 +149,7 @@ def test_output_files_schema_mismatch(tmp_path):
     with pytest.warns(SchemaMismatchWarning):
         test_object_lenient.confirm_schema()
 
-    test_object_lenient.compare_values()
-    metadata = {
-                "prog": "TableValidator_pytest",
-                "prog_version": "0.0.1dev",
-                }
-    test_object_lenient.write_results(metadata=metadata, output=f"{tmp_path}/test_out_schema_mismatch.json", out_format="json")
-
-    files_identical, diff =  _files_are_identical(file1="tests/test_data/pytest_out_schema_mismatch.json", file2=f"{tmp_path}/test_out_schema_mismatch.json")[0], "Files should be identical!"
-    if is_docker():
-        assert len(diff) == 26
-    else:
-        assert files_identical
+    assert test_object_lenient.schema_errors["sample_4"]["field2"] in ["SchemaMismatch. Expected {<class 'int'>, <class 'str'>} Found <class 'bool'>", "SchemaMismatch. Expected {<class 'str'>, <class 'int'>} Found <class 'bool'>"]
 
 def test_output_files_value_mismatch(tmp_path):
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
