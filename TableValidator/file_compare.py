@@ -204,8 +204,9 @@ class FileCompare():
             output (str): Path to output file
             out_format (str, optional): Format to write outputs to ['json', 'csv']. Defaults to "json".
                                         if 'csv' is provided, two files are produced,
-                                            {output_basename}_schema_check.csv
-                                            {output_basename}_value_check.csv
+                                            {output_basename}_schema_check.csv: contains results of schema comparison
+                                            {output_basename}_value_check.csv: contains results of value comparison
+                                        NB: metadata is written as comments starting with "##" to both of the above files.
         """
         ## if output format is json, format all dicts in a single one and write to file
         if out_format == "json":
