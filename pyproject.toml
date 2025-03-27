@@ -10,12 +10,12 @@ build-backend = "setuptools.build_meta"
 # setuptools_scm obtains the package version number from Git tags so we don't
 # have to have a version number hardcoded in scripts in the package 
 # upon installation, the version is written (from git tag) to this file
-write_to = "TableValidator/version.py"
+write_to = "validation_toolkit/version.py"
 git_describe_command = "git describe --dirty --tags --long --match v* --first-parent"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["TableValidator"]
+include = ["validation_toolkit"]
 exclude = []
 namespaces = false
 
