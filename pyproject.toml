@@ -20,7 +20,7 @@ exclude = []
 namespaces = false
 
 [project]
-name = "TableValidator"
+name = "validation_toolkit"
 authors = [
     {name = "Bruhad Dave", email = "bd8@sanger.ac.uk"},
 ]
