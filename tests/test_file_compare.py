@@ -1,4 +1,4 @@
-import pytest
+import pytest, warnings
 import difflib
 from TableValidator.file_io import File_IO
 from TableValidator.file_compare import FileCompare
@@ -41,11 +41,13 @@ def test_confirm_schema(test_init):
     test_object = test_init
     test_object.create_schema()
     test_object.confirm_schema()
+    assert test_object.schema_errors["sample_1"] == {"sample_id": "SchemaMatch", "field1": "SchemaMatch", "field2": "SchemaMatch", "field3": "SchemaMatch"}
 
 def test_compare_values(test_init):
     test_object = test_init
     test_object.create_schema()
     test_object.compare_values()
+    assert test_object.value_mismatches["sample_1"] == {"sample_id": "ValueMatch", "field1": "ValueMatch", "field2": "ValueMatch", "field3": "ValueMatch"}
 
 def test_confirm_schema_fail():
     left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
@@ -54,7 +56,7 @@ def test_confirm_schema_fail():
     test_object_lenient.create_schema()
 
     ## there should be a schema check failure here
-    with pytest.warns(SchemaMismatchWarning):#, match="Field field2 is of type <class 'bool'>, expected types are {<class 'int'>, <class 'str'>}" or "Field field2 is of type <class 'bool'>, expected types are {<class 'str'>, <class 'int'>}"):
+    with pytest.warns(SchemaMismatchWarning):
         test_object_lenient.confirm_schema()
 
     ## using strict mode, this warning should now be an exception -- pytest.raises needed to catch it
@@ -82,6 +84,7 @@ def test_compare_values_specific_fields():
     ## even though this test uses a value_mismatch test fixture
     ## there should be no warnings as the field in question is not included in the provided list of field names to check
     test_object.compare_values(field_names=["sample_id", "field1", "field3"])
+    assert test_object.value_mismatches["sample_1"] == {"sample_id": "ValueMatch", "field1": "ValueMatch", "field2": "Field not checked", "field3": "ValueMatch"}
 
 def test_compare_fail_with_no_config(test_init_config):
     test_object_no_config, _ = test_init_config
@@ -94,6 +97,8 @@ def test_compare_values_config(test_init_config):
     test_object_w_config.create_schema()
     test_object_w_config.confirm_schema()
     test_object_w_config.compare_values()
+    assert test_object_w_config.schema_errors["sample1"] == {"sample_id": "sample1", "col_right_1": "SchemaMatch", "col_right_2": "SchemaMatch", "col_right_3": "SchemaMatch"}
+    assert test_object_w_config.value_mismatches["sample1"] == {"sample_id": "sample1", "col_right_1": "ValueMatch", "col_right_2": "ValueMatch", "col_right_3": "ValueMatch"}
 
 def _files_are_identical(file1, file2):
     with open(file1, "r") as f1:
@@ -101,8 +106,8 @@ def _files_are_identical(file1, file2):
             diff = difflib.unified_diff(
                 f1.readlines(),
                 f2.readlines(),
-                fromfile='f1',
-                tofile='f2',
+                fromfile="f1",
+                tofile="f2",
             )
     diff = [i for i in diff]
 
