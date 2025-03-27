@@ -2,7 +2,7 @@ import os, sys
 import csv
 import json
 import yaml
-from TableValidator.custom_exceptions import UnsupportedFileFormatError, UnexpectedFileFormatError
+from validation_toolkit.TableValidator.custom_exceptions import UnsupportedFileFormatError, UnexpectedFileFormatError
 
 class File_IO():
     """Read, write and intercovert between a range of file types.

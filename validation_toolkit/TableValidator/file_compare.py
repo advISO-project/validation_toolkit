@@ -1,7 +1,7 @@
 import warnings
 import json
 from collections import defaultdict
-from TableValidator.custom_exceptions import KeyMismatchWarning, SchemaMismatchWarning, FieldMismatchWarning, ValueMismatchWarning, MissingSampleWarning
+from validation_toolkit.TableValidator.custom_exceptions import KeyMismatchWarning, SchemaMismatchWarning, FieldMismatchWarning, ValueMismatchWarning, MissingSampleWarning
 
 class FileCompare():
     def __init__(self, left_data: dict, right_data: dict = None, strict: bool = False):

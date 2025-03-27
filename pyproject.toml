@@ -38,9 +38,11 @@ dependencies = [
 	"flake8>=7.0.0",
 	"pytest>=6.2.2",
     "pyyaml",
+    "importlib-resources>=5.1.0"
 ]
 
 dynamic = ["version"]
 
 [project.scripts]
-table_validator = "TableValidator.cli:main"
+# create an executable for the CLI
+validation_toolkit = "validation_toolkit.cli:main"
