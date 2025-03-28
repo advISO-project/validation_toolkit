@@ -1,6 +1,6 @@
 import os, sys, argparse, datetime
-from TableValidator.file_io import File_IO
-from TableValidator.file_compare import FileCompare
+from validation_toolkit.TableValidator.file_io import File_IO
+from validation_toolkit.TableValidator.file_compare import FileCompare
 
 try:
     from TableValidator.version import __version__
