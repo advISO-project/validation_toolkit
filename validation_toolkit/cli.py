@@ -18,7 +18,7 @@ def collect_args():
     file_compare_mode.add_argument("-r", "--ref_table", type=str, required=True, help="Reference tabular dataset.")
     file_compare_mode.add_argument("-q", "--query_table", type=str, required=True, help="Subject tabular dataset to compare.")
     file_compare_mode.add_argument("-rs", "--ref_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the reference table.")
-    file_compare_mode.add_argument("-qs", "--query_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the query table.")
+    file_compare_mode.add_argument("-qs", "--query_sampleid_key", type=str, required=False, help="The column/field name that contains sample IDs in the query table.")
     file_compare_mode.add_argument("-e", "--strict", action = "store_true", required=False, help="Whether to raise warnings as exceptions or not.")
     file_compare_mode.add_argument("-m", "--mode", type=str, required=False, default="quick_compare", help="How to execute comparison. [quick_compare, compare_subset]")
     file_compare_mode.add_argument("-l", "--field_list", type=str, required=False, help="Comma-separated list of column names/fields to compare, required and used ONLY if using mode 'compare_subset'.")
@@ -74,6 +74,9 @@ def main():
             print(f"Paths using basename: {base} already exist. Using timestamp to prevent overwriting.")
             validator_output_file = f"{base}_" + ".".join(NOW.split(" ")[1].split(":")) + ".csv"
             print(validator_output_file)
+
+    else:
+        raise ValueError(f"Unsupported output file format! Supported formats: csv, json. You provided: {args.write_format}")
 
     ## when run_mode is to compare, collect ref and query filepaths
     if args.run_mode == "compare":
