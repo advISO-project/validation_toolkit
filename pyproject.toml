@@ -10,17 +10,17 @@ build-backend = "setuptools.build_meta"
 # setuptools_scm obtains the package version number from Git tags so we don't
 # have to have a version number hardcoded in scripts in the package 
 # upon installation, the version is written (from git tag) to this file
-write_to = "TableValidator/version.py"
+write_to = "validation_toolkit/version.py"
 git_describe_command = "git describe --dirty --tags --long --match v* --first-parent"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["TableValidator"]
+include = ["validation_toolkit"]
 exclude = []
 namespaces = false
 
 [project]
-name = "TableValidator"
+name = "validation_toolkit"
 authors = [
     {name = "Bruhad Dave", email = "bd8@sanger.ac.uk"},
 ]
@@ -37,9 +37,12 @@ dependencies = [
     ##TODO: Add as needed
 	"flake8>=7.0.0",
 	"pytest>=6.2.2",
+    "pyyaml",
+    "importlib-resources>=5.1.0"
 ]
 
 dynamic = ["version"]
 
 [project.scripts]
-table_validator = "TableValidator.cli:main"
+# create an executable for the CLI
+validation_toolkit = "validation_toolkit.cli:main"

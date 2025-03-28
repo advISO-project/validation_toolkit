@@ -4,6 +4,10 @@
 # dynamic version
 version.py
 
+## dev/env
+.venv
+.vscode
+
 #led / optimized / DLL files
 __pycache__/
 *.py[cod]

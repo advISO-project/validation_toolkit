@@ -1,0 +1,15 @@
+col_left_1:
+  col_name: col_right_1
+  value_map: null
+col_left_2:
+  col_name: col_right_2
+  value_map:
+    true: 1
+    false: 0
+    unknown: null
+col_left_3:
+  col_name: col_right_3
+  value_map:
+    resistant: 1
+    sensitive: 0
+    unknown: 2
