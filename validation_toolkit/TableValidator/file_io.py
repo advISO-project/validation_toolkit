@@ -2,7 +2,7 @@ import os, sys
 import csv
 import json
 import yaml
-from TableValidator.custom_exceptions import UnsupportedFileFormatError, UnexpectedFileFormatError
+from validation_toolkit.TableValidator.custom_exceptions import UnsupportedFileFormatError, UnexpectedFileFormatError
 
 class File_IO():
     """Read, write and intercovert between a range of file types.
@@ -154,7 +154,7 @@ class File_IO():
                     value: field/column value
         """
         ## first make sure the file_type is csv or tsv
-            ## this is a redundant check and should never evaluate to False
+        ## this is a redundant check and should never evaluate to False
         if not self.input_file_type in ["csv", "tsv"]:
             raise UnexpectedFileFormatError("Found unexpected file format. Supported formats are: [csv, tsv]")
 
@@ -168,7 +168,9 @@ class File_IO():
             ## populate the data dictionary
             data = {}
             for row in file_reader:
-                sample_id = row[sample_id_key]
+                sample_id = row.get(sample_id_key, "")
+                if not sample_id:
+                    raise KeyError(f"Specified sample ID key: {sample_id_key} not found in table.")
                 sample_data = {k: v for k, v in row.items()}
                 data[sample_id] = sample_data
         in_csv_or_tsv_handle.close()

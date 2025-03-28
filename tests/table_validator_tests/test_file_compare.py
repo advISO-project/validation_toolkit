@@ -1,15 +1,19 @@
 import pytest, warnings
 import difflib
-from TableValidator.file_io import File_IO
-from TableValidator.file_compare import FileCompare
-from TableValidator.custom_exceptions import SchemaMismatchWarning, ValueMismatchWarning
+from importlib_resources import files
+
+from validation_toolkit.TableValidator.file_io import File_IO
+from validation_toolkit.TableValidator.file_compare import FileCompare
+from validation_toolkit.TableValidator.custom_exceptions import SchemaMismatchWarning, ValueMismatchWarning
 
 from pathlib import Path
 
+TEST_DATA_DIR = files('tests.table_validator_tests.test_data')
+
 @pytest.fixture
 def test_init():
-    left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
-    right_data = File_IO(input_file="tests/test_data/ref_toy_json.json", sample_id_key="sample_id")
+    left_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
+    right_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_json.json", sample_id_key="sample_id")
 
     test_object = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
     assert test_object, "A test file_compare object should be built"
@@ -17,9 +21,9 @@ def test_init():
 
 @pytest.fixture
 def test_init_config():
-    my_ref_fileio_object = File_IO(input_file="tests/test_data/data_map_test_left.csv", sample_id_key="col_left_1", config="tests/test_data/sample_config.yaml")
-    my_ref_fileio_object_no_config = File_IO(input_file="tests/test_data/data_map_test_left.csv", sample_id_key="col_left_1")
-    my_query_fileio_object = File_IO(input_file="tests/test_data/data_map_test_right.csv", sample_id_key="col_right_1")
+    my_ref_fileio_object = File_IO(input_file= TEST_DATA_DIR / "data_map_test_left.csv", sample_id_key="col_left_1", config= TEST_DATA_DIR / "sample_config.yaml")
+    my_ref_fileio_object_no_config = File_IO(input_file= TEST_DATA_DIR / "data_map_test_left.csv", sample_id_key="col_left_1")
+    my_query_fileio_object = File_IO(input_file= TEST_DATA_DIR / "data_map_test_right.csv", sample_id_key="col_right_1")
 
     test_object_no_config = FileCompare(left_data=my_ref_fileio_object_no_config.data_reader, right_data=my_query_fileio_object.data_reader)
     test_object_w_config = FileCompare(left_data=my_ref_fileio_object.data_reader, right_data=my_query_fileio_object.data_reader)
@@ -46,8 +50,8 @@ def test_compare_values(test_init):
     assert test_object.value_mismatches["sample_1"] == {"sample_id": "ValueMatch", "field1": "ValueMatch", "field2": "ValueMatch", "field3": "ValueMatch"}
 
 def test_confirm_schema_fail():
-    left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
-    right_data = File_IO(input_file="tests/test_data/query_toy_json_schemamismatch.json", sample_id_key="sample_id")
+    left_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
+    right_data = File_IO(input_file= TEST_DATA_DIR / "query_toy_json_schemamismatch.json", sample_id_key="sample_id")
     test_object_lenient = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
     test_object_lenient.create_schema()
 
@@ -62,8 +66,8 @@ def test_confirm_schema_fail():
         test_object_strict.confirm_schema()
 
 def test_compare_values_fail():
-    left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
-    right_data = File_IO(input_file="tests/test_data/query_toy_json_valmismatch.json", sample_id_key="sample_id")
+    left_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
+    right_data = File_IO(input_file= TEST_DATA_DIR / "query_toy_json_valmismatch.json", sample_id_key="sample_id")
     test_object = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
     test_object.create_schema()
     test_object.confirm_schema()
@@ -72,8 +76,8 @@ def test_compare_values_fail():
         test_object.compare_values()
 
 def test_compare_values_specific_fields():
-    left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
-    right_data = File_IO(input_file="tests/test_data/query_toy_json_valmismatch.json", sample_id_key="sample_id")
+    left_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
+    right_data = File_IO(input_file= TEST_DATA_DIR / "query_toy_json_valmismatch.json", sample_id_key="sample_id")
     test_object = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
     test_object.create_schema()
     test_object.confirm_schema()
@@ -123,7 +127,7 @@ def test_output_files_json(test_init, tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.json", out_format="json")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match.json", file2=f"{tmp_path}/test_out_all_match.json")[0], "Files should be identical!"
+    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match.json", file2=f"{tmp_path}/test_out_all_match.json")[0], "Files should be identical!"
 
 def test_output_files_csv(test_init, tmp_path):
     test_object = test_init
@@ -136,12 +140,12 @@ def test_output_files_csv(test_init, tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.csv", out_format="csv")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv")[0], "Files should be identical!"
-    assert _files_are_identical(file1="tests/test_data/pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv")[0], "Files should be identical!"
+    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv")[0], "Files should be identical!"
+    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv")[0], "Files should be identical!"
 
 def test_output_files_schema_mismatch():
-    left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
-    right_data = File_IO(input_file="tests/test_data/query_toy_json_schemamismatch.json", sample_id_key="sample_id")
+    left_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
+    right_data = File_IO(input_file= TEST_DATA_DIR / "query_toy_json_schemamismatch.json", sample_id_key="sample_id")
     test_object_lenient = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
     test_object_lenient.create_schema()
 
@@ -152,8 +156,8 @@ def test_output_files_schema_mismatch():
     assert test_object_lenient.schema_errors["sample_4"]["field2"] in ["SchemaMismatch. Expected {<class 'int'>, <class 'str'>} Found <class 'bool'>", "SchemaMismatch. Expected {<class 'str'>, <class 'int'>} Found <class 'bool'>"]
 
 def test_output_files_value_mismatch(tmp_path):
-    left_data = File_IO(input_file="tests/test_data/ref_toy_csv.csv", sample_id_key="sample_id")
-    right_data = File_IO(input_file="tests/test_data/query_toy_json_valmismatch.json", sample_id_key="sample_id")
+    left_data = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
+    right_data = File_IO(input_file= TEST_DATA_DIR / "query_toy_json_valmismatch.json", sample_id_key="sample_id")
     test_object = FileCompare(left_data=left_data.data_reader, right_data=right_data.data_reader)
     test_object.create_schema()
     test_object.confirm_schema()
@@ -167,4 +171,4 @@ def test_output_files_value_mismatch(tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_value_mismatch.json", out_format="json")
 
-    assert _files_are_identical(file1="tests/test_data/pytest_out_value_mismatch.json", file2=f"{tmp_path}/test_out_value_mismatch.json")[0], "Files should be identical!"
+    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_value_mismatch.json", file2=f"{tmp_path}/test_out_value_mismatch.json")[0], "Files should be identical!"
