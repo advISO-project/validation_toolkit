@@ -3,7 +3,7 @@ from validation_toolkit.TableValidator.file_io import File_IO
 from validation_toolkit.TableValidator.file_compare import FileCompare
 
 try:
-    from TableValidator.version import __version__
+    from validation_toolkit.version import __version__
 except ImportError:
     __version__ = "0.0.1dev"
     version_tuple = (0, 0, "1dev")
