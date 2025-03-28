@@ -152,7 +152,7 @@ def test_output_files_schema_mismatch():
     ## there should be a schema check failure here
     with pytest.warns(SchemaMismatchWarning):
         test_object_lenient.confirm_schema()
-        
+
     assert test_object_lenient.schema_errors["sample_4"]["field2"] in ["SchemaMismatch. Expected {<class 'int'>, <class 'str'>} Found <class 'bool'>", "SchemaMismatch. Expected {<class 'str'>, <class 'int'>} Found <class 'bool'>"]
 
 def test_output_files_value_mismatch(tmp_path):
