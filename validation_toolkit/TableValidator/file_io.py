@@ -55,7 +55,6 @@ class File_IO():
             else:
                 self.data_reader = read_functions[self.input_file_type](self.full_path_input_file)
 
-            ##TODO: Add this method
             if config:
                 self.data_reader = self.map_data(data_reader_dict=self.data_reader, config=config)
 
@@ -310,7 +309,7 @@ class File_IO():
         val_mappings = {k: v["value_map"] for k, v in config_dict.items()}
 
         mapped = {}
-        for k, v in self.data_reader.items():
+        for k, v in data_reader_dict.items():
             mapped_vals = {}
             for val_k, val_v in v.items():
                 if val_mappings[val_k]:
