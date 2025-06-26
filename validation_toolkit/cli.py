@@ -124,8 +124,6 @@ def main():
             raise ValueError(f"\n===\nUnsupported output file format! Supported formats: csv, tsv, json, yaml. You provided: {args.write_format}\n===\n")
         ## admin
         input_file = os.path.abspath(args.input_filepath)
-        # output_dir = os.path.abspath(args.output_dir)
-        # output_file = os.path.abspath(args.outp)
         reader_object = File_IO(input_file=input_file, sample_id_key=args.sampleid_key)
         print(f"Writing output to: {output_file} in {args.write_format} format")
         match args.write_format:
