@@ -19,17 +19,17 @@ class FileCompare():
 
         ## load reference data
         ## if config provided then this will be used to map column names
-        self.ref_table = File_IO(input_file=left_file, sample_id_key=l_sample_id_key, config=config).data_reader
+        self.ref_table = File_IO(input_file=left_file, sample_id_key=l_sample_id_key, config=config).data_dict
 
         ## load query data
         ## if unique key provided for sample_id column, use that
         ## else assume same sampl_id_key as reference data
         if r_sample_id_key:
-            self.query_table = File_IO(input_file=right_file, sample_id_key=r_sample_id_key).data_reader
+            self.query_table = File_IO(input_file=right_file, sample_id_key=r_sample_id_key).data_dict
         else:
             print("No sample_id_key provided for query table, assuming it is the same as sample_id_key for reference table.")
             try:
-                self.query_table = File_IO(input_file=right_file, sample_id_key=l_sample_id_key).data_reader
+                self.query_table = File_IO(input_file=right_file, sample_id_key=l_sample_id_key).data_dict
             except KeyError as ke:
                 raise ValueError(f"\n==\nDid not find any column {l_sample_id_key} in query table. Please check that you have provided a config file and a valid query sample_id_key on the command line.\n==\n")
 
