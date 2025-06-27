@@ -8,12 +8,12 @@ class File_IO():
     """Read, write and intercovert between a range of file types.
         Currently supports csv, tsv, json, and yaml
     """
-    def __init__(self, input_file: str, sample_id_key: str, config: str = None, data_reader: dict = None):
+    def __init__(self, input_file: str, sample_id_key: str, config: str = None, data_dict: dict = None):
         """Initialising a File_IO object
 
         Args:
             input_file (str/pathlike): File to read from.
-            data_reader (dict, optional): Dictionary formatted as {sample_id: {field1: val1, field2: val2...}}. Defaults to None.
+            data_dict (dict, optional): Dictionary formatted as {sample_id: {field1: val1, field2: val2...}}. Defaults to None.
                                             This is the output/internal structure of data in File_IO
                                             File_IO can alternatively start with such a dict
             sample_id_key (str, optional): The name of the field or column in the input file corresponding to sample IDs.
@@ -34,13 +34,13 @@ class File_IO():
                             "yaml": self._read_serialized,
                         }
 
-        ## if data_reader is provided, use that to initialise
+        ## if data_dict is provided, use that to initialise
         ## if input file is ALSO provided, it is ignored
-        if data_reader or data_reader and input_file:
-            self.data_reader = data_reader
+        if data_dict or data_dict and input_file:
+            self.data_dict = data_dict
 
         ## if ONLY input file provided, read it in
-        elif input_file and not data_reader:
+        elif input_file and not data_dict:
             self.full_path_input_file = os.path.abspath(input_file)
 
             ## get file type of input file from its extension
@@ -48,20 +48,20 @@ class File_IO():
 
             ## if csv or tsv, pass to tabular file reader function
             if self.input_file_type in ["csv", "tsv"]:
-                tmp_data_reader = read_functions[self.input_file_type](self.full_path_input_file, sample_id_key)
-                self.data_reader = self._recover_types_in_data(tmp_data_reader)
+                tmp_data_dict = read_functions[self.input_file_type](self.full_path_input_file, sample_id_key)
+                self.data_dict = self._recover_types_in_data(tmp_data_dict)
 
             ## if json or yaml, pass to serialized file reader function
             else:
-                self.data_reader = read_functions[self.input_file_type](self.full_path_input_file)
+                self.data_dict = read_functions[self.input_file_type](self.full_path_input_file)
 
             if config:
-                self.data_reader = self.map_data(data_reader_dict=self.data_reader, config=config)
+                self.data_dict = self.map_data(config=config)
 
             ## collect a list of fields/column names from the input
             self.fields = []
-            example_key = list(self.data_reader.keys())[0]
-            self.fields.extend(list(self.data_reader[example_key].keys()))
+            example_key = list(self.data_dict.keys())[0]
+            self.fields.extend(list(self.data_dict[example_key].keys()))
 
     def _get_file_type(self, input_file: str):
         """Use file extension to infer file type
@@ -256,9 +256,9 @@ class File_IO():
             output_file (str): Path to output file
         """
         rows_to_write = []
-        for sample_id in self.data_reader.keys():
+        for sample_id in self.data_dict.keys():
             row = {"sample_id": sample_id}
-            row.update(self.data_reader[sample_id])
+            row.update(self.data_dict[sample_id])
             rows_to_write.append(row)
         with open(output_file, "w") as out_handle:
             writer = csv.DictWriter(out_handle, fieldnames=self.fields, delimiter=",")
@@ -273,9 +273,9 @@ class File_IO():
             output_file (str): Path to output file
         """
         rows_to_write = []
-        for sample_id in self.data_reader.keys():
+        for sample_id in self.data_dict.keys():
             row = {"sample_id": sample_id}
-            row.update(self.data_reader[sample_id])
+            row.update(self.data_dict[sample_id])
             rows_to_write.append(row)
         with open(output_file, "w") as out_handle:
             writer = csv.DictWriter(out_handle, fieldnames=self.fields, delimiter="\t")
@@ -290,7 +290,7 @@ class File_IO():
             output_file (str): Path to output file
         """
         with open(output_file, "w") as outhandle:
-            json.dump(self.data_reader, outhandle, indent=4)
+            json.dump(self.data_dict, outhandle, indent=4)
 
     def write_to_yaml(self, output_file: str):
         """Function to write data to yaml
@@ -299,9 +299,9 @@ class File_IO():
             output_file (str): Path to output file
         """
         with open(output_file, "w") as outhandle:
-            yaml.dump(self.data_reader, outhandle, indent=4)
+            yaml.dump(self.data_dict, outhandle, indent=4)
 
-    def map_data(self, data_reader_dict, config):
+    def map_data(self, config):
         with open(config, "rt") as config_handle:
             config_dict = yaml.safe_load(config_handle)
 
@@ -309,7 +309,7 @@ class File_IO():
         val_mappings = {k: v["value_map"] for k, v in config_dict.items()}
 
         mapped = {}
-        for k, v in data_reader_dict.items():
+        for k, v in self.data_dict.items():
             mapped_vals = {}
             for val_k, val_v in v.items():
                 if val_mappings[val_k]:
