@@ -1,10 +1,11 @@
 import warnings
 import json
 from collections import defaultdict
+from validation_toolkit.TableValidator.file_io import File_IO
 from validation_toolkit.TableValidator.custom_exceptions import KeyMismatchWarning, SchemaMismatchWarning, FieldMismatchWarning, ValueMismatchWarning, MissingSampleWarning
 
 class FileCompare():
-    def __init__(self, left_data: dict, right_data: dict = None, strict: bool = False):
+    def __init__(self, left_file: str, right_file: str, l_sample_id_key: str, r_sample_id_key: str = None, config: str = None, strict: bool = False):
         """Initialise a file comparison object with reference and query datasets
 
         Args:
@@ -12,8 +13,26 @@ class FileCompare():
             right_data (dict, optional): Data formatted by FileIO from the query/subject table
             strict (bool, optional): Whether to elevate warnings to exceptions and terminate the program. Defaults to False.
         """
-        self.ref_table = left_data
-        self.query_table = right_data
+
+        self.ref_file = left_file
+        self.query_file = right_file
+
+        ## load reference data
+        ## if config provided then this will be used to map column names
+        self.ref_table = File_IO(input_file=left_file, sample_id_key=l_sample_id_key, config=config).data_dict
+
+        ## load query data
+        ## if unique key provided for sample_id column, use that
+        ## else assume same sampl_id_key as reference data
+        if r_sample_id_key:
+            self.query_table = File_IO(input_file=right_file, sample_id_key=r_sample_id_key).data_dict
+        else:
+            print("No sample_id_key provided for query table, assuming it is the same as sample_id_key for reference table.")
+            try:
+                self.query_table = File_IO(input_file=right_file, sample_id_key=l_sample_id_key).data_dict
+            except KeyError as ke:
+                raise ValueError(f"\n==\nDid not find any column {l_sample_id_key} in query table. Please check that you have provided a config file and a valid query sample_id_key on the command line.\n==\n")
+
         self.schema_errors = defaultdict(dict)
         self.value_mismatches = defaultdict(dict)
 
@@ -21,7 +40,7 @@ class FileCompare():
         if strict:
             warnings.filterwarnings("error")
 
-    def create_schema(self, required_fields: list = None):
+    def _create_schema(self, required_fields: list = None):
         """Using the reference data, infer a "schema": expected field names and expected data types for each field
 
         Args:
@@ -62,7 +81,7 @@ class FileCompare():
             for k in self.sample_schema.keys():
                 self.sample_schema[k].update({"required": True})
 
-    def confirm_schema(self):
+    def _confirm_schema(self):
         """Function to check data types in the query/subject table to ensure it matches the schema inferred from the reference table
         """
 
@@ -106,6 +125,13 @@ class FileCompare():
             field_names (list, optional): List of field names to compare values for. Defaults to None and all fields are checked.
             col_maps (dict, optional): Mapping of column names between reference and query datasets if the schemas are not identical. Defaults to None.
         """
+
+        ## create schema from ref_table
+        ## check query_table schema against it
+        print("Setting up and validating schema...")
+        self._create_schema()
+        self._confirm_schema()
+
         if col_maps:
             raise NotImplementedError("Operation mode that uses this argument is not yet implemented.")
 

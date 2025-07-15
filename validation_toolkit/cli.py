@@ -10,11 +10,16 @@ except ImportError:
 
 def collect_args():
     parser = argparse.ArgumentParser(description="A tool to compare tabular data against specified reference data.")
+
     parser.add_argument("-v", "--version", action="version", version=f"TableValidator: {__version__}")
 
-    subparsers = parser.add_subparsers(title="subcommands", help="TableValidator sub-commands", dest="run_mode")
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument("-o", "--output_filename", type=str, required=False, help="File path to write output data to.")
+    parent_parser.add_argument("-f", "--write_format", type=str, required=False, default="json", help="File format to write output to. Valid formats are ['csv', 'tsv', 'json', 'yaml'] for mode 'convert_format'; ['csv', 'json'] for mode 'compare'.")
 
-    file_compare_mode = subparsers.add_parser("compare")
+    subparsers = parser.add_subparsers(title="subcommands", dest="run_mode")
+
+    file_compare_mode = subparsers.add_parser("compare", parents=[parent_parser])
     file_compare_mode.add_argument("-r", "--ref_table", type=str, required=True, help="Reference tabular dataset.")
     file_compare_mode.add_argument("-q", "--query_table", type=str, required=True, help="Subject tabular dataset to compare.")
     file_compare_mode.add_argument("-rs", "--ref_sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs in the reference table.")
@@ -23,16 +28,10 @@ def collect_args():
     file_compare_mode.add_argument("-m", "--mode", type=str, required=False, default="quick_compare", help="How to execute comparison. [quick_compare, compare_subset]")
     file_compare_mode.add_argument("-l", "--field_list", type=str, required=False, help="Comma-separated list of column names/fields to compare, required and used ONLY if using mode 'compare_subset'.")
     file_compare_mode.add_argument("-c", "--custom_config", type=str, required=False, help="Custom config file containing col_name and value mappings in .yaml format.")
-    file_compare_mode.add_argument("-o", "--output_filename", type=str, required=True, help="Path to output file to be written.")
-    file_compare_mode.add_argument("-f", "--write_format", type=str, required=False, default="json", help="File format to write comparison output to ['json', 'csv'].")
 
-    format_convert_mode = subparsers.add_parser("convert_format")
+    format_convert_mode = subparsers.add_parser("convert_format", parents=[parent_parser])
     format_convert_mode.add_argument("-i", "--input_filepath", type=str, required=False, help="File path to read data from for conversion to new format.")
-    ## code duplication, consider alternatives
     format_convert_mode.add_argument("-s", "--sampleid_key", type=str, required=True, help="The column/field name that contains sample IDs.")
-    format_convert_mode.add_argument("-o", "--output_filename", type=str, required=False, help="File name to write converted data to.")
-    format_convert_mode.add_argument("-d", "--output_dir", type=str, required=False, default=".", help="Directory path to write converted data to.")
-    format_convert_mode.add_argument("-f", "--write_format", type=str, required=False, help="File format to convert input data to.")
 
     args = parser.parse_args()
     return args
@@ -50,36 +49,38 @@ def main():
 
     args = collect_args()
 
-    ## confirm accepted mode
-    if args.mode not in ["quick_compare", "compare_subset"]:
-        raise ValueError("args.mode should be in [quick_compare, compare_subset]")
-
     ## set up output file
-    ## if file with given name exists, use timestamp to prevent overwriting
-    if args.write_format == "json":
-        if not os.path.exists(args.output_filename):
-            validator_output_file = args.output_filename
-        else:
-            print(f"Path: {args.output_filename} already exists. Using timestamp to prevent overwriting.")
-            validator_output_file = args.output_filename.strip(f".json") + "_" + ".".join(NOW.split(" ")[1].split(":")) + ".json"
+    output_file = os.path.abspath(args.output_filename)
 
-    ## if output format is csv, 2 files are generated, so two filenames need to be checked
-    elif args.write_format == "csv":
-        base = args.output_filename.strip(f".csv")
-        files_to_check = [f"{base}_schema_check.csv", f"{base}_value_check.csv"]
-        files_exist = any(os.path.exists(file) for file in files_to_check)
-        if not files_exist:
-            validator_output_file = args.output_filename
-        else:
-            print(f"Paths using basename: {base} already exist. Using timestamp to prevent overwriting.")
-            validator_output_file = f"{base}_" + ".".join(NOW.split(" ")[1].split(":")) + ".csv"
-            print(validator_output_file)
-
-    else:
-        raise ValueError(f"Unsupported output file format! Supported formats: csv, json. You provided: {args.write_format}")
-
-    ## when run_mode is to compare, collect ref and query filepaths
+    ## when run_mode is "compare", valid output formats are csv and json only
     if args.run_mode == "compare":
+    ## if file with given name exists, use timestamp to prevent overwriting
+        if args.write_format == "json":
+            if not os.path.exists(output_file):
+                validator_output_file = output_file
+            else:
+                print(f"Path: {output_file} already exists. Using timestamp to prevent overwriting.")
+                validator_output_file = output_file.strip(f".json") + "_" + ".".join(NOW.split(" ")[1].split(":")) + ".json"
+
+        ## if output format is csv, 2 files are generated, so two filenames need to be checked
+        elif args.write_format == "csv":
+            base = output_file.strip(f".csv")
+            files_to_check = [f"{base}_schema_check.csv", f"{base}_value_check.csv"]
+            files_exist = any(os.path.exists(file) for file in files_to_check)
+            if not files_exist:
+                validator_output_file = output_file
+            else:
+                print(f"Paths using basename: {base} already exist. Using timestamp to prevent overwriting.")
+                validator_output_file = f"{base}_" + ".".join(NOW.split(" ")[1].split(":")) + ".csv"
+                print(validator_output_file)
+
+        else:
+            raise ValueError(f"\n===\nUnsupported output file format! Supported formats: csv, json. You provided: {args.write_format}\n===\n")
+
+        ## confirm accepted mode
+        if args.mode not in ["quick_compare", "compare_subset"]:
+            raise ValueError("args.mode should be in [quick_compare, compare_subset]")
+
         r_file = os.path.abspath(args.ref_table)
         q_file = os.path.abspath(args.query_table)
 
@@ -87,29 +88,14 @@ def main():
         metadata["ref"] = r_file
         metadata["query"] = q_file
 
-        ## if only ref sample_id_key provided, assume it is the same in query
-        r_key = args.ref_sampleid_key
-        if r_key and not args.query_sampleid_key:
-            q_key = r_key
-        else:
-            q_key = args.query_sampleid_key
-
-
         print("Reading data from files...")
         ## if custom config given, use it to map colnames and values onto reference file
         ## colnames and values in ref should now match representations in the query
         if args.custom_config:
             print("Custom config found...")
-        r_table = File_IO(input_file=r_file, sample_id_key=r_key, config=args.custom_config)
-        q_table = File_IO(input_file=q_file, sample_id_key=q_key)
 
         ## initialise validator object
-        validator = FileCompare(left_data=r_table.data_reader, right_data=q_table.data_reader, strict=args.strict)
-
-        print("Setting up and validating schema...")
-        ## create and confirm schema
-        validator.create_schema()
-        validator.confirm_schema()
+        validator = FileCompare(left_file=r_file, right_file=q_file, l_sample_id_key=args.ref_sampleid_key, r_sample_id_key=args.query_sampleid_key, config=args.custom_config, strict=args.strict)
 
         ## in quick_compare, nothing else needs to be done before comparing values
         if args.mode == "quick_compare":
@@ -132,12 +118,14 @@ def main():
 
     ## when run_mode is "convert_format"
     ## simply read data in, and write out to provided format
+    ## allowed output formats are csv, tsv, json, and yaml
     elif args.run_mode == "convert_format":
+        if args.write_format not in ["csv", "tsv", "json", "yaml"]:
+            raise ValueError(f"\n===\nUnsupported output file format! Supported formats: csv, tsv, json, yaml. You provided: {args.write_format}\n===\n")
         ## admin
         input_file = os.path.abspath(args.input_filepath)
-        output_dir = os.path.abspath(args.output_dir)
-        output_file = os.path.join(output_dir, args.output_filepath)
         reader_object = File_IO(input_file=input_file, sample_id_key=args.sampleid_key)
+        print(f"Writing output to: {output_file} in {args.write_format} format")
         match args.write_format:
             case "csv": reader_object.write_to_csv(output_file=output_file)
             case "tsv": reader_object.write_to_tsv(output_file=output_file)

@@ -10,28 +10,28 @@ TEST_DATA_DIR = files('tests.table_validator_tests.test_data')
 def test_init():
     my_fileio_object = File_IO(input_file= TEST_DATA_DIR / "ref_toy_csv.csv", sample_id_key="sample_id")
     assert my_fileio_object.input_file_type == "csv", "Wrong file type found"
-    assert len(my_fileio_object.data_reader.keys()) == 5, "Expected 5 sample_ids in the test data"
+    assert len(my_fileio_object.data_dict.keys()) == 5, "Expected 5 sample_ids in the test data"
     assert len(my_fileio_object.fields) == 4, f"Expected 4 columns/fields in data"
     assert sorted(my_fileio_object.fields) == sorted(["sample_id", "field1", "field2", "field3"]), "Did not find all expected fields"
 
 def test_read_from_tsv():
     my_fileio_object = File_IO(input_file= TEST_DATA_DIR / "ref_toy_tsv.tsv", sample_id_key="sample_id")
     assert my_fileio_object.input_file_type == "tsv", "Wrong file type found"
-    assert len(my_fileio_object.data_reader.keys()) == 5, "Expected 5 sample_ids in the test data"
+    assert len(my_fileio_object.data_dict.keys()) == 5, "Expected 5 sample_ids in the test data"
     assert len(my_fileio_object.fields) == 4, f"Expected 4 columns/fields in data"
     assert sorted(my_fileio_object.fields) == sorted(["sample_id", "field1", "field2", "field3"]), "Did not find all expected fields"
 
 def test_read_from_json():
     my_fileio_object = File_IO(input_file= TEST_DATA_DIR / "ref_toy_json.json", sample_id_key="sample_id")
     assert my_fileio_object.input_file_type == "json", "Wrong file type found"
-    assert len(my_fileio_object.data_reader.keys()) == 5, "Expected 5 sample_ids in the test data"
+    assert len(my_fileio_object.data_dict.keys()) == 5, "Expected 5 sample_ids in the test data"
     assert len(my_fileio_object.fields) == 4, f"Expected 4 columns/fields in data"
     assert sorted(my_fileio_object.fields) == sorted(["sample_id", "field1", "field2", "field3"]), "Did not find all expected fields"
 
 def test_read_from_yaml():
     my_fileio_object = File_IO(input_file= TEST_DATA_DIR / "ref_toy_yaml.yaml", sample_id_key="sample_id")
     assert my_fileio_object.input_file_type == "yaml", "Wrong file type found"
-    assert len(my_fileio_object.data_reader.keys()) == 5, "Expected 5 sample_ids in the test data"
+    assert len(my_fileio_object.data_dict.keys()) == 5, "Expected 5 sample_ids in the test data"
     assert len(my_fileio_object.fields) == 4, f"Expected 4 columns/fields in data"
     assert sorted(my_fileio_object.fields) == sorted(["sample_id", "field1", "field2", "field3"]), "Did not find all expected fields"
 
@@ -72,6 +72,6 @@ def test_data_mapping():
     my_ref_fileio_object_no_config = File_IO(input_file= TEST_DATA_DIR / "data_map_test_left.csv", sample_id_key="col_left_1")
     my_query_fileio_object = File_IO(input_file= TEST_DATA_DIR / "data_map_test_right.csv", sample_id_key="col_right_1")
 
-    assert list(my_ref_fileio_object.data_reader.keys()) == list(my_query_fileio_object.data_reader.keys()), "Config mapping erroneously altered sample_ids"
+    assert list(my_ref_fileio_object.data_dict.keys()) == list(my_query_fileio_object.data_dict.keys()), "Config mapping erroneously altered sample_ids"
     assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
     assert not sorted(my_ref_fileio_object_no_config.fields) == sorted(my_query_fileio_object.fields), "Column names should not match when config is not used"

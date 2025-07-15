@@ -1,8 +1,7 @@
 name: Run PyTest on Push
 
 on:
-  push:
-    branches: [ "*" ]
+  push
 
 jobs:
   build:

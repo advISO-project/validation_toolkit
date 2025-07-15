@@ -128,13 +128,13 @@ Metadata lines are formatted as comments starting with two hashes; these are wri
 
 # List of Options
 - `-h`, `--help`: show this help message and exit
-- `-r`, `--ref_table`: Reference tabular dataset.
-- `-q`, `--query_table`: Subject tabular dataset to compare.
-- `-rs`, `--ref_sampleid_key`: The column/field name that contains sample IDs in the reference table.
-- `-qs`, `--query_sampleid_key`: The column/field name that contains sample IDs in the query table.
+- `-r`, `--ref_table`: Reference tabular dataset. [REQUIRED: TRUE]
+- `-q`, `--query_table`: Subject tabular dataset to compare. [REQUIRED: TRUE]
+- `-rs`, `--ref_sampleid_key`: The column/field name that contains sample IDs in the reference table. [REQUIRED: TRUE]
+- `-qs`, `--query_sampleid_key`: The column/field name that contains sample IDs in the query table. [OPTIONAL] [DEFAULT: same as provided value for `--ref_sampleid_key`]
 - `-e`, `--strict`: Whether to raise warnings as exceptions or not. **NB** Using this option will cause the program to quit upon encountering differences in the datasets and consequenctly, no output files will be generated. Ordinarily, this flag should never be used.
-- `-m`, `--mode`: How to execute comparison. [quick_compare, compare_subset]
+- `-m`, `--mode`: How to execute comparison. [VALID: quick_compare, compare_subset] [DEFAULT: quick_compare]
 - `-l`, `--field_list`: Comma-separated list of column names/fields to compare, required and used ONLY if using mode 'compare_subset'.
 - `-c`, `--custom_config`: Custom config file containing col_name and value mappings in .yaml format.
-- `-o`, `--output_filename`: Path to output file to be written.
-- `-f`, `--write_format`: File format to write comparison output to ['json', 'csv'].
+- `-o`, `--output_filename`: Path to output file to be written. [REQUIRED: TRUE]
+- `-f`, `--write_format`: File format to write comparison output to. [VALID: 'csv', 'json']
