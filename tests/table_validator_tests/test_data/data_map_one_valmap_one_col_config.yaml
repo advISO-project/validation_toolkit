@@ -1,0 +1,7 @@
+col_left_2:
+  col_name: col_right_2
+col_right_3:
+  value_map:
+    resistant: 1
+    sensitive: 0
+    unknown: 2
