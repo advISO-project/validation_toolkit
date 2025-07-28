@@ -320,5 +320,4 @@ class File_IO():
                 else:
                     mapped_vals[mapped_valname] = val_v
             mapped[k] = mapped_vals
-        print(f"{mapped = }")
         return mapped
