@@ -1,0 +1,6 @@
+col_right_1,col_left_2,col_right_3
+sample1,1,resistant
+sample2,0,resistant
+sample3,0,unknown
+sample4,0,sensitive
+sample5,1,sensitive

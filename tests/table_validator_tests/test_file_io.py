@@ -75,3 +75,35 @@ def test_data_mapping():
     assert list(my_ref_fileio_object.data_dict.keys()) == list(my_query_fileio_object.data_dict.keys()), "Config mapping erroneously altered sample_ids"
     assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
     assert not sorted(my_ref_fileio_object_no_config.fields) == sorted(my_query_fileio_object.fields), "Column names should not match when config is not used"
+    for k, v in my_ref_fileio_object.data_dict.items():
+        assert v == my_query_fileio_object.data_dict[k], f"Value discrepancies found for sample {k}.\nLeft = {v}\nRight = {my_query_fileio_object.data_dict[k]}"
+
+def test_data_mapping_only_different_colnames():
+    ## only colnames differ, values all same
+    my_ref_fileio_object = File_IO(input_file=TEST_DATA_DIR / "data_map_test_left_colname.csv", sample_id_key="col_left_1", config=TEST_DATA_DIR / "data_map_colname_config.yaml")
+    my_query_fileio_object = File_IO(input_file=TEST_DATA_DIR / "data_map_test_right_colname.csv", sample_id_key="col_right_1")
+
+    assert list(my_ref_fileio_object.data_dict.keys()) == list(my_query_fileio_object.data_dict.keys()), "Config mapping erroneously altered sample_ids"
+    assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
+    for k, v in my_ref_fileio_object.data_dict.items():
+        assert v == my_query_fileio_object.data_dict[k], f"Value discrepancies found for sample {k}.\nLeft = {v}\nRight = {my_query_fileio_object.data_dict[k]}"
+
+def test_data_mapping_only_different_valmaps():
+    ## only values mapped differently, colnames all same
+    my_ref_fileio_object = File_IO(input_file=TEST_DATA_DIR / "data_map_test_left_valmap.csv", sample_id_key="col_left_1", config=TEST_DATA_DIR / "data_map_valmap_config.yaml")
+    my_query_fileio_object = File_IO(input_file=TEST_DATA_DIR / "data_map_test_right_valmap.csv", sample_id_key="col_left_1")
+
+    assert list(my_ref_fileio_object.data_dict.keys()) == list(my_query_fileio_object.data_dict.keys()), "Config mapping erroneously altered sample_ids"
+    assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
+    for k, v in my_ref_fileio_object.data_dict.items():
+        assert v == my_query_fileio_object.data_dict[k], f"Value discrepancies found for sample {k}.\nLeft = {v}\nRight = {my_query_fileio_object.data_dict[k]}"
+
+def test_data_mapping_only_subset_difference():
+    ## colname different for col 2, valmap different for col 3
+    my_ref_fileio_object = File_IO(input_file=TEST_DATA_DIR / "data_map_test_left_one_valmap_one_col.csv", sample_id_key="col_right_1", config=TEST_DATA_DIR / "data_map_one_valmap_one_col_config.yaml")
+    my_query_fileio_object = File_IO(input_file=TEST_DATA_DIR / "data_map_test_right_one_valmap_one_col.csv", sample_id_key="col_right_1")
+
+    assert list(my_ref_fileio_object.data_dict.keys()) == list(my_query_fileio_object.data_dict.keys()), "Config mapping erroneously altered sample_ids"
+    assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
+    for k, v in my_ref_fileio_object.data_dict.items():
+        assert v == my_query_fileio_object.data_dict[k], f"Value discrepancies found for sample {k}.\nLeft = {v}\nRight = {my_query_fileio_object.data_dict[k]}"

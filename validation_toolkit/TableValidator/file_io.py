@@ -305,17 +305,19 @@ class File_IO():
         with open(config, "rt") as config_handle:
             config_dict = yaml.safe_load(config_handle)
 
-        col_mappings = {k: v["col_name"] for k, v in config_dict.items()}
-        val_mappings = {k: v["value_map"] for k, v in config_dict.items()}
+        col_mappings = {k: v.get("col_name", None) for k, v in config_dict.items()}
+        val_mappings = {k: v.get("value_map", {}) for k, v in config_dict.items()}
 
         mapped = {}
         for k, v in self.data_dict.items():
             mapped_vals = {}
             for val_k, val_v in v.items():
-                if val_mappings[val_k]:
-                    mapped_vals[col_mappings[val_k]] = val_mappings[val_k][val_v]
-                else:
-                    mapped_vals[col_mappings[val_k]] = val_v
-            mapped[k] = mapped_vals
+                alt_valname = col_mappings.get(val_k, "")
+                mapped_valname = alt_valname if alt_valname else val_k
 
+                if val_mappings.get(val_k, ""):
+                    mapped_vals[mapped_valname] = val_mappings[val_k][val_v]
+                else:
+                    mapped_vals[mapped_valname] = val_v
+            mapped[k] = mapped_vals
         return mapped
