@@ -1,4 +1,6 @@
-import pytest, warnings
+import pytest
+import json
+import filecmp
 import difflib
 from importlib_resources import files
 
@@ -90,20 +92,7 @@ def test_compare_values_config(test_init_config):
     assert test_object_w_config.value_mismatches["sample1"] == {"sample_id": "sample1", "col_right_1": "ValueMatch", "col_right_2": "ValueMatch", "col_right_3": "ValueMatch"}
 
 def _files_are_identical(file1, file2):
-    with open(file1, "r") as f1:
-        with open(file2, "r") as f2:
-            diff = difflib.unified_diff(
-                f1.readlines(),
-                f2.readlines(),
-                fromfile="f1",
-                tofile="f2",
-            )
-    diff = [i for i in diff]
-
-    if diff:
-        return False, diff
-    else:
-        return True, []
+    return filecmp.cmp(f1=file1, f2=file2, shallow=False)
 
 def test_output_files_json(test_init, tmp_path):
     test_object = test_init
@@ -113,9 +102,13 @@ def test_output_files_json(test_init, tmp_path):
                 "prog": "TableValidator_pytest",
                 "prog_version": "0.0.1dev",
                 }
-    test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.json", out_format="json")
 
-    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match.json", file2=f"{tmp_path}/test_out_all_match.json")[0], "Files should be identical!"
+    test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.json", out_format="json")
+    with open(f"{tmp_path}/test_out_all_match.json", "r") as created_json:
+        out_data = json.load(created_json)
+    created_json.close()
+    expected_keys = ["metadata", "schema_check", "value_check"]
+    assert sorted(list(out_data.keys())) == expected_keys, f"Did not find all expected keys in output JSON. Expected: f{expected_keys}, found: {sorted(list(out_data.keys()))}"
 
 def test_output_files_csv(test_init, tmp_path):
     test_object = test_init
@@ -127,8 +120,10 @@ def test_output_files_csv(test_init, tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_all_match.csv", out_format="csv")
 
-    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv")[0], "Files should be identical!"
-    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv")[0], "Files should be identical!"
+    ## using fixture files here as it is useful to check this in a static way
+    ## fixtures can also be used as a reference for expected FileCompare output when using CSV as output format
+    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match_schema_check.csv", file2=f"{tmp_path}/test_out_all_match_schema_check.csv"), "Files should be identical!"
+    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_all_match_value_check.csv", file2=f"{tmp_path}/test_out_all_match_value_check.csv"), "Files should be identical!"
 
 def test_output_files_schema_mismatch():
 
@@ -155,4 +150,13 @@ def test_output_files_value_mismatch(tmp_path):
                 }
     test_object.write_results(metadata=metadata, output=f"{tmp_path}/test_out_value_mismatch.json", out_format="json")
 
-    assert _files_are_identical(file1= TEST_DATA_DIR / "pytest_out_value_mismatch.json", file2=f"{tmp_path}/test_out_value_mismatch.json")[0], "Files should be identical!"
+    with open(f"{tmp_path}/test_out_value_mismatch.json", "r") as created_json:
+        out_data = json.load(created_json)
+    created_json.close()
+    assert out_data["value_check"]["sample_4"]["field2"] == "ValueMismatch. Expected 42 Found fourtwo"
+    assert out_data["metadata"] == metadata
+
+def test_composite_ids_compare_with_config():
+    comp_object = FileCompare(left_file= TEST_DATA_DIR / "composite_ids_test_left.csv", right_file=TEST_DATA_DIR / "composite_ids_test_right.csv", l_sample_id_key="sample_id,uid", r_sample_id_key="sample_id,uuid", config=TEST_DATA_DIR / "composite_ids_test_config.yaml")
+    with pytest.warns(ValueMismatchWarning):
+        comp_object.compare_values()

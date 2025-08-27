@@ -66,6 +66,7 @@ def test_infer_types():
     assert my_fileio_object._infer_type(var="fAlse") == False, "Bool inference fails"
     assert my_fileio_object._infer_type(var="3.14") == 3.14, "Float inference fails"
     assert my_fileio_object._infer_type(var="simple_string") == "simple_string", "Inference incorrectly applied to string"
+    assert not my_fileio_object._infer_type(var=""), "empty string should evaluate to NoneType"
 
 def test_data_mapping():
     my_ref_fileio_object = File_IO(input_file= TEST_DATA_DIR / "data_map_test_left.csv", sample_id_key="col_left_1", config= TEST_DATA_DIR / "sample_config.yaml")
@@ -107,3 +108,8 @@ def test_data_mapping_only_subset_difference():
     assert sorted(my_ref_fileio_object.fields) == sorted(my_query_fileio_object.fields), "Config mapping on column names went wrong"
     for k, v in my_ref_fileio_object.data_dict.items():
         assert v == my_query_fileio_object.data_dict[k], f"Value discrepancies found for sample {k}.\nLeft = {v}\nRight = {my_query_fileio_object.data_dict[k]}"
+
+def test_composite_ids():
+    my_file_io_object = File_IO(input_file= TEST_DATA_DIR / "composite_ids_test_left.csv", sample_id_key="sample_id,uid")
+
+    assert "sample_1.1" in my_file_io_object.data_dict.keys(), "Composite IDs should have been constructed as 'sample_id_val' + '.' + 'uid_val' "
