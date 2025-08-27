@@ -1,0 +1,7 @@
+uid:
+  col_name: uuid
+data_col_2:
+  col_name: data_col_alt_2
+  value_map:
+    true: 1
+    false: 0

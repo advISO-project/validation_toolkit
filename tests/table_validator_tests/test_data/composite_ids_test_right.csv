@@ -1,0 +1,10 @@
+sample_id,uuid,data_col_1,data_col_alt_2
+sample_1,1,true,0
+sample_1,2,true,0
+sample_1,3,false,1
+sample_2,1,true,1
+sample_2,2,true,0
+sample_2,3,false,0
+sample_3,1,true,1
+sample_3,2,true,0
+sample_3,3,true,1
