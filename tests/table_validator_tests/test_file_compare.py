@@ -160,3 +160,7 @@ def test_composite_ids_compare_with_config():
     comp_object = FileCompare(left_file= TEST_DATA_DIR / "composite_ids_test_left.csv", right_file=TEST_DATA_DIR / "composite_ids_test_right.csv", l_sample_id_key="sample_id,uid", r_sample_id_key="sample_id,uuid", config=TEST_DATA_DIR / "composite_ids_test_config.yaml")
     with pytest.warns(ValueMismatchWarning):
         comp_object.compare_values()
+
+    assert comp_object.value_mismatches["sample_1.1"]["data_col_alt_2"] == "ValueMismatch. Expected 1 Found 0", "Failed to find expected value mismatch!"
+    assert comp_object.value_mismatches["sample_2.3"]["data_col_alt_2"] == "ValueMismatch. Expected 1 Found 0", "Failed to find expected value mismatch!"
+    assert comp_object.value_mismatches["sample_3.3"]["data_col_1"] == "ValueMismatch. Expected False Found True", "Failed to find expected value mismatch!"
