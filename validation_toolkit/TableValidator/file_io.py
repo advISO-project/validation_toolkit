@@ -157,6 +157,12 @@ class File_IO():
         if not self.input_file_type in ["csv", "tsv"]:
             raise UnexpectedFileFormatError("Found unexpected file format. Supported formats are: [csv, tsv]")
 
+        if "," in sample_id_key:
+            sample_id_key_list = sample_id_key.split(",")
+            print(f"Using composite identifiers: {sample_id_key_list}")
+        else:
+            sample_id_key_list = [sample_id_key]
+
         ## use the file type to read file in with the correct delimiter
         with open(csv_or_tsv_file, "rt") as in_csv_or_tsv_handle:
             if self.input_file_type == "csv":
@@ -167,9 +173,12 @@ class File_IO():
             ## populate the data dictionary
             data = {}
             for row in file_reader:
-                sample_id = row.get(sample_id_key, "")
-                if not sample_id:
-                    raise KeyError(f"Specified sample ID key: {sample_id_key} not found in table.")
+                sample_id_components = [row.get(sample_id_key, "") for sample_id_key in sample_id_key_list]
+                for i, sample_id_found in enumerate(sample_id_components):
+                    if sample_id_found == "":
+                        sample_id_not_found = sample_id_key_list[i]
+                        raise KeyError(f"Specified sample ID key: {sample_id_not_found} not found in table.")
+                sample_id = ".".join(sample_id_components)
                 sample_data = {k: v for k, v in row.items()}
                 data[sample_id] = sample_data
         in_csv_or_tsv_handle.close()
@@ -232,6 +241,9 @@ class File_IO():
             str | int | float | bool: The var input, converted to int/float/bool as applicable
         """
         bool_map = {"true": True, "false": False}
+        ## catch case where var is empty
+        if not var:
+            return None
         ## first check if the string is numeric
         ## if yes, return the int
         if var.isnumeric():
@@ -239,7 +251,7 @@ class File_IO():
         ## next check if string might contain a bool expression
         ## if so, return the correct bool
         elif var.lower() in ["true", "false"]:
-                return bool_map[var.lower()]
+            return bool_map[var.lower()]
         else:
             try:
                 ## next try casting it to float
