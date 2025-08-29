@@ -138,3 +138,5 @@ Metadata lines are formatted as comments starting with two hashes; these are wri
 - `-c`, `--custom_config`: Custom config file containing col_name and value mappings in .yaml format.
 - `-o`, `--output_filename`: Path to output file to be written. [REQUIRED: TRUE]
 - `-f`, `--write_format`: File format to write comparison output to. [VALID: 'csv', 'json']
+
+> `ref_sampleid_key` and `query_sampleid_key` can be either a string, eg 'sample_id' or a comma-separated list of strings, eg 'sample_id,replicate_id' - referring to two columns, here sample_id and replicate_id, which when combined will produce a unique identifier. This is useful when columns like sample_id may contain duplicate entries but joining them with another column containing relevant identifiers produces unique IDs, so the 'sample_id' column in this example will contain duplicate entries if the example data contains replicates, but joining sample_id with replicate_id will produce a unique identifier for each row of data.
