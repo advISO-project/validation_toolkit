@@ -173,7 +173,7 @@ class File_IO():
             ## populate the data dictionary
             data = {}
             for row in file_reader:
-                sample_id_components = [row.get(sample_id_key, "") for sample_id_key in sample_id_key_list]
+                sample_id_components = [row.get(id_key, "") for id_key in sample_id_key_list]
                 for i, sample_id_found in enumerate(sample_id_components):
                     if sample_id_found == "":
                         sample_id_not_found = sample_id_key_list[i]
