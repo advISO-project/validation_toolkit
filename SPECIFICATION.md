@@ -29,7 +29,7 @@ Responsibility for the provenance and suitability of reference material, the com
 The organisation of the toolkit within the AdvISO GitHub organisation is:
 
 ```text
-AdvISO
+adviso-project
 └── validation_toolkit
     ├── compare subcommand
     └── internal comparison, specification, provenance, findings, and reporting components
@@ -51,7 +51,7 @@ Additional commands are not a development objective for the first release and MU
 
 The first-release scope of `compare` is:
 
-- comparison of structured records represented in CSV, TSV, JSON, or YAML;
+- comparison of structured records represented in CSV, TSV or JSON;
 - explicit single-field or composite record keys;
 - detection of matching, differing, missing, and extra records and fields;
 - field-specific comparison rules;
@@ -80,11 +80,11 @@ No bioinformatics-specific or domain-aware comparator is required for the first 
 
 The following principles govern all requirements:
 
-1. **Explicit over inferred:** Clinically material comparison behaviour MUST be declared, not guessed from observed data.
+1. **Explicit over inferred:** Comparison behaviour MUST be declared, not guessed from observed data.
 2. **No silent data loss:** Input records, duplicate keys, unmapped values, and unsupported structures MUST NOT be silently discarded or overwritten.
 3. **Symmetry:** Missing and extra content MUST be assessed in both directions.
-4. **Separation of concerns:** Execution success, comparison outcome, and laboratory acceptance decision are distinct concepts.
-5. **Complete evidence:** A normal comparison failure MUST still produce a complete report.
+4. **Separation of concerns:** Execution success and comparison outcome are distinct concepts.
+5. **Complete evidence:** A normal comparison mismatch MUST still produce a complete report.
 6. **Determinism:** Identical inputs, configuration, and tool version MUST produce semantically identical results.
 7. **Traceability:** Findings MUST identify the rule, record, and field that produced them.
 8. **Privacy by design:** Reports MUST include only the sensitive data necessary for their intended purpose.
@@ -126,7 +126,7 @@ A comparison run MUST receive:
 - one query dataset;
 - an output destination.
 
-A custom comparison specification MAY be supplied. If it is omitted, the bundled strict-exact specification defined in Section 6.8 MUST be used.
+A custom comparison specification MAY be supplied. If it is omitted, the bundled strict-exact specification defined in Section 6.9 MUST be used.
 
 ### 5.2 Supported formats
 
@@ -134,10 +134,9 @@ The initial implementation MUST support:
 
 - CSV conforming to the configured dialect;
 - TSV conforming to the configured dialect;
-- JSON using a documented record-oriented structure;
-- YAML using the same logical structure as JSON.
+- JSON using a documented record-oriented structure.
 
-The reference and query formats MAY be selected independently through explicit command-line options. If a format is not supplied, it MAY be detected only from a recognised, unambiguous extension: `.csv`, `.tsv`, `.json`, `.yaml`, or `.yml`. In either case:
+The reference and query formats MAY be selected independently through explicit command-line options. If a format is not supplied, it MAY be detected only from a recognised, unambiguous extension: `.csv`, `.tsv` or `.json`. In either case:
 
 - detected format MUST be recorded;
 - ambiguous or unsupported content MUST fail validation;
@@ -164,9 +163,9 @@ For CSV and TSV:
 - source row numbers SHOULD be retained for traceability;
 - input values MUST initially remain strings unless a custom specification declares a null representation or type conversion; in the bundled strict-exact specification, an empty cell is an empty string.
 
-### 5.5 JSON and YAML parsing
+### 5.5 JSON parsing
 
-- JSON and YAML inputs MUST use a schema-validated list of record objects:
+- JSON inputs MUST use a schema-validated list of record objects:
 
 ```json
 [
@@ -175,28 +174,24 @@ For CSV and TSV:
 ]
 ```
 
-- YAML scalar resolution MUST use a documented restricted YAML 1.2-compatible schema in which only lowercase `true`, `false`, and `null` receive implicit non-numeric scalar types.
 - Values such as `yes`, `no`, `on`, `off`, uppercase boolean-like values, and timestamp-like strings MUST remain strings unless a custom specification explicitly maps or parses them.
-- JSON and YAML numerical tokens that may be used as decimals MUST be loaded without an intermediate binary floating-point conversion, and their source lexical representations MUST remain available.
+- JSON numerical tokens that may be used as decimals MUST be loaded without an intermediate binary floating-point conversion, and their source lexical representations MUST remain available.
 - Root scalars, heterogeneous root structures, and records that are not objects MUST be rejected with actionable errors.
 
 ### 5.6 Preserved parser-native values
 
-For `preserved_exact` comparison, parsers MUST expose a common, deterministic set of parser-native value categories:
-
-- `string`, `integer`, `decimal`, `boolean`, `null`, `array`, and `object`;
+- For `preserved_exact` comparison, parsers MUST expose a common, deterministic set of parser-native value categories: `string`, `integer`, `decimal`, `boolean`, `null`, `array`, and `object`;
 - CSV and TSV cells MUST be strings, including empty strings, unless a custom specification declares further processing;
 - JSON numbers without a fractional or exponent component MUST be integers, while other finite JSON numbers MUST be exact decimals;
-- YAML scalars MUST resolve under the restricted schema in Section 5.5 to strings, arbitrary-precision integers, exact finite decimals, booleans, or nulls; timestamps MUST NOT be resolved implicitly;
-- JSON arrays and YAML sequences MUST be arrays, and JSON or YAML mappings used as field values MUST be objects; and
-- equality MUST require the same parser-native category and recursively equal content. Array order MUST be significant and object member order MUST not be significant.
-
-The source lexical representation of numerical values MUST remain available as evidence even though numerically equivalent representations within the same parser-native numerical category compare equally. Non-finite numerical values MUST be rejected.
+- JSON arrays MUST be arrays, and JSON mappings used as field values MUST be objects; and
+- Values are equal only when they have the same parser-native category and recursively equal content. For array-valued fields, element order is significant under `preserved_exact`; for object-valued fields, member names and values must match but member order is not significant. Top-level records are aligned by their declared record keys, and their input order does not affect comparison.
+- Numerical values MUST be retained exactly as they appeared in the input for reporting and traceability. However, two values in the same numerical category compare as equal when they represent the same number; for example, decimal `1.0` and decimal `1.00` are equal.
+- `NaN`, positive infinity, and negative infinity are not valid numerical values. In an attributable non-key field, they MUST produce a contract finding and make that value `not_assessable`; other assessable content MUST still be compared. If such a value occurs in a record key or prevents construction of an unambiguous record model, it MUST produce an execution error.
 
 ### 5.7 Empty inputs
 
 - Empty files and datasets with zero records MUST be recognised explicitly.
-- A custom comparison specification MUST declare whether two empty datasets satisfy its records-phase acceptance criteria.
+- A custom comparison specification MUST state whether a comparison in which both datasets contain no records is acceptable. It MAY accept two empty datasets as having no missing or extra records, or require a minimum number of records.
 - A non-empty reference and empty query MUST report every expected record as missing.
 - An empty reference and non-empty query MUST report every observed record as extra.
 
@@ -224,7 +219,301 @@ A valid specification MUST declare at least:
 - duplicate-key policy;
 - phase-specific acceptance criteria.
 
-### 6.2 Record keys
+### 6.2 Custom comparison-specification YAML format
+
+Custom comparison specifications MUST be YAML documents conforming to the format defined in this section. YAML is used only for the comparison specification; it is not a supported dataset format. A specification file SHOULD use the `.yaml` extension; `.yml` MAY also be accepted.
+
+#### 6.2.1 YAML parsing and validation
+
+- The document MUST be UTF-8 encoded and contain exactly one YAML mapping at its root.
+- YAML 1.2 scalar resolution MUST be used with a safe loader.
+- Duplicate mapping keys, merge keys, aliases, anchors, explicit tags, and executable or implementation-specific object constructors MUST be rejected.
+- Unknown keys MUST be rejected unless a future schema version explicitly defines an extension mechanism.
+- Required keys MUST NOT be supplied as YAML null values.
+- `schema_version`, `id`, `revision`, criterion identifiers, exception identifiers, field names, operation names, comparator names, enumerated values, decimal lexical values, dates, and datetimes SHOULD be quoted to prevent unintended YAML scalar conversion.
+- The complete document MUST be validated against the published schema identified by `schema_version` before either dataset is read.
+- Validation errors MUST identify the YAML path and the violated requirement.
+
+#### 6.2.2 Complete structural template
+
+The following template defines the complete first-release structure. Keys marked “optional” in comments MAY be omitted; other displayed keys are required when their parent construct is used, except where a conditional omission is explicitly permitted below. Empty lists are valid only where stated below.
+
+```yaml
+schema_version: "1.0"
+
+specification:
+  id: "org.example.pipeline-output-comparison"
+  revision: "1.0.0"
+  title: "Example pipeline-output comparison"       # optional
+  description: "Approved comparison rules"          # optional
+
+records:
+  keys:
+    - "record_id"
+  policies:
+    duplicate_keys: "error"
+    missing_records: "finding"
+    extra_records: "finding"
+    empty_datasets: "accept"
+
+fields:
+  include: "all"
+  undeclared: "fail"
+  policies:
+    missing_fields: "finding"
+    extra_fields: "finding"
+  definitions:
+    record_id:
+      source:
+        reference: "sample_id"
+        query: "specimen_id"
+      required:
+        reference: true
+        query: true
+      logical_type: "string"
+      null:
+        allowed: false
+        nulls_equal: false
+        missing_tokens:
+          reference: []
+          query: []
+      source_normalisation: []
+      value_mapping:
+        reference: []
+        query: []
+      typed_normalisation: []
+      comparator:
+        name: "typed_exact"
+        parameters: {}
+      unit: "laboratory-defined-unit"                # optional
+      sensitivity: "identifier"                     # optional label
+      finding_severity: "error"                     # optional
+
+acceptance:
+  contract:
+    - id: "no-contract-findings"
+      metric: "contract_finding_count"
+      operator: "equal"
+      threshold: 0
+  records:
+    - id: "no-missing-records"
+      metric: "missing_record_count"
+      operator: "equal"
+      threshold: 0
+    - id: "no-extra-records"
+      metric: "extra_record_count"
+      operator: "equal"
+      threshold: 0
+  values:
+    - id: "no-value-mismatches"
+      metric: "value_mismatch_count"
+      operator: "equal"
+      threshold: 0
+
+exceptions: []
+
+reporting:
+  finding_limit: 10000                              # optional
+  excluded_field_detail: "summary"
+```
+
+The template is illustrative rather than an instruction to use these particular rules. In particular, laboratories MUST choose identifiers, field definitions, policies, criteria, thresholds, exceptions, and reporting limits appropriate to the intended comparison. The published machine-readable schema MUST encode the same structure and constraints as this section; where the schema and this document disagree, the normative behaviour specification MUST be corrected before release rather than silently choosing one interpretation.
+
+#### 6.2.3 Top-level keys and identity
+
+The only permitted top-level keys are `schema_version`, `specification`, `records`, `fields`, `acceptance`, `exceptions`, and `reporting`.
+
+- `schema_version` MUST be a quoted string identifying a supported comparison-specification schema version.
+- `specification.id` MUST be a stable, non-empty identifier. It SHOULD use a collision-resistant organisational namespace.
+- `specification.revision` MUST be a non-empty revision string controlled by the specification owner. Any behaviourally material change MUST produce a new revision.
+- `specification.title` and `specification.description` are optional human-readable strings and MUST NOT alter comparison behaviour.
+
+#### 6.2.4 Record configuration
+
+- `records.keys` MUST be a non-empty ordered list of canonical field names present in `fields.definitions`. List order defines composite-key order.
+- Every key field MUST be required on both sides, non-nullable, and declared with a scalar logical type. A key field MAY use explicitly declared source normalisation or value mapping, but MUST use `typed_exact` after transformation.
+- `records.policies.duplicate_keys` MUST be `error`; `missing_records` and `extra_records` MUST be `finding`. These values are explicit even though no alternative is supported in the first release.
+- `records.policies.empty_datasets` MUST be `accept` or `reject`. `accept` means that two syntactically valid zero-record datasets satisfy the records-phase empty-dataset rule; it does not waive independently assessable contract requirements. `reject` creates a records-phase finding and is itself a conclusive records-phase acceptance failure when both datasets contain zero records. This generated criterion and its result MUST be included in the report.
+
+#### 6.2.5 Field selection, declaration, and source names
+
+- `fields.include` MUST be either the string `all` or a non-empty list of canonical field names. Key fields are always included whether or not they appear in the list.
+- `fields.undeclared` MUST be one of `compare`, `ignore`, `warn`, or `fail`.
+  - `compare` compares shared undeclared fields with `preserved_exact`; an undeclared field present on only one side follows the missing/extra-field policy.
+  - `ignore` excludes undeclared fields and records the exclusion as `not_assessed`.
+  - `warn` behaves as `ignore` and additionally emits a structured warning.
+  - `fail` creates a contract finding for every undeclared field.
+- `fields.policies.missing_fields` and `extra_fields` MUST be `finding`. Required missing fields and unexpected extra fields are therefore reported; acceptance criteria determine their effect on the outcome.
+- `fields.definitions` MUST be a mapping keyed by unique canonical field name and MUST contain a definition for every field referenced by `records.keys`. Definitions for non-key fields MAY be omitted only to the extent permitted by `fields.undeclared`.
+- `source.reference` and `source.query` MUST each contain the source field name used on that side. Omitting either source name is permitted only for a field that is not required on that side.
+- `required.reference` and `required.query` MUST be booleans. Absence of a required field creates a contract finding; absence of an optional field does not.
+- `sensitivity`, when present, is a stable non-empty classification label interpreted by the selected reporting/privacy policy. It does not itself define redaction behaviour.
+- `finding_severity`, when present, MUST be `info`, `warning`, or `error`. Severity is report metadata and MUST NOT determine the comparison outcome unless referenced by an explicit acceptance criterion.
+- `unit`, when present, MUST be a non-empty string. It records the declared unit but does not request automatic unit conversion.
+
+#### 6.2.6 Logical types and null policy
+
+For a scalar field, `logical_type` MUST be one of `string`, `integer`, `decimal`, `boolean`, `date`, or `datetime`. It MAY be omitted only when the comparator is `preserved_exact` and no typed parsing, mapping, or typed normalisation is configured.
+
+For a collection field, `logical_type` MUST use this form:
+
+```yaml
+logical_type:
+  name: "list"                 # list, set, or multiset
+  element_type: "string"       # scalar logical type
+  element_comparator:
+    name: "typed_exact"
+    parameters: {}
+```
+
+Nested collection types MUST be rejected. The comparator named for the field itself MUST correspond to the collection kind: `list_exact`, `set_exact`, or `multiset_exact`.
+
+Every declared field MUST contain a `null` mapping:
+
+- `allowed` and `nulls_equal` MUST be booleans.
+- `nulls_equal` MUST be `false` when `allowed` is `false`.
+- `missing_tokens.reference` and `missing_tokens.query` MUST each be a list of source-value descriptors. A matched token is converted to null at processing step 3 in Section 6.8.
+- An empty list declares that there are no textual missing tokens on that side. Parser-native JSON null remains null independently of this list.
+
+A source-value descriptor has one of these forms:
+
+```yaml
+category: "string"
+value: "NA"
+```
+
+```yaml
+category: "decimal"
+value: "1.00"
+```
+
+```yaml
+category: "null"
+```
+
+`category` MUST be `string`, `integer`, `decimal`, `boolean`, or `null`. `value` MUST be present for every category except `null`; it MUST be a quoted lexical string for `string`, `integer`, and `decimal`, and `true` or `false` for `boolean`. The lexical value MUST be valid for its stated category. Descriptors are matched using parser-native category and value equality under Section 5.6; the retained lexical form remains evidence but does not create a distinct numerical value. This explicit representation prevents YAML scalar resolution from changing mapping keys or missing tokens.
+
+#### 6.2.7 Normalisation and value mapping
+
+`source_normalisation` and `typed_normalisation` MUST be ordered lists. Each entry MUST have this form:
+
+```yaml
+- operation: "trim"
+  parameters:
+    side: "both"
+```
+
+`parameters` MAY be omitted only when the registered operation has no parameters. `operation` MUST name an operation defined by the applicable schema version, and its parameters MUST validate against that operation’s published parameter schema. An unknown operation or parameter MUST invalidate the specification. List order is execution order. The permitted processing stages and their overall order are fixed by Section 6.8.
+
+The first-release source-text operation identifiers are:
+
+- `unicode_normalise`, requiring `form` with one of `NFC`, `NFD`, `NFKC`, or `NFKD`;
+- `trim`, requiring `side` with one of `leading`, `trailing`, or `both`; and
+- `case_fold`, which takes no parameters.
+
+The first-release typed-value operation identifiers are:
+
+- `decimal_quantise`, requiring a non-negative integer `places` and `rounding` with one of `half_even`, `half_up`, or `down`; and
+- `datetime_truncate`, requiring `precision` with one of `second`, `millisecond`, or `microsecond`.
+
+A source-text operation MUST appear only in `source_normalisation`; a typed-value operation MUST appear only in `typed_normalisation`. Operation semantics, including the Unicode-data version used by Unicode operations, MUST be published with the schema and recorded sufficiently for reproducibility.
+
+`value_mapping.reference` and `value_mapping.query` MUST be ordered lists of entries with this form:
+
+```yaml
+- from:
+    category: "string"
+    value: "resistant"
+  to:
+    category: "string"
+    value: "R"
+```
+
+- `from` and `to` MUST be source-value descriptors as defined in Section 6.2.6.
+- A `to` descriptor with `category: "null"` explicitly maps to null and is distinct from absence of a mapping entry.
+- Each `from` value MUST occur at most once within one side’s mapping. Conflicting or unreachable entries MUST invalidate the specification.
+- A non-empty value mapping requires a scalar `logical_type`; value mapping of collection fields is not supported in the first release. Its `to` values are parsed as the destination type after mapping.
+- When a side’s value-mapping list is non-empty, a source value with no mapping entry creates a contract finding. Pass-through of unmapped values is not supported in the first release.
+- Empty lists declare that no value mapping is applied on that side.
+
+#### 6.2.8 Comparator declarations
+
+Every field definition MUST contain `comparator.name` and `comparator.parameters`. `name` MUST be one of the comparator identifiers in Section 7.4, and `parameters` MUST be a mapping containing only parameters valid for that comparator.
+
+- `preserved_exact`, `typed_exact`, `normalised_string`, `numeric_exact`, `date_exact`, `datetime_exact`, `list_exact`, `set_exact`, and `multiset_exact` take no field-level parameters in the first release; their `parameters` mapping MUST be empty.
+- `numeric_tolerance` permits only `absolute_tolerance` and `relative_tolerance`. At least one MUST be present. Each MUST be a quoted, non-negative finite decimal string; omission of one means it is treated as zero as specified in Section 7.4.5.
+- The comparator MUST be compatible with `logical_type`: string comparators with `string`, numeric comparators with `integer` or `decimal`, date comparators with their corresponding temporal type, and collection comparators with their corresponding collection type.
+- `normalised_string` requires at least one `source_normalisation` or `typed_normalisation` operation applicable to strings.
+
+#### 6.2.9 Acceptance criteria
+
+`acceptance` MUST contain `contract`, `records`, and `values`, each an ordered list of criterion mappings. A list MAY be empty only when that phase cannot be reached under the approved intended use; selecting a scope that includes a phase with no criterion MUST invalidate the run as required by Section 8.5.
+
+Every criterion MUST contain:
+
+- a stable `id`, unique within the specification;
+- `metric`, naming a metric defined by the applicable schema version;
+- `operator`, one of `equal`, `not_equal`, `less_than`, `less_than_or_equal`, `greater_than`, or `greater_than_or_equal`; and
+- `threshold`, expressed as a non-negative integer for count metrics or a quoted finite decimal string between `0` and `1`, inclusive, for proportion metrics.
+
+The first-release core metrics are `contract_finding_count`, `missing_record_count`, `extra_record_count`, `value_mismatch_count`, `not_assessable_count`, `reference_record_count`, and `query_record_count`. It also supports the corresponding proportion metrics `contract_finding_proportion` and `value_mismatch_proportion`.
+
+A criterion MAY additionally contain:
+
+```yaml
+fields: ["result", "confidence"]
+finding_codes: ["VALUE_MISMATCH"]
+parameters:
+  side: "reference"
+denominator:
+  population: "in_scope_values"
+  not_assessed: "exclude"
+exceptions: ["known-difference-001"]
+```
+
+- `fields` restricts the metric to the listed canonical fields; omission means all fields applicable to the metric.
+- `finding_codes` restricts a finding-based metric to the listed stable codes; omission means all codes applicable to that metric.
+- `parameters` MUST contain only parameters published for the chosen metric. `side` is required for a metric whose population is not otherwise unambiguous.
+- A filter or parameter that is not meaningful for the chosen metric MUST invalidate the specification rather than be ignored.
+- `denominator` is required for proportion metrics and MUST be absent for count metrics. `population` MUST name a population supported by the metric. `not_assessed` MUST be `include` or `exclude`, making its treatment explicit. `not_assessable` content is governed by Section 8.5 and cannot be configured as a match or silently excluded.
+- `exceptions` lists exception identifiers applied before the criterion is evaluated; omission is equivalent to an empty list.
+- A referenced exception excludes a matching finding from that criterion’s failing metric but MUST NOT remove the finding from the report, summary counts, or provenance.
+- Criteria are evaluated in list order for reporting, but order MUST NOT alter any phase or overall outcome.
+
+#### 6.2.10 Permitted exceptions
+
+`exceptions` MUST be a list and MAY be empty. Each exception MUST contain a unique stable `id`, a non-empty `rationale`, and an `applies_to` mapping containing at least one of `finding_codes`, `fields`, or `record_keys`. It MAY contain `revision`, `approved_by`, and `review_date` as provenance strings. These metadata fields do not replace the laboratory’s external approval controls.
+
+```yaml
+exceptions:
+  - id: "known-difference-001"
+    revision: "1"
+    rationale: "Approved legacy representation"
+    applies_to:
+      finding_codes: ["VALUE_MISMATCH"]
+      fields: ["result"]
+      record_keys:
+        - record_id:
+            category: "string"
+            value: "S001"
+    effect: "permitted_difference"
+    approved_by: "approval-record-reference"
+    review_date: "2027-01-31"
+```
+
+- `finding_codes`, `fields`, and `record_keys` are cumulative filters: a finding must satisfy every filter that is present.
+- `record_keys` MUST be a list of mappings containing exactly the canonical key fields declared by `records.keys`. Each field value MUST be expressed as a value descriptor in the form defined by Section 6.2.6 and MUST represent the canonical post-transformation key value.
+- `effect` MUST be `permitted_difference`; no exception may suppress parsing, contract assessment, reporting, or provenance.
+- Every applied exception MUST remain visible in findings and criterion evaluation.
+- An exception has no effect unless its `id` is referenced by an acceptance criterion.
+
+#### 6.2.11 Reporting controls
+
+- `reporting.finding_limit`, when present, MUST be a positive integer. Omission means that no comparison-finding limit is configured, although documented resource limits still apply. Reaching a configured limit has the outcome consequences specified in Sections 7.5 and 8.4.
+- `reporting.excluded_field_detail` MUST be `summary` or `individual`. `summary` permits omission of individual `not_assessed` findings only when the exclusion summary required by Section 7.5 is emitted; `individual` requires a finding for each excluded field occurrence.
+- Privacy and redaction settings are not defined by this schema version. They MUST be supplied by a separately approved reporting policy and recorded in provenance.
+
+### 6.3 Record keys
 
 - A record key MUST contain one or more named fields.
 - Composite-key field order MUST be stable and recorded.
@@ -238,24 +527,13 @@ A valid specification MUST declare at least:
 - Duplicate records MUST never overwrite one another silently.
 - Findings and reports MUST retain enough information to distinguish every source record.
 
-### 6.3 Field declarations and preserved values
+### 6.4 Field declarations and preserved values
 
-The comparison engine MUST support both preserved, untyped values and explicitly declared logical types. Custom specifications MAY declare logical field types. A type declaration is required for a field that uses typed parsing, normalisation, mapping, or a type-specific comparator. Every custom specification MUST explicitly declare how undeclared fields are treated: `compare`, `ignore`, `warn`, or `fail`. There MUST be no implicit policy. An `ignore` policy MUST still be represented as an assessment exclusion in accordance with Section 7.5.
+The comparison engine MUST support both preserved, untyped values and explicitly declared logical types. A type declaration is required for a field that uses typed parsing, normalisation, mapping, or a type-specific comparator. Every custom specification MUST explicitly declare how undeclared fields are treated: `compare`, `ignore`, `warn`, or `fail`. There MUST be no implicit policy. An `ignore` policy MUST still be represented as an assessment exclusion in accordance with Section 7.5.
 
-A field definition MAY declare:
+Every declared field MUST define its canonical name, reference and query source names where applicable, required status on each side, null policy, ordered normalisation and mapping lists, and comparator. It MUST declare a logical type except where Section 6.2.6 permits omission for `preserved_exact`. Unit, sensitivity classification, and finding severity are optional. The authoritative YAML representation and validation rules are defined in Section 6.2.
 
-- canonical name;
-- reference and query source names;
-- required or optional status on each side;
-- logical type;
-- null policy;
-- source-text and typed-value normalisation steps;
-- comparator and comparator parameters;
-- controlled vocabulary or value mapping;
-- sensitivity or redaction classification;
-- severity or acceptance contribution.
-
-### 6.4 Logical types and typed parsing
+### 6.5 Logical types and typed parsing
 
 The comparison engine MUST support custom specifications declaring scalar logical types `string`, `integer`, `decimal`, `boolean`, `date`, and `datetime`, and typed `list`, `set`, and `multiset` collections. Collection fields MUST declare their element type. Null is a distinct value state governed by field policy, not a logical type.
 
@@ -263,42 +541,42 @@ Type parsing MUST be field-specific and declared. The tool MUST NOT infer a logi
 
 An invalid typed value in a non-key field that remains attributable to an unambiguous record MUST be a contract finding and MUST make that value `not_assessable`; it MUST NOT be an execution error. Defects that prevent construction of a complete and unambiguous record model are classified under Section 8.3.
 
-#### 6.4.1 String
+#### 6.5.1 String
 
 - A string MUST preserve its Unicode code points exactly by default.
 - `typed_exact` equality MUST be code-point-for-code-point equality.
 - Empty strings, whitespace-only strings, nulls, and absent fields MUST remain distinct.
 
-#### 6.4.2 Integer
+#### 6.5.2 Integer
 
 - Textual integers MUST use signed base-10 notation consisting of an optional `+` or `-` followed by one or more ASCII digits.
 - Decimal points, exponent notation, booleans, and other characters MUST be invalid after source-text normalisation and mapping.
 - Leading zeros MUST be accepted and have no numerical significance. Identifiers for which leading zeros are significant MUST be declared as strings.
 - Integer representation MUST support arbitrary precision within documented resource limits.
 
-#### 6.4.3 Decimal
+#### 6.5.3 Decimal
 
 - Decimals MUST be parsed and represented using decimal arithmetic without an intermediate binary floating-point conversion.
 - Plain and scientific decimal notation MUST be accepted.
 - Numerically equivalent finite representations such as `1.0`, `1.00`, and `1e0` MUST have the same canonical value.
 - Parsing MUST preserve all supplied numerical precision.
-- `NaN`, positive infinity, and negative infinity MUST be invalid in the first release.
+- `NaN`, positive infinity, and negative infinity MUST be invalid.
 
-#### 6.4.4 Boolean
+#### 6.5.4 Boolean
 
-- Native JSON and YAML booleans MUST be accepted.
+- Native JSON booleans MUST be accepted.
 - Textual boolean parsing MUST accept only lowercase `true` and `false`.
 - Integers, uppercase boolean-like values, `yes`, `no`, `on`, `off`, and other representations MUST require an explicit value mapping.
 - Booleans MUST NOT be treated as integers.
 
-#### 6.4.5 Date
+#### 6.5.5 Date
 
 - Dates MUST use the ISO 8601 full-date form `YYYY-MM-DD`.
 - Values MUST represent valid Gregorian calendar dates.
 - Partial dates and locale-dependent forms MUST be invalid.
 - The canonical value MUST be the represented calendar date.
 
-#### 6.4.6 Datetime
+#### 6.5.6 Datetime
 
 - Datetimes MUST use an RFC 3339-compatible representation containing a full date, time, and `Z` or numeric UTC offset.
 - Local datetimes without an offset MUST be invalid.
@@ -306,17 +584,17 @@ An invalid typed value in a non-key field that remains attributable to an unambi
 - Fractional seconds MUST be preserved unless explicit precision normalisation is configured.
 - Leap-second representations MUST be invalid in the first release.
 
-#### 6.4.7 Collections
+#### 6.5.7 Collections
 
 - Every collection MUST declare its element logical type and element comparator.
 - A `list` MUST preserve order and duplicates.
 - A `set` MUST be unordered and MUST reject duplicate source elements rather than silently collapse them.
 - A `multiset` MUST be unordered and MUST preserve element occurrence counts.
-- JSON and YAML collections MUST use array or sequence values.
+- JSON collections MUST use arrays.
 - A CSV or TSV collection cell MUST use valid JSON-array syntax; ordinary delimited text MUST NOT be inferred to be a collection.
 - Nested collections are outside the first-release scope.
 
-### 6.5 Null, blank, and absent values
+### 6.6 Null, blank, and absent values
 
 The specification MUST distinguish absent fields, explicit nulls, empty strings, whitespace-only strings, and configured missing tokens such as `NA`, `.`, or `null`. No two states are equivalent unless a field-specific policy declares them equivalent. Applied equivalence rules MUST be recorded.
 
@@ -329,9 +607,9 @@ The specification MUST distinguish absent fields, explicit nulls, empty strings,
 
 The bundled strict-exact specification permits parser-native nulls. Under that specification, null matches only null and remains distinct from an absent field, an empty string, and every non-null value.
 
-### 6.6 Mappings
+### 6.7 Mappings
 
-#### 6.6.1 Column mappings
+#### 6.7.1 Column mappings
 
 - Reference and query fields MAY map to a canonical field name.
 - Mappings MUST be one-to-one unless an explicitly defined transformation supports another cardinality.
@@ -340,7 +618,7 @@ The bundled strict-exact specification permits parser-native nulls. Under that s
 - Required mapped fields that are absent MUST be reported.
 - All applied mappings MUST be identifiable in the evidence.
 
-#### 6.6.2 Value mappings
+#### 6.7.2 Value mappings
 
 - A value mapping MUST operate on a preserved source value before typed parsing.
 - The mapping output MUST be parsed as the declared destination logical type.
@@ -351,7 +629,7 @@ The bundled strict-exact specification permits parser-native nulls. Under that s
 - Mapping keys MUST be parsed without format-dependent scalar ambiguity.
 - Applied mappings MUST be identifiable in the evidence.
 
-### 6.7 Normalisation and processing order
+### 6.8 Normalisation and processing order
 
 Normalisation MUST be opt-in, field-specific, ordered deterministically, and recorded. Source-text normalisation is distinct from typed-value normalisation.
 
@@ -369,7 +647,7 @@ Typed processing MUST occur in this order:
 
 Column-name mapping MUST occur before field-value processing. A failure at any stage MUST identify the stage and attributable source value, subject to redaction policy.
 
-### 6.8 Bundled strict-exact specification
+### 6.9 Bundled strict-exact specification
 
 If `--specification` is omitted, the tool MUST select the bundled strict-exact specification. It MUST be distributed as a documented template from which laboratories can develop controlled custom specifications, and the selected effective specification MUST be recorded in provenance. Supplying `--specification` MUST select the named custom specification; sentinel path values such as `DEFAULT` MUST NOT have special meaning.
 
@@ -379,7 +657,7 @@ The bundled default specification MUST:
 - include every shared non-key field without requiring field-specific declarations;
 - preserve parser-native types and use `preserved_exact` comparison;
 - perform no type inference, implicit coercion, mapping, normalisation, or tolerance;
-- permit parser-native null values and compare them according to Section 6.5;
+- permit parser-native null values and compare them according to Section 6.6;
 - treat two syntactically valid zero-record datasets as satisfying all bundled acceptance criteria;
 - treat reference-only and query-only fields as contract findings;
 - require zero contract findings, zero missing or extra records, and zero value mismatches.
@@ -399,7 +677,7 @@ Comparison phases MUST be cumulative and ordered:
 Public scope names identify the final requested phase:
 
 | Scope | Contract | Records | Values |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `contract` | Full | Not assessed | Not assessed |
 | `records` | Full | Full | Not assessed |
 | `full` | Full | Full | Full |
@@ -448,7 +726,7 @@ Used by the bundled strict-exact specification. Values match only when their par
 
 #### 7.4.2 `typed_exact`
 
-Values match only when both are present, valid under their field policies, have the same declared logical type, and have equal canonical values. Null handling follows Section 6.5. Cross-type equality is not implicit.
+Values match only when both are present, valid under their field policies, have the same declared logical type, and have equal canonical values. Null handling follows Section 6.6. Cross-type equality is not implicit.
 
 #### 7.4.3 `normalised_string`
 
@@ -466,7 +744,7 @@ allowed_difference = max(absolute_tolerance, relative_tolerance * abs(reference)
 match if difference <= allowed_difference
 ```
 
-- At least one tolerance MUST be supplied; an omitted tolerance contributes zero.
+- At least one of `absolute_tolerance` or `relative_tolerance` MUST be specified. If only one is specified, the other MUST be treated as zero when calculating the allowed difference.
 - Tolerances MUST be non-negative finite decimals.
 - The boundary MUST be inclusive.
 - Relative tolerance MUST be directional and calculated against the absolute reference value.
@@ -481,7 +759,7 @@ Dates match when their canonical calendar dates are equal. Datetimes match when 
 #### 7.4.7 `list_exact`, `set_exact`, and `multiset_exact`
 
 - Lists use ordered element-by-element comparison and their lengths MUST match.
-- Sets use order-independent comparison of unique elements; duplicate source elements are invalid under Section 6.4.7.
+- Sets use order-independent comparison of unique elements; duplicate source elements are invalid under Section 6.5.7.
 - Multisets use order-independent comparison that preserves occurrence counts.
 - Elements use the declared element comparator.
 
@@ -688,8 +966,8 @@ adviso-validation compare \
   --output OUTPUT \
   [--scope {contract,records,full}] \
   [--specification SPECIFICATION] \
-  [--reference-format {csv,tsv,json,yaml}] \
-  [--query-format {csv,tsv,json,yaml}] \
+  [--reference-format {csv,tsv,json}] \
+  [--query-format {csv,tsv,json}] \
   [--overwrite]
 ```
 
@@ -704,7 +982,7 @@ Convenience flags MAY override non-critical settings only when the effective con
 Exit codes MUST distinguish at least:
 
 | Code | Meaning |
-|---:|---|
+| ---: | --- |
 | 0 | Execution completed and comparison outcome is `pass` |
 | 1 | Execution completed and comparison outcome is `fail` |
 | 2 | Execution completed but comparison outcome is `inconclusive` |
@@ -726,7 +1004,7 @@ No additional command is specified for the initial release. In particular, the p
 - Secrets MUST be redacted from recorded invocation details.
 - Temporary files MUST be created securely and removed according to documented policy.
 - Logs MUST NOT contain more sensitive information than the selected report policy permits.
-- YAML MUST be parsed using a safe loader.
+- Comparison-specification YAML MUST be parsed using the safe-loader rules in Section 6.2.1.
 - Spreadsheet-oriented exports MUST mitigate formula injection.
 - Resource limits SHOULD protect against unexpectedly large or malicious inputs without silently truncating results.
 - The tool SHOULD document filesystem permission expectations and leave access control to an appropriate deployment wrapper where necessary.
@@ -835,9 +1113,13 @@ This catalogue summarises minimum executable scenarios for the first release. It
 - **AT-CON-005:** Unknown, conflicting, and incomplete mappings fail clearly; mapping to null differs from a missing map entry.
 - **AT-CON-006:** Malformed syntax or structure, empty or duplicate column names, and irregular tabular rows receive their specified error classification without silent data loss.
 - **AT-CON-007:** Two syntactically valid empty datasets pass under the bundled strict-exact specification; one-sided empty datasets produce all applicable missing or extra record findings.
-- **AT-CON-008:** YAML scalar resolution and cross-format typed parsing are deterministic across supported environments.
+- **AT-CON-008:** Comparison-specification YAML scalar resolution and cross-format typed dataset parsing are deterministic across supported environments.
 - **AT-CON-009:** The bundled strict-exact specification treats parser-native null as equal only to null and distinguishes null, absent fields, and empty strings.
 - **AT-CON-010:** Every custom specification explicitly declares an undeclared-field policy; omission is rejected.
+- **AT-CON-011:** A complete custom YAML specification conforming to Section 6.2 validates and produces the declared effective configuration.
+- **AT-CON-012:** Duplicate or unknown YAML keys, unsafe YAML features, unsupported schema versions, invalid enumerations, and incompatible type/comparator combinations are rejected with precise configuration paths.
+- **AT-CON-013:** Source-value descriptors distinguish strings, numbers, booleans, and null; mapping to null remains distinct from an absent mapping entry.
+- **AT-CON-014:** Each selected comparison phase requires applicable acceptance criteria, and count and proportion criteria validate their operators, thresholds, filters, and denominators.
 
 ### 14.2 Record scenarios
 
@@ -855,7 +1137,7 @@ This catalogue summarises minimum executable scenarios for the first release. It
 - **AT-VAL-005:** Boolean parsing accepts native booleans and lowercase textual `true` or `false`; other representations require a mapping.
 - **AT-VAL-006:** Dates reject invalid or non-ISO full dates; datetimes require offsets and compare as instants.
 - **AT-VAL-007:** Lists preserve order and duplicates, sets reject duplicates and ignore order, and multisets ignore order while preserving occurrence counts.
-- **AT-VAL-008:** Typed transformations follow Section 6.7 and retain evidence of the attributable source value.
+- **AT-VAL-008:** Typed transformations follow Section 6.8 and retain evidence of the attributable source value.
 - **AT-VAL-009:** Numeric tolerance uses exact decimal arithmetic, a reference-relative component, and an inclusive boundary, including below, at, and above boundary cases.
 - **AT-VAL-010:** All assessable differences are collected in one run.
 - **AT-VAL-011:** Subset comparison identifies its limited coverage, records the required exclusion summary when individual findings are omitted, and rejects unknown requested fields.
@@ -922,5 +1204,3 @@ Before implementation begins, reviewers SHOULD confirm that:
 - every first-milestone scenario has an agreed expected result;
 - unresolved decisions have named owners and target dates;
 - approved requirements have stable identifiers for test traceability.
-
-
