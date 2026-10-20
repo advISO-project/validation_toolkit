@@ -1,0 +1,638 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AdvISO comparison configuration",
+  "description": "Normative structural schema for comparison-configuration schema version 1.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metadata",
+    "fields"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "metadata": {
+      "$ref": "#/$defs/configurationMetadata"
+    },
+    "fields": {
+      "$ref": "#/$defs/fields"
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "uniqueNonEmptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "configurationMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_key",
+        "undeclared",
+        "definitions"
+      ],
+      "properties": {
+        "record_key": {
+          "$ref": "#/$defs/uniqueNonEmptyStrings"
+        },
+        "undeclared": {
+          "enum": [
+            "compare",
+            "exclude",
+            "fail"
+          ]
+        },
+        "definitions": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/fieldDefinition"
+          }
+        }
+      }
+    },
+    "fieldDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "required",
+        "nulls",
+        "comparator"
+      ],
+      "properties": {
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reference",
+            "query"
+          ],
+          "properties": {
+            "reference": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "query": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "required": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reference",
+            "query"
+          ],
+          "properties": {
+            "reference": {
+              "type": "boolean"
+            },
+            "query": {
+              "type": "boolean"
+            }
+          }
+        },
+        "logical_type": {
+          "$ref": "#/$defs/logicalType"
+        },
+        "nulls": {
+          "$ref": "#/$defs/nullPolicy"
+        },
+        "source_normalisation": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "reference": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/sourceNormalisation"
+              }
+            },
+            "query": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/sourceNormalisation"
+              }
+            }
+          }
+        },
+        "value_mapping": {
+          "$ref": "#/$defs/valueMapping"
+        },
+        "typed_normalisation": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/typedNormalisation"
+          }
+        },
+        "comparator": {
+          "$ref": "#/$defs/comparator"
+        },
+        "review_priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "required": [
+                "logical_type"
+              ]
+            }
+          },
+          "then": {
+            "properties": {
+              "comparator": {
+                "properties": {
+                  "name": {
+                    "const": "preserved_exact"
+                  }
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "value_mapping"
+                  ]
+                },
+                {
+                  "required": [
+                    "typed_normalisation"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "scalarLogicalType": {
+      "enum": [
+        "string",
+        "integer",
+        "decimal",
+        "boolean",
+        "date",
+        "datetime"
+      ]
+    },
+    "logicalType": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/scalarLogicalType"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "element_type",
+            "element_comparator"
+          ],
+          "properties": {
+            "name": {
+              "enum": [
+                "list",
+                "set",
+                "multiset"
+              ]
+            },
+            "element_type": {
+              "$ref": "#/$defs/scalarLogicalType"
+            },
+            "element_comparator": {
+              "$ref": "#/$defs/comparator"
+            }
+          }
+        }
+      ]
+    },
+    "nullPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed",
+        "nulls_equal"
+      ],
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "nulls_equal": {
+          "type": "boolean"
+        },
+        "missing_tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "reference": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/sourceValueDescriptor"
+              }
+            },
+            "query": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/sourceValueDescriptor"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "allowed": {
+                "const": false
+              }
+            },
+            "required": [
+              "allowed"
+            ]
+          },
+          "then": {
+            "properties": {
+              "nulls_equal": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceValueDescriptor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "value"
+          ],
+          "properties": {
+            "category": {
+              "const": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "value"
+          ],
+          "properties": {
+            "category": {
+              "const": "integer"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^-?(?:0|[1-9][0-9]*)$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "value"
+          ],
+          "properties": {
+            "category": {
+              "const": "decimal"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^-?(?:(?:0|[1-9][0-9]*)\\.[0-9]+|(?:0|[1-9][0-9]*)(?:[eE][+-]?[0-9]+)|(?:0|[1-9][0-9]*)\\.[0-9]+(?:[eE][+-]?[0-9]+))$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "value"
+          ],
+          "properties": {
+            "category": {
+              "const": "boolean"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category"
+          ],
+          "properties": {
+            "category": {
+              "const": "null"
+            }
+          }
+        }
+      ]
+    },
+    "sourceNormalisation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "parameters"
+          ],
+          "properties": {
+            "operation": {
+              "const": "unicode_normalise"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "form"
+              ],
+              "properties": {
+                "form": {
+                  "enum": [
+                    "NFC",
+                    "NFD",
+                    "NFKC",
+                    "NFKD"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "parameters"
+          ],
+          "properties": {
+            "operation": {
+              "const": "trim"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "side"
+              ],
+              "properties": {
+                "side": {
+                  "enum": [
+                    "leading",
+                    "trailing",
+                    "both"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation"
+          ],
+          "properties": {
+            "operation": {
+              "const": "case_fold"
+            },
+            "parameters": {
+              "type": "object",
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "typedNormalisation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "parameters"
+          ],
+          "properties": {
+            "operation": {
+              "const": "decimal_quantise"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "places",
+                "rounding"
+              ],
+              "properties": {
+                "places": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "rounding": {
+                  "enum": [
+                    "half_even",
+                    "half_up",
+                    "down"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "parameters"
+          ],
+          "properties": {
+            "operation": {
+              "const": "datetime_truncate"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "precision"
+              ],
+              "properties": {
+                "precision": {
+                  "enum": [
+                    "second",
+                    "millisecond",
+                    "microsecond"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "valueMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "reference": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/valueMappingEntry"
+          }
+        },
+        "query": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/valueMappingEntry"
+          }
+        }
+      }
+    },
+    "valueMappingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/sourceValueDescriptor"
+        },
+        "to": {
+          "$ref": "#/$defs/sourceValueDescriptor"
+        }
+      }
+    },
+    "comparator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "enum": [
+                "preserved_exact",
+                "typed_exact",
+                "normalised_string",
+                "numeric_exact",
+                "date_exact",
+                "datetime_exact",
+                "list_exact",
+                "set_exact",
+                "multiset_exact"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "parameters"
+          ],
+          "properties": {
+            "name": {
+              "const": "numeric_tolerance"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "absolute_tolerance": {
+                  "$ref": "#/$defs/nonNegativeDecimalString"
+                },
+                "relative_tolerance": {
+                  "$ref": "#/$defs/nonNegativeDecimalString"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nonNegativeDecimalString": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+    }
+  }
+}
