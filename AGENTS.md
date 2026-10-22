@@ -1,151 +1,117 @@
 # Agent guidance for `adviso-validation`
 
-## Purpose and authority
+## Purpose of this file
 
-This repository is being implemented as `adviso-validation`, a tool that translates reference and query datasets from their source dialects into a declared canonical representation, compares them, and reports both post-translation differences and assessment issues.
+This file governs how agents work in this repository. It does not define product behaviour. Product requirements belong in `docs/SPECIFICATION.md` and the normative schemas; do not duplicate them here.
 
-For version 1 behaviour, use this order of authority:
+## Sources of truth
+
+Use this order of authority:
 
 1. `docs/SPECIFICATION.md` — normative behaviour and requirement identifiers.
-2. `src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json` — normative structural schema for comparison configurations.
-3. `src/adviso_validation/schemas/comparison-results-v1.0.schema.json` — normative structural schema for canonical results.
-4. Version 1 tests and controlled fixtures, once created — executable verification of the sources above.
-5. User documentation — explanatory material that must agree with the normative sources.
+2. `src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
+3. `src/adviso_validation/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
+4. Version 1 tests and controlled fixtures — executable verification of the normative sources.
+5. User documentation — explanatory material that must agree with the sources above.
 
-If the specification and a schema appear inconsistent, stop and report the conflict. Do not silently choose one, weaken either, or invent compatibility behaviour.
+If these sources appear inconsistent, stop and report the exact conflict and its consequences. Do not silently choose an interpretation, weaken a requirement, or invent behaviour.
 
-## Repository state
+## Repository layout
 
-This is a clean-slate version 1 implementation. Do not recover behaviour, interfaces, tests, fixtures, terminology, or implementation patterns from Git history unless the repository owner explicitly requests historical investigation.
+- Put production code under `src/adviso_validation/`.
+- Put automated tests under `tests/`.
+- Put maintained user and developer documentation under `docs/`.
+- Keep runtime package resources inside `src/adviso_validation/`.
+- Treat generated version files, build outputs, caches, coverage output, and virtual environments as generated artefacts rather than source.
 
-The behaviour specification and schemas are substantially developed; production code and the version 1 test suite are not. Do not describe the package as operational until the specified implementation, verification, documentation, and packaging work is complete.
-
-## Product identities
-
-Preserve these distinct names:
-
-- Distribution and executable: `adviso-validation`
-- Python import package: `adviso_validation`
-- Sole version 1 subcommand: `compare`
-
-Production code belongs under `src/adviso_validation/`.
+Do not create new top-level directories or reorganize established modules without a concrete need in the approved implementation plan.
 
 ## Working method
 
-Before implementing behaviour:
+Before changing behaviour:
 
-1. Read the relevant specification sections in full, including referenced requirements in other sections.
-2. Read both schemas when the work touches configuration, findings, results, or reporting.
-3. Identify the requirement IDs affected by the change.
+1. Read the relevant specification sections in full, including referenced requirements elsewhere in the document.
+2. Read the relevant schema definitions.
+3. Identify the requirement IDs affected by the work.
 4. Add or update the smallest coherent set of tests that verifies those requirements.
 5. Implement until those tests pass.
-6. Run the proportionate wider test suite and static checks.
+6. Run proportionate wider tests, static checks, schema checks, and packaging checks.
+7. Update affected documentation and controlled fixtures.
 
-Use test-driven development for the implementation. A failing test is useful only when it represents current specified behaviour. Do not add tests for discarded design ideas, renamed properties that never entered version 1, or other historical “fossils.”
-
-Tests should cite the requirement IDs they verify. Prefer a focused parameterized test that covers a coherent rule table over many near-duplicate tests. Do not merge unrelated behaviours merely to reduce the test count. Not every implementation, documentation, release-process, or quality requirement needs a direct automated test.
+Use test-driven development for the version 1 implementation. A failing test is useful only when it represents current specified behaviour. Do not create tests for discarded ideas, historical decisions that never entered version 1, or renamed and removed properties.
 
 ## Change control
 
-- Do not change `docs/SPECIFICATION.md`, either schema, or established requirement semantics unless the task explicitly authorizes a specification change.
-- Behaviour changes must update all affected normative text, schemas, tests, fixtures, and user documentation together.
-- Preserve existing requirement IDs. Add new IDs rather than renumbering requirements after insertion or deletion.
-- Preserve schema version identifiers and canonical `$id` values unless a deliberate schema-version change has been approved.
-- Treat unknown configuration and result properties as errors; do not add permissive extension points speculatively.
-- Do not add CLI options, comparators, normalisers, file formats, report formats, plugin systems, compatibility shims, or acceptance logic outside the specified v1 scope.
-- Keep commits and patches narrowly scoped. Do not mix behavioural work with unrelated restructuring or formatting.
+- Do not change `docs/SPECIFICATION.md`, either normative schema, or established requirement semantics unless the task explicitly authorizes a specification change.
+- Preserve existing requirement IDs. Add new IDs rather than renumbering requirements.
+- Preserve schema version identifiers and canonical `$id` values unless a deliberate version change has been approved.
+- When behaviour changes are authorized, update all affected normative text, schemas, tests, fixtures, and user documentation together.
+- Do not add speculative features, extension points, compatibility layers, dependencies, or abstractions.
+- Keep patches narrowly scoped. Do not mix behavioural work with unrelated restructuring or formatting.
+- Preserve unrelated work already present in the worktree.
 
-When a requirement is ambiguous, contradictory, or not implementable as written, present the exact conflict and its consequences to the repository owner. Do not resolve product decisions through undocumented assumptions.
+When a requirement is ambiguous, contradictory, or not implementable as written, ask for a decision rather than encoding an undocumented assumption.
 
-## Design guardrails
+## Code quality
 
-- Keep the top-level CLI thin. Put comparison behaviour in independently testable internal modules.
-- Keep parsing, configuration validation, canonicalisation, record alignment, comparison, result construction, semantic result validation, and rendering as distinct responsibilities.
-- Prefer small explicit interfaces and ordinary modules. Version 1 does not need a general plugin framework.
-- Keep the comparison kernel independent of CLI parsing and HTML presentation.
-- Model the three processing phases (`contract`, `records`, and `values`) separately from finding classification (`comparison_difference` and `assessment_issue`).
-- Treat the reference and query as having distinct roles where the specification does so, including directional relative tolerance.
-- Never use binary floating-point arithmetic for specified decimal parsing, normalisation, tolerance calculation, or canonical rendering.
-- Preserve source lexical evidence where required while keeping canonical typed values distinct from source values.
-- Make ordering explicit. Never rely on dictionary, set, filesystem, locale, or hash iteration order for canonical output.
-- Collect all safely assessable findings. Do not stop normal comparison at the first difference.
-- Keep execution errors outside canonical comparison results and findings.
-- Generate HTML only from validated canonical JSON and fixed renderer resources.
-
-## Validation boundaries
-
-Configuration processing has two mandatory layers:
-
-1. structural validation against the packaged comparison-configuration schema;
-2. semantic validation of the cross-property rules in `docs/SPECIFICATION.md`.
-
-Canonical-result validation likewise has two layers:
-
-1. structural validation against the packaged results schema, with Draft 2020-12 format assertion enabled;
-2. semantic validation of reconciliation, ordering, classification, configuration agreement, and other cross-property invariants.
-
-Never publish an evidence package unless both result-validation layers pass. A generated-result validation failure is `internal.unexpected`, not a user finding.
-
-Load packaged schemas and the bundled configuration through the package-resource API. Core comparison must work without network access and must not resolve schemas by downloading their canonical HTTPS identifiers.
-
-## Python quality
-
+- Follow PEP 8 and write idiomatic Python compatible with the project's supported Python versions.
+- Follow PEP 257 for public-module, class, function, and method docstrings; document intent and constraints rather than restating the code.
+- Where configured automated formatting, linting, or type-checking rules differ from general style guidance, the project configuration is authoritative.
+- Avoid unrelated formatting changes that obscure the substantive content of a patch.
+- Keep the command-line layer thin and keep domain logic independently testable.
+- Separate I/O, domain logic, validation, and presentation responsibilities.
+- Prefer small explicit interfaces and ordinary modules over framework-like abstraction.
 - Use type annotations for production interfaces and non-trivial internal functions.
-- Prefer explicit domain types, enums, and immutable value objects where they prevent invalid states.
-- Keep functions focused and make transformation stages easy to test in isolation.
-- Raise or return domain-specific errors at architectural boundaries; do not use broad exception handling to hide defects.
-- Convert unexpected exceptions into the specified CLI diagnostic only at the outer application boundary.
-- Do not expose tracebacks during ordinary CLI operation.
+- Prefer explicit domain types and immutable value objects where they prevent invalid states.
+- Keep functions focused and transformation stages testable in isolation.
 - Avoid mutable global state and import-time side effects.
-- Keep dependencies minimal, justified, pinned or bounded appropriately, and separated into runtime and development dependencies.
-- Use safe YAML loading with the restrictions required by the specification. Never construct arbitrary Python objects from configuration input.
-- Use secure temporary-file and atomic-publication patterns. Never broaden filesystem permissions.
+- Use domain-specific exceptions or result types at architectural boundaries.
+- Do not use broad exception handling to conceal defects.
+- Keep dependencies minimal and justified, with runtime and development dependencies separated.
+- Write deterministic code; do not depend accidentally on unordered collections, filesystem order, locale, or hash iteration.
 
-Do not introduce a formatter, linter, type checker, build backend, or supported-Python change as an incidental edit. Such project-wide tooling choices belong in the implementation plan and must be configured consistently before being enforced.
+Do not introduce or replace a formatter, linter, type checker, build backend, test framework, dependency manager, or supported-Python policy as an incidental edit. Project-wide tooling choices require deliberate configuration and approval.
 
-## Testing guardrails
+## Testing practice
 
-The version 1 suite should be organized around public behaviour and stable internal contracts, not private implementation details. It must eventually include the test families specified in Section 14 of `docs/SPECIFICATION.md`.
-
-In particular:
-
+- Cite the requirement IDs verified by each behavioural test or coherent parameterized scenario.
+- Prefer parameterization when it expresses one rule table clearly; do not merge unrelated behaviours merely to reduce test count.
+- Test public behaviour and stable internal contracts rather than private implementation details.
 - Use controlled, synthetic, non-sensitive fixtures.
-- Keep fixtures small enough to review, except for tests specifically concerned with scale or resource behaviour.
-- Record why generated fixtures exist and make their regeneration deterministic.
-- Test both directions where reference/query symmetry is required.
-- Test boundary values, malformed inputs, Unicode, composite keys, null versus absence, exact decimal behaviour, and deterministic ordering.
-- Validate representative results against the packaged schema and the semantic result validator.
-- Test the installed `adviso-validation` entry point, not only direct Python calls.
-- Test the built wheel and source distribution rather than relying only on an editable source checkout.
-- Do not update expected outputs blindly. Review semantic changes in canonical JSON fixtures field by field.
+- Keep fixtures small enough for meaningful review unless scale is the subject of the test.
+- Document generated fixtures and make their regeneration deterministic.
+- Test both directions where the specification requires symmetry.
+- Exercise boundary values, malformed inputs, and failure paths, not only successful examples.
+- Validate representative configuration and result documents against their packaged schemas.
+- Include installed-entry-point and built-distribution tests where required by the specification.
+- Do not update expected outputs blindly; review semantic changes field by field.
 
-## Security and clinical-data handling
+Not every implementation, documentation, release-process, or quality requirement needs a direct automated test. Add automated coverage where it provides a reliable and maintainable verification of observable behaviour.
 
-Assume inputs and evidence packages may contain sensitive clinical or laboratory information.
+## Sensitive data and repository safety
 
-- Never place real patient data, identifiers, credentials, absolute local paths, or secrets in source, tests, fixtures, snapshots, logs, or examples.
-- Routine logs, progress output, terminal diagnostics, and execution-error diagnostics must not reproduce record identifiers or source values.
-- Findings may contain identifiers or values only where the specification requires them to identify or explain a finding.
-- Do not add telemetry, remote schema lookup, remote assets, or any other network transmission.
-- Treat input basenames as potentially sensitive.
-- Preserve the specification's overwrite, symlink, temporary-file, and atomic-publication protections.
+- Never place real patient data, clinical identifiers, credentials, secrets, or identifying local paths in source, tests, fixtures, snapshots, logs, examples, or documentation.
+- Do not use destructive repository or filesystem operations unless the user has explicitly authorized them and the exact target has been verified.
+- Never overwrite unrelated user changes to make a check pass.
+
+Refer to the specification for the software's normative security and data-governance behaviour.
 
 ## Documentation
 
-The eventual user guide must describe the released behaviour, complete CLI, configuration schema, results schema, finding taxonomy, evidence package, and corrective guidance for execution errors. Documentation examples must validate against the packaged schemas.
-
-Keep the root README concise and truthful about implementation status. Expand installation and usage instructions only when the corresponding v1 interface is implemented and verified.
+- Keep the README and user documentation accurate for the implemented version.
+- Do not document planned behaviour as already available.
+- Ensure complete examples validate against the corresponding packaged schema.
+- Link to normative material instead of copying substantial requirements into explanatory documentation.
 
 ## Before declaring work complete
 
-For the scope changed, confirm and report:
+Report:
 
-- affected requirement IDs;
+- the requirement IDs affected;
 - tests added or updated and why they are sufficient;
 - commands run and their results;
-- schema validation performed, including format assertion where applicable;
-- any checks not run and the reason;
-- documentation or fixture changes;
+- schema, static, packaging, and documentation checks performed;
+- checks not run and the reason;
 - remaining assumptions, limitations, or follow-up work.
 
-Do not claim completion while relevant tests, schema checks, packaging checks, or documentation are knowingly inconsistent with the implementation.
+Do not claim completion while relevant tests, schemas, documentation, or packaging metadata are knowingly inconsistent with the implementation.
