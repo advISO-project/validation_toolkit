@@ -9,9 +9,11 @@
 
 This document defines a specification for version 1.0 of the AdvISO Validation Toolkit: a command-line namespace for cohesive capabilities that support bioinformatics validation and verification activities associated with ISO 15189 accreditation.
 
-The initial sole user-facing subcommand within the toolkit is `compare`. This subcommand compares a reference dataset with a query dataset according to an explicit comparison configuration and produces deterministic, machine-readable findings and a human-readable summary suitable for review and retention as one component of a bioinformatics pipeline validation or verification record. It is intended to answer this question:
+The initial sole user-facing subcommand within the toolkit is `compare`. It is designed for two datasets that describe the same kinds of samples or observations but may express their fields and values using different names, types, vocabularies, or other source dialects. The declared comparison configuration translates those representations into a common canonical representation, after which the tool compares the canonical records and values. It produces deterministic, machine-readable findings and a human-readable summary suitable for review and retention as one component of a bioinformatics pipeline validation or verification record.
 
-> Given these identified inputs and these declared comparison rules, which expected and observed records and values are equivalent, different, missing, extra, or not assessable?
+The tool distinguishes differences that remain after successful translation from issues that prevented some intended translation or assessment. It is intended to answer these questions:
+
+> Given these identified inputs and declared translation and comparison rules, which expected and observed records and values are equivalent, different, missing, or extra after translation? Which input or configuration-related issues prevented an intended assessment?
 
 Given this narrow and precisely defined scope, the toolkit cannot be used _alone_ to assert that:
 
@@ -96,9 +98,9 @@ The following principles govern all requirements:
 1. **REQ-PRN-001.** **Explicit over inferred:** Comparison behaviour MUST be declared, not guessed from observed data.
 2. **REQ-PRN-002.** **No silent data loss:** Input records, duplicate keys, unmapped values, and unsupported structures MUST NOT be silently discarded or overwritten.
 3. **REQ-PRN-003.** **Symmetry:** Missing and extra content MUST be assessed in both directions.
-4. **Separation of concerns:** Run status, comparison evidence, and the laboratory's acceptance decision are distinct concepts.
+4. **REQ-PRN-009.** **Separation of concerns:** Run status, comparison evidence, and the laboratory's acceptance decision MUST remain distinct concepts.
 5. **REQ-PRN-004.** **Complete evidence:** A normal comparison mismatch MUST still produce a complete report.
-6. **REQ-PRN-005.** **Determinism:** Identical inputs, configuration, and tool version MUST produce semantically identical results.
+6. **REQ-PRN-005.** **Determinism:** The same exact input bytes, input basenames, configuration document, toolkit version, and runtime identity MUST produce identical result content except for the explicitly variable run identifier and completion time. Comparison outcomes MUST additionally satisfy the invariance rules in Section 9.1.
 7. **REQ-PRN-006.** **Traceability:** Findings MUST identify the rule, record, and field that produced them.
 8. **REQ-PRN-007.** **Data minimisation:** Reports MUST include only the source identifiers and values necessary to explain and review the comparison. Routine logs, progress output, terminal diagnostics, and execution-error diagnostics MUST NOT reproduce them.
 9. **REQ-PRN-008.** **Fail clearly:** Invalid or ambiguous input MUST produce an explicit error rather than an assumed interpretation.
@@ -162,7 +164,7 @@ For each input:
 - **REQ-INP-011.** Invalid UTF-8 byte sequences MUST cause an input error.
 - **REQ-INP-012.** Invalid UTF-8 byte sequences MUST NOT be replaced silently.
 - **REQ-INP-013.** Field names and string values MUST be preserved exactly before declared normalisation.
-- **REQ-INP-014.** Line endings MUST NOT affect comparison results.
+- **REQ-INP-014.** Changing only accepted LF and CRLF line endings MUST NOT affect the comparison outcome defined in Section 9.1. Exact-byte size and digest evidence MAY differ.
 
 ### 5.4 Tabular parsing
 
@@ -180,13 +182,13 @@ For CSV and TSV:
 - **REQ-INP-023.** delimiters, quoting, escaping, and embedded newlines MUST be handled by a standards-compliant parser;
 - **REQ-INP-024.** rows with too many or too few columns MUST be input errors;
 - **REQ-INP-025.** all physical input rows MUST be accounted for;
-- **REQ-INP-026.** source row numbers SHOULD be retained for traceability;
+- **REQ-INP-026.** the one-based data-record number and one-based starting physical line number of every record MUST be retained for traceability; the header is not a data record;
 - **REQ-INP-027.** Input values MUST initially remain strings unless a custom configuration declares a null representation or type conversion.
 - **REQ-INP-028.** In the bundled strict-exact configuration, an empty cell MUST be an empty string.
 
 ### 5.5 JSON parsing
 
-- **REQ-INP-029.** JSON inputs MUST use a schema-validated list of record objects:
+- **REQ-INP-029.** A JSON input MUST contain one root-level array of record objects. A dataset containing one record MUST use a one-element array; a root-level record object is not supported:
 
 ```json
 [
@@ -199,11 +201,12 @@ For CSV and TSV:
 - **REQ-INP-031.** JSON decimal numbers - i.e. numbers containing a fractional or exponent component - MUST be parsed using exact decimal arithmetic.
 - **REQ-INP-032.** JSON decimal numbers MUST NOT first be converted to binary floating-point values.
 - **REQ-INP-033.** The tool MUST retain the original text of each JSON number — for example, distinguishing the representations `0.100`, `0.1`, and `1e-1` — for inclusion in evidence when required.
-- **REQ-INP-034.** A JSON input MUST contain either one object representing a single record or an array of objects representing multiple records.
+- **REQ-INP-034.** A root-level JSON value that is not an array MUST cause an input error, including a root-level object that could otherwise represent one record.
 - **REQ-INP-035.** A root-level scalar MUST cause an input error.
 - **REQ-INP-036.** A root-level array containing any item that is not an object MUST cause an input error.
 - **REQ-INP-037.** An invalid-root error MUST identify the invalid root value or array item.
 - **REQ-INP-038.** An invalid-root error MUST explain the required structure.
+- **REQ-INP-070.** Duplicate member names in any JSON object MUST cause an input error, including duplicates in record objects and nested object-valued fields. A parser MUST detect duplicates before constructing a mapping that could overwrite an earlier member.
 
 ### 5.6 Parser-native value model
 
@@ -216,21 +219,25 @@ For CSV and TSV:
 - Parser-native values are equal only when they have the same category and recursively equal content. For array-valued fields, element order is significant; for object-valued fields, member names and values must match but member order is not significant. Top-level records are aligned by their declared record keys, and their input order does not affect comparison.
 - **REQ-INP-045.** Numerical values MUST be retained exactly as they appeared in the input for reporting and traceability.
 - **REQ-INP-046.** Two values in the same numerical category MUST compare as equal when they represent the same number; for example, decimal `1.0` and decimal `1.00` are equal.
-- `NaN`, positive infinity, and negative infinity are not valid numerical values.
-- **REQ-INP-047.** A non-finite value in an attributable non-key field MUST produce a contract finding.
-- **REQ-INP-048.** A non-finite value in an attributable non-key field MUST make that value `not_assessable`.
-- **REQ-INP-049.** Other assessable content MUST still be compared when a non-finite value occurs in an attributable non-key field.
-- **REQ-INP-050.** A non-finite value in a record key MUST produce an execution error.
-- **REQ-INP-051.** A non-finite value that prevents construction of an unambiguous record model MUST produce an execution error.
+- `NaN`, positive infinity, and negative infinity are not valid JSON numerical values or valid declared decimals.
+- **REQ-INP-047.** An unquoted non-finite token such as `NaN`, `Infinity`, or `-Infinity` in a JSON input MUST cause an input error because the document is not valid JSON, irrespective of the field in which it occurs.
+- **REQ-INP-048.** A quoted representation such as `"NaN"` in JSON, CSV, or TSV MUST initially remain a parser-native string.
+- **REQ-INP-049.** If such a string is parsed as a declared decimal in an attributable non-key field, it MUST produce an `invalid_field_value` finding, make that value opportunity `not_assessable`, and allow other assessable content to continue.
+- **REQ-INP-050.** If such a string is parsed as a declared decimal record-key field, the invalid key MUST produce an execution error.
+- **REQ-INP-051.** The JSON parser MUST reject non-standard non-finite tokens rather than enabling a permissive extension. Every accepted parser-native JSON number is therefore a finite exact integer or decimal.
 
 ### 5.7 Empty inputs
 
-- **REQ-INP-052.** Empty files and datasets with zero records MUST be recognised explicitly.
+- **REQ-INP-052.** Zero-byte files and datasets with zero records MUST be recognised explicitly and distinguished. A valid zero-record JSON dataset is `[]`; a valid zero-record CSV or TSV dataset contains a valid header and no data records. A zero-byte JSON file is malformed JSON, and a zero-byte CSV or TSV file is an input error because it lacks the required header.
 - **REQ-INP-053.** If both datasets are syntactically valid and contain no records, the records phase MUST report no missing records.
 - **REQ-INP-054.** If both datasets are syntactically valid and contain no records, the records phase MUST report no extra records.
 - **REQ-INP-055.** If both datasets are syntactically valid and contain no records, the values phase MUST perform no comparisons.
 - **REQ-INP-056.** Contract requirements that can be evaluated without records MUST still be checked.
 - **REQ-INP-057.** The tool MUST NOT infer that an empty dataset is unsuitable merely because it is empty.
+- **REQ-INP-066.** Per-record requirements have no applicable opportunities in a zero-record dataset and MUST NOT produce findings or not-assessable classifications merely because no records exist.
+- **REQ-INP-067.** Available dataset-level structure MUST still be assessed. A zero-record CSV or TSV header MAY establish declared, missing, or undeclared source columns. A JSON empty array exposes no field structure, so field presence or absence MUST NOT be inferred from it.
+- **REQ-INP-068.** Two valid zero-record datasets MUST have complete records and values phases, zero matched, missing, and extra records, and zero value opportunities. Header-derived contract findings do not alter those phase statuses.
+- **REQ-INP-069.** When exactly one dataset has records, every record on that side MUST be reported as missing or extra as applicable; because there are no aligned records, there are zero value opportunities and the records and values phases remain complete.
 - Any minimum-size acceptance criterion belongs to the external laboratory decision process.
 - **REQ-INP-058.** A non-empty reference and empty query MUST report every expected record as missing.
 - **REQ-INP-059.** An empty reference and non-empty query MUST report every observed record as extra.
@@ -385,7 +392,7 @@ fields:
 
 ```
 
-**REQ-CFG-015.** The template is illustrative rather than an instruction to use these particular rules. Laboratories MUST choose identifiers, field definitions, and policies appropriate to the intended comparison.
+The template is illustrative rather than a recommendation to use these particular rules.
 
 **REQ-CFG-016.** The published machine-readable schema MUST encode the complete version 1 comparison-configuration structure and constraints.
 
@@ -397,9 +404,7 @@ The only permitted top-level keys are `schema_version`, `metadata`, and `fields`
 
 - **REQ-CFG-017.** `schema_version` MUST be a quoted string identifying a supported comparison-configuration schema version.
 - **REQ-CFG-018.** `metadata.id` MUST be a stable, non-empty identifier for the comparison configuration.
-- **REQ-CFG-019.** `metadata.id` SHOULD use a collision-resistant organisational namespace.
-- **REQ-CFG-020.** `metadata.revision` MUST be a non-empty revision string controlled by the configuration owner.
-- **REQ-CFG-021.** Any behaviourally material change elsewhere in the configuration MUST produce a new revision.
+- **REQ-CFG-020.** `metadata.revision` MUST be a non-empty string.
 - `metadata.title` and `metadata.description` are optional human-readable strings.
 - **REQ-CFG-022.** The `metadata` properties MUST NOT directly alter comparison behaviour.
 - **REQ-CFG-023.** The `metadata` properties MUST be preserved in the configuration embedded in the canonical result.
@@ -417,11 +422,17 @@ The only permitted top-level keys are `schema_version`, `metadata`, and `fields`
 
 - Every field in `fields.definitions` is in scope. Field definitions are the sole mechanism for selecting explicitly configured fields in version 1.
 - **REQ-CFG-030.** `fields.undeclared` is required and MUST be one of `compare`, `exclude`, or `fail`.
-  - `compare` compares shared undeclared fields with `preserved_exact`; an undeclared field present on only one side creates a contract finding because no corresponding value can be compared.
-  - `exclude` does not compare undeclared fields and records them in the exclusion summary as `not_assessed`.
-  - `fail` creates a contract finding for every undeclared field.
+  - `compare` compares dataset-wide shared undeclared field names with `preserved_exact`; a name observed in only one dataset creates one dataset-level contract finding because no corresponding field can be established.
+  - `exclude` does not compare undeclared fields and records one entry per dataset side and source field in the exclusion summary as `not_assessed`.
+  - `fail` creates one dataset-level contract finding per dataset side and undeclared source field and does not compare that field.
 - **REQ-CFG-031.** Undeclared reference and query fields MUST be aligned only when their input field names are identical.
 - No name inference or source-name mapping is applied to undeclared fields.
+- **REQ-CFG-116.** Undeclared source-field names MUST be discovered dataset-wide. For CSV and TSV, the header defines the observed names even when there are no records. For JSON, the observed names are the union of member names across all record objects.
+- **REQ-CFG-117.** Under `compare`, an undeclared name observed in both datasets MUST become an implicit untyped comparison field whose reference, query, and canonical names are identical, whose comparator is `preserved_exact`, and whose review priority is unassigned.
+- **REQ-CFG-118.** For a shared undeclared field under `compare`, each aligned record in which at least one side contains the field MUST contribute one value opportunity. Two present values are compared normally; one present and one absent value MUST produce one `value_mismatch` finding with presence-state evidence; and two absent values contribute no opportunity.
+- **REQ-CFG-119.** Under `compare`, an undeclared name observed in only one dataset MUST produce one dataset-level `undeclared_field` finding for that side. Each aligned record containing that field MUST contribute one not-assessable value opportunity. Occurrences confined to missing or extra records do not create value opportunities.
+- **REQ-CFG-120.** Under `fail`, each undeclared field MUST produce one dataset-level `undeclared_field` finding for each dataset side on which it is observed. Each aligned record in which the field is present on either side MUST contribute one not-assessable value opportunity, irrespective of whether the same source name occurs in both datasets.
+- **REQ-CFG-121.** A dataset-level undeclared-field finding or exclusion entry MUST record the number of records on that dataset side that contain the source field. A field known only from a zero-record CSV or TSV header has a record count of zero.
 - **REQ-CFG-032.** Fields with different names MUST be declared explicitly under a common canonical field definition if they are intended to correspond.
 - **REQ-CFG-033.** `fields.definitions` MUST be a mapping keyed by unique canonical field name.
 - **REQ-CFG-034.** `fields.definitions` MUST contain a definition for every field referenced by `fields.record_key`.
@@ -443,7 +454,7 @@ The only permitted top-level keys are `schema_version`, `metadata`, and `fields`
 
 **REQ-CFG-048.** For a scalar field, `logical_type` MUST be one of `string`, `integer`, `decimal`, `boolean`, `date`, or `datetime`.
 
-**REQ-CFG-049.** `logical_type` MAY be omitted only when the comparator is `preserved_exact` and no typed parsing, mapping, or typed normalisation is configured.
+**REQ-CFG-049.** `logical_type` MUST be omitted when, and only when, the comparator is `preserved_exact`. A `preserved_exact` field MUST also omit `source_normalisation`, `value_mapping`, `typed_normalisation`, and `nulls.missing_tokens`. Its requiredness and null policy still apply, and parser-native JSON null remains governed by that null policy, but no additional source representation is transformed or interpreted as null.
 
 **REQ-CFG-050.** For a collection field, `logical_type` MUST use this form:
 
@@ -459,12 +470,18 @@ logical_type:
 
 **REQ-CFG-052.** The comparator named for the field itself MUST correspond to the collection kind: `list_exact`, `set_exact`, or `multiset_exact`.
 
+**REQ-CFG-124.** A `set` or `multiset` element comparator MUST be `typed_exact`.
+
+**REQ-CFG-125.** A `list` element comparator MUST be `typed_exact` or `numeric_tolerance`. `numeric_tolerance` MUST be permitted only when `element_type` is `integer` or `decimal` and MUST use the same parameter rules as a field-level numeric-tolerance comparator.
+
+**REQ-CFG-126.** `preserved_exact`, `normalised_string`, `numeric_exact`, `date_exact`, `datetime_exact`, and the collection comparators MUST NOT be used as element comparators in version 1. Exact comparison of any declared scalar element type uses `typed_exact`.
+
 **REQ-CFG-053.** Every declared field MUST contain a `nulls` mapping:
 
 - **REQ-CFG-054.** `allowed` and `nulls_equal` MUST be booleans.
 - **REQ-CFG-055.** `nulls_equal` MUST be `false` when `allowed` is `false`.
 - **REQ-CFG-056.** `missing_tokens` MAY be omitted; omission means that no additional source values are interpreted as null. Parser-native JSON null remains null independently of this property.
-- **REQ-CFG-057.** When `missing_tokens` is present, it MUST contain `reference`, `query`, or both. Each present side MUST be a non-empty list of source-value descriptors. An omitted side has no configured textual missing tokens. A matched token is converted to null at processing step 3 in Section 6.8.
+- **REQ-CFG-057.** When `missing_tokens` is present, it MUST contain `reference`, `query`, or both. Each present side MUST be a non-empty list of non-null source-value descriptors. An omitted side has no configured missing tokens. A matched token is converted to null at processing step 3 in Section 6.8.
 
 A source-value descriptor has one of these forms:
 
@@ -485,6 +502,8 @@ category: "null"
 **REQ-CFG-058.** `category` MUST be `string`, `integer`, `decimal`, `boolean`, or `null`.
 
 **REQ-CFG-059.** `value` MUST be present for every category except `null`. It MUST be a quoted lexical string for `string`, `integer`, and `decimal`. It MUST be `true` or `false` for `boolean`. The lexical value MUST be valid for its stated category.
+
+**REQ-CFG-122.** A descriptor with `category: null` MUST be permitted only as the `to` destination of a value-mapping entry. It MUST NOT be permitted as a missing token or as a mapping `from` value, because parser-native null is recognised without configuration and null values bypass mapping.
 
 Descriptors are matched using parser-native category and value equality under Section 5.6. The retained lexical form remains evidence but does not create a distinct numerical value. This explicit representation prevents YAML scalar resolution from changing mapping keys or missing tokens.
 
@@ -523,6 +542,8 @@ The first-release typed-value operation identifiers are:
 
 **REQ-CFG-066.** A source-text operation MUST appear only in `source_normalisation.reference` or `source_normalisation.query`. It applies only to the corresponding dataset.
 
+**REQ-CFG-123.** A source-text operation MUST apply only when the current parser-native value is a string. A non-string value MUST pass through the source-normalisation stage unchanged; it MUST NOT be stringified, transformed, or rejected merely because a source-text operation is configured.
+
 **REQ-CFG-067.** A typed-value operation MUST appear only in `typed_normalisation`. It applies identically to both datasets.
 
 **REQ-CFG-068.** Operation semantics MUST be published with the schema and recorded sufficiently for reproducibility. This information MUST include the Unicode-data version used by Unicode operations.
@@ -540,9 +561,9 @@ The first-release typed-value operation identifiers are:
     value: "R"
 ```
 
-- **REQ-CFG-071.** `from` and `to` MUST be source-value descriptors as defined in Section 6.2.6.
+- **REQ-CFG-071.** `from` MUST be a non-null source-value descriptor and `to` MUST be a source-value descriptor as defined in Section 6.2.6.
 - A `from` descriptor is matched against the source value after the applicable `source_normalisation` operations and missing-token recognition have been performed, in accordance with the processing order in Section 6.8.
-- A `to` descriptor with `category: "null"` explicitly maps to null and is distinct from absence of a mapping entry.
+- A `to` descriptor with `category: "null"` explicitly maps a non-null source value to null and is distinct from absence of a mapping entry. The null policy is then applied and typed parsing is bypassed.
 - **REQ-CFG-072.** Each `from` value MUST occur at most once within one side’s mapping.
 - **REQ-CFG-073.** Conflicting entries MUST invalidate the comparison configuration.
 - **REQ-CFG-074.** Unreachable entries MUST invalidate the comparison configuration.
@@ -573,6 +594,8 @@ The first-release typed-value operation identifiers are:
 
 The normative JSON Schema Draft 2020-12 definition of comparison-configuration schema version `1.0` is [`src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json`](src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json).
 
+**REQ-CFG-128.** The schema MUST use `https://adviso-project.github.io/validation_toolkit/schemas/comparison-configuration-v1.0.schema.json` as its canonical `$id`.
+
 **REQ-CFG-086.** A YAML configuration MUST first be loaded using Section 6.2.1. The resulting JSON-compatible data structure MUST then validate against that schema before either input dataset is read.
 
 The standalone schema file is the authoritative machine-readable definition.
@@ -585,9 +608,10 @@ The standalone schema file is the authoritative machine-readable definition.
 
 - **REQ-CFG-104.** every name in `fields.record_key` exists in `fields.definitions`;
 - **REQ-CFG-105.** every key field is required on both sides, non-nullable, scalar, and uses `typed_exact`;
-- **REQ-CFG-106.** a field without `logical_type` uses `preserved_exact` and has no typed normalisation or value mapping;
+- **REQ-CFG-106.** a field without `logical_type` uses `preserved_exact` and has no source normalisation, value mapping, typed normalisation, or configured missing tokens; conversely, a field using `preserved_exact` omits `logical_type` and all of those processing properties;
 - **REQ-CFG-107.** each comparator and normalisation operation is compatible with the field’s logical type and processing stage;
 - **REQ-CFG-108.** source-value descriptors contain lexically valid values for their declared categories, and each side’s value mapping has unique `from` values;
+- **REQ-CFG-127.** the `source.reference` names are unique across canonical field definitions, and the `source.query` names are independently unique across canonical field definitions;
 
 **REQ-CFG-091.** A failure of any semantic check MUST be reported as an invalid comparison configuration with the relevant configuration path and violated rule.
 
@@ -637,6 +661,19 @@ Normalisation, value mapping, and review priority are optional. An omitted revie
 
 Intended equivalence between differing source representations requires both sides to be parsed as the same declared destination logical type, with an explicit value mapping where the source representation cannot be parsed directly.
 
+The accepted parser-native inputs for each declared logical type are fixed as follows:
+
+- **REQ-VAL-076.** A `string` field MUST accept only a parser-native string. No other parser-native category is converted to text implicitly.
+- **REQ-VAL-077.** An `integer` field MUST accept a parser-native integer or a parser-native string satisfying the textual integer grammar in Section 6.5.2. A parser-native decimal MUST be rejected even when it represents a mathematically integral value.
+- **REQ-VAL-078.** A `decimal` field MUST accept a parser-native integer, parser-native decimal, or parser-native string matching `[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`. Conversion of a parser-native integer to a decimal is exact. Text such as `.5` and `1.` MUST be rejected.
+- **REQ-VAL-079.** A `boolean` field MUST accept a parser-native boolean or a parser-native string accepted by Section 6.5.4.
+- **REQ-VAL-080.** A `date` or `datetime` field MUST accept only a parser-native string, which MUST then satisfy the applicable grammar in Sections 6.5.5 and 6.5.6.
+- **REQ-VAL-081.** A collection field MUST accept either a parser-native array or, for CSV and TSV input, a parser-native string containing one valid JSON array. No other parser-native category is accepted as a collection.
+- **REQ-VAL-082.** After a collection has been obtained, each element MUST be parsed independently according to the declared scalar element type and the same source-category rules.
+- **REQ-VAL-083.** A parser-native object MUST be invalid for every declared version 1 logical type. An untyped field using `preserved_exact` MAY still preserve and compare a parser-native object.
+- **REQ-VAL-084.** A source representation not accepted directly by this matrix MUST require an explicit value mapping to an accepted representation. The implementation MUST NOT introduce any additional implicit conversion.
+- **REQ-VAL-085.** Null recognition and null-policy handling MUST occur before typed parsing. Null is therefore not an accepted typed-parser input category.
+
 **REQ-VAL-010.** The original source value or lexical representation MUST remain available to the comparison engine. It MAY be included in evidence when required to explain a finding.
 
 **REQ-VAL-011.** An invalid typed value in a non-key field that remains attributable to an unambiguous record MUST be a contract finding. It MUST make that value `not_assessable`. It MUST NOT be an execution error.
@@ -681,7 +718,7 @@ Intended equivalence between differing source representations requires both side
 - **REQ-VAL-032.** Datetimes MUST use an RFC 3339-compatible representation containing a full date, time, and `Z` or numeric UTC offset.
 - **REQ-VAL-033.** Local datetimes without an offset MUST be invalid.
 - **REQ-VAL-034.** Equivalent instants expressed with different offsets MUST have the same canonical value.
-- **REQ-VAL-035.** Fractional seconds MUST be preserved unless explicit precision normalisation is configured.
+- **REQ-VAL-035.** Supplied fractional-second precision MUST remain available in the source lexical evidence. The canonical datetime representation MUST remove unnecessary trailing fractional-second zeros and omit a zero-valued fractional component. Any reduction that changes the represented instant, rather than only its redundant lexical form, MUST require explicit precision normalisation.
 - **REQ-VAL-036.** Leap-second representations MUST be invalid in the first release.
 
 #### 6.5.7 Collections
@@ -689,7 +726,7 @@ Intended equivalence between differing source representations requires both side
 - **REQ-VAL-037.** Every collection MUST declare its element logical type and element comparator.
 - **REQ-VAL-038.** A `list` MUST preserve order and duplicates.
 - **REQ-VAL-039.** A `set` MUST be unordered.
-- **REQ-VAL-040.** A `set` MUST reject duplicate source elements rather than silently collapse them.
+- **REQ-VAL-040.** A `set` MUST reject duplicate elements after typed parsing, using typed-exact canonical equality, rather than silently collapse them. Distinct source representations that parse to the same canonical value, such as textual integers `"01"` and `"1"`, are duplicates.
 - **REQ-VAL-041.** A `multiset` MUST be unordered.
 - **REQ-VAL-042.** A `multiset` MUST preserve element occurrence counts.
 - **REQ-VAL-043.** JSON collections MUST use arrays.
@@ -720,8 +757,8 @@ The field-level null policy governs the collection value as a whole and does not
 #### 6.7.1 Column mappings
 
 - **REQ-VAL-056.** Reference and query fields MAY map to a canonical field name.
-- **REQ-VAL-057.** Mappings MUST be one-to-one unless an explicitly defined transformation supports another cardinality.
-- **REQ-VAL-058.** Conflicting target mappings MUST be rejected.
+- **REQ-VAL-057.** Column-name mappings MUST be one-to-one in version 1. One source field MUST NOT feed multiple canonical fields, and one canonical field MUST NOT receive multiple source fields from the same dataset side.
+- **REQ-VAL-058.** Reuse of a source name by more than one canonical field on the same dataset side MUST invalidate the comparison configuration before either dataset is read. Reference and query namespaces are independent, so the same source name MAY occur once on each side.
 - **REQ-VAL-059.** Unknown source fields MUST follow the undeclared-field policy.
 - **REQ-VAL-060.** Required mapped fields that are absent MUST be reported.
 - **REQ-VAL-061.** All applied mappings MUST be identifiable in the evidence.
@@ -737,21 +774,25 @@ The field-level null policy governs the collection value as a whole and does not
 - **REQ-VAL-068.** Values used in mappings MUST be represented using the typed source-value descriptor. The parser MUST NOT infer their intended category from YAML scalar syntax.
 - **REQ-VAL-069.** Applied mappings MUST be identifiable in the evidence.
 
+**REQ-VAL-086.** Parser-native null and values converted to null by missing-token recognition MUST bypass value mapping and typed parsing. A non-null value explicitly mapped to null MUST bypass typed parsing after the null policy has been applied. Mapping from null is not supported.
+
 ### 6.8 Normalisation and processing order
 
 **REQ-VAL-070.** Normalisation MUST be opt-in, field-specific, ordered deterministically, and recorded. Source-text normalisation is distinct from typed-value normalisation.
 
-**REQ-VAL-071.** Source-text normalisation MAY include Unicode normalisation, leading or trailing whitespace trimming, and case folding. Typed-value normalisation MAY include datetime offset normalisation, declared precision reduction, and stable ordering of collections declared to be unordered.
+**REQ-VAL-071.** Source-text normalisation MAY include Unicode normalisation, leading or trailing whitespace trimming, and case folding. Typed-value normalisation MAY include datetime offset normalisation and declared precision reduction. Deterministic serialization order for sets and multisets is canonical output handling, not a configured typed-normalisation operation.
 
 **REQ-VAL-072.** Typed processing MUST occur in this order:
 
 1. preserve the source value and representation;
-2. apply the source-text normalisation declared for the applicable dataset side;
-3. recognise configured null or missing tokens;
-4. apply a declared source-value mapping;
-5. parse the declared logical type;
-6. apply declared typed-value normalisation;
-7. compare canonical values.
+2. if the current value is a parser-native string, apply the source-text normalisation declared for the applicable dataset side; otherwise pass it through unchanged;
+3. recognise parser-native null or a configured non-null missing token;
+4. if the value is null, apply the null policy and bypass value mapping and typed parsing;
+5. for a non-null value, apply a declared source-value mapping and produce a `mapping_failure` finding if a configured mapping has no matching entry;
+6. if the mapping output is null, apply the null policy and bypass typed parsing;
+7. otherwise parse the declared logical type;
+8. apply declared typed-value normalisation;
+9. compare canonical values.
 
 **REQ-VAL-073.** Column-name mapping MUST occur before field-value processing.
 
@@ -773,7 +814,7 @@ The field-level null policy governs the collection value as a whole and does not
 - **REQ-CFG-114.** treat two syntactically valid zero-record datasets as having zero missing records, zero extra records, and zero value mismatches, while evaluating contract findings as required by Sections 5.7 and 7.2;
 - **REQ-CFG-115.** treat reference-only and query-only fields as contract findings.
 
-**REQ-CFG-094.** Because parser-native types differ between formats, strict-exact comparison across different input formats MAY report type mismatches for lexically similar values. A custom typed configuration is required when cross-format logical equivalence is intended.
+**REQ-CFG-094.** Because parser-native categories differ between formats, strict-exact comparison across different input formats MAY report `value_mismatch` findings for lexically similar values. Such a difference is not a `type_mismatch`, because `preserved_exact` declares no logical type contract. A custom typed configuration is required when cross-format logical equivalence is intended.
 
 ## 7. Comparison behaviour
 
@@ -819,7 +860,7 @@ The field-level null policy governs the collection value as a whole and does not
 
 **REQ-CMP-009.** For a zero-record dataset, contract requirements that can be evaluated from available structural information, such as CSV or TSV headers, MUST still be assessed.
 
-**REQ-CMP-010.** A requirement that depends on examining a record and cannot be evaluated because no records exist MUST be reported as `not_assessable`. It MUST NOT be treated as satisfied merely because no contradictory record was observed.
+**REQ-CMP-010.** A per-record requirement with no applicable record opportunity MUST be treated as not applicable, not as satisfied, violated, `not_assessed`, or `not_assessable`. It MUST contribute no finding or value count. This rule does not suppress contract checks supported by available dataset-level structure.
 
 ### 7.3 Records comparison
 
@@ -837,7 +878,7 @@ The field-level null policy governs the collection value as a whole and does not
 
 #### 7.4.1 `preserved_exact`
 
-Used by the bundled strict-exact configuration. Values match according to the parser-native value model and equality rules in Section 5.6. No inference, coercion, mapping, normalisation, or tolerance is applied. Textual `"1"`, integer `1`, decimal `1.0`, and boolean `true` are distinct.
+Used by the bundled strict-exact configuration. Values match according to the parser-native value model and equality rules in Section 5.6. No logical type, additional missing-token recognition, inference, coercion, mapping, normalisation, or tolerance is applied. Textual `"1"`, integer `1`, decimal `1.0`, and boolean `true` are distinct.
 
 #### 7.4.2 `typed_exact`
 
@@ -875,17 +916,18 @@ difference = abs(reference - query)
 - **REQ-CMP-025.** Lists use ordered element-by-element comparison and their lengths MUST match.
 - Sets use order-independent comparison of unique elements; duplicate source elements are invalid under Section 6.5.7.
 - Multisets use order-independent comparison that preserves occurrence counts.
-- Elements use the declared element comparator.
+- **REQ-CMP-040.** List elements use their declared element comparator positionally: element `n` in the reference is compared only with element `n` in the query. Numeric tolerance is therefore unambiguous for lists.
+- **REQ-CMP-041.** Set and multiset elements use typed-exact equality. Version 1 MUST NOT perform tolerance-based or other fuzzy matching within an unordered collection.
 
 ### 7.5 Completeness, subsets, and determinism
 
-- **REQ-CMP-026.** Comparison findings MUST NOT terminate a normal run.
+- **REQ-CMP-026.** Findings MUST NOT terminate a normal run.
 - **REQ-CMP-027.** All assessable differences MUST be collected.
 - **REQ-CMP-028.** A malformed record that prevents a complete and unambiguous record model MUST be an input error.
 - **REQ-CMP-029.** A malformed record MUST NOT disappear silently.
 - **REQ-CMP-030.** Key fields MUST always be processed.
 - **REQ-CMP-031.** Under `fields.undeclared: "exclude"`, undeclared fields MUST be represented by a summary rather than by an individual finding for every excluded occurrence. The canonical report MUST record a stable exclusion code, the policy, the affected input field names, and the number of excluded records or values where calculable.
-- **REQ-CMP-032.** Record order MUST NOT affect results unless explicitly declared significant.
+- **REQ-CMP-032.** Record order MUST NOT affect the comparison outcome defined in Section 9.1. Input digests, source locations, messages containing those locations, and report-local finding IDs MAY differ as permitted by the provenance and ordering rules.
 - **REQ-CMP-033.** Output ordering MUST be deterministic and independent of hash-map ordering and locale.
 
 ## 8. Findings and run status
@@ -894,7 +936,7 @@ difference = abs(reference - query)
 
 **REQ-FND-001.** Every finding MUST follow the structured representation in Section 9.1.2 and the normative results schema.
 
-**REQ-FND-002.** Every finding MUST contain a stable finding code, deterministic report-local ID, phase, affected side, and human-readable message.
+**REQ-FND-002.** Every finding MUST contain a stable finding code, finding classification, deterministic report-local ID, phase, affected side, and human-readable message.
 
 **REQ-FND-003.** Record identity, source locations, canonical or source field name, review priority, and value evidence MUST be present exactly where required by the finding code and data-minimisation rules.
 
@@ -902,7 +944,7 @@ difference = abs(reference - query)
 
 **REQ-FND-005.** Successful field matches MUST be represented in summary counts. Successful record matches MUST be represented in summary counts. Successful matches MUST NOT produce individual findings.
 
-### 8.2 Minimum finding categories
+### 8.2 Finding codes and classifications
 
 **REQ-FND-006.** Stable finding codes MUST exist for at least:
 
@@ -910,12 +952,30 @@ difference = abs(reference - query)
 - **REQ-FND-009.** extra record;
 - **REQ-FND-010.** missing required field;
 - **REQ-FND-011.** undeclared field;
-- **REQ-FND-012.** type mismatch;
-- **REQ-FND-013.** invalid field value, including an attributable field-level parse or data-contract failure;
+- **REQ-FND-012.** type mismatch: the parser-native category of a non-null source value is not accepted by the field's declared logical type under the matrix in Section 6.5;
+- **REQ-FND-013.** invalid field value: the parser-native category is accepted by the declared logical type, but the value fails its lexical, domain, collection-content, or other field-level validity rule;
 - **REQ-FND-014.** null-policy violation;
 - **REQ-FND-015.** mapping failure;
-- **REQ-FND-016.** value mismatch;
-- **REQ-FND-017.** not assessable;
+- **REQ-FND-016.** value mismatch: both values are valid and assessable, but the selected comparator determines that they differ;
+
+**REQ-FND-023.** Every finding MUST have exactly one of two classifications. Classification expresses the meaning of a finding, while phase records where in processing it was detected; neither replaces the other.
+
+- **REQ-FND-024.** `comparison_difference` means that translation succeeded sufficiently to compare the relevant records or values and a difference remained. `missing_record`, `extra_record`, and `value_mismatch` MUST have this classification.
+- **REQ-FND-025.** `assessment_issue` means that the declared translation or assessment could not be applied cleanly to some input content. `missing_required_field`, `undeclared_field`, `type_mismatch`, `invalid_field_value`, `null_policy_violation`, and `mapping_failure` MUST have this classification.
+
+Finding classification does not assert scientific or clinical significance. In particular, an assessment issue such as an unrecognised mapped value may be important to investigate, but the tool cannot report it as a post-translation difference because translation did not succeed.
+
+**REQ-FND-018.** `type_mismatch`, `invalid_field_value`, and `value_mismatch` are mutually exclusive for one affected value or value opportunity. A parser-native category difference under `preserved_exact` MUST be a `value_mismatch`, not a `type_mismatch`, because no logical type contract has been declared.
+
+**REQ-FND-019.** A record-specific missing-required-field, type-mismatch, invalid-field-value, null-policy-violation, or mapping-failure finding MUST describe one record, one canonical field, and one affected dataset side. If reference and query independently violate the same field rule, the tool MUST emit two findings, one with `affected_side: reference` and one with `affected_side: query`. It MUST NOT combine the independent violations into one `both` finding. The dataset-level zero-record missing-field case is the explicit exception defined by `REQ-FND-022`.
+
+**REQ-FND-020.** A value-mismatch finding MUST describe one comparison between two individually valid, assessable values and MUST use `affected_side: both`. Missing-record and extra-record findings remain one finding per affected record key. Undeclared-field finding granularity is defined separately by the undeclared-field policy.
+
+**REQ-FND-021.** An `undeclared_field` finding MUST be dataset-level and identify one dataset side, one source field name, and the number of records on that side containing the field. It MUST NOT be repeated for individual record occurrences. A `value_mismatch` involving a shared undeclared field under `compare` is record-specific, identifies the shared source field name, has unassigned review priority, and is not accompanied by an `undeclared_field` finding.
+
+**REQ-FND-022.** If a zero-record CSV or TSV header omits a declared source column that is required on that dataset side, the tool MUST emit one dataset-level `missing_required_field` finding for that canonical field and side. It contains the canonical field and review priority but no record identity, source location, or value evidence. An empty JSON array cannot produce this finding because it exposes no field structure.
+
+**REQ-FND-017.** `not_assessable` MUST be a value-opportunity classification, not a finding code. Every not-assessable opportunity MUST be explained by its applicable causal finding, such as `missing_required_field`, `type_mismatch`, `invalid_field_value`, `null_policy_violation`, `mapping_failure`, or `undeclared_field`. The tool MUST NOT emit an additional finding merely to repeat that the affected opportunity is not assessable.
 
 **REQ-FND-007.** Execution errors MUST NOT be represented as findings or assigned finding codes. In particular, invalid invocation or configuration, malformed input structure, invalid record keys, resource failure, I/O failure, and internal failure are execution errors governed by Section 8.3.
 
@@ -927,7 +987,7 @@ difference = abs(reference - query)
 - **REQ-RUN-016.** `incomplete`: the inputs and record model remain sufficiently trustworthy for a useful comparison, but one or more configured assessments could not be completed safely because a comparison prerequisite was not satisfied;
 - **REQ-RUN-017.** `error`: no trustworthy comparison result could be produced because of an invalid invocation or comparison configuration, malformed or unreadable input syntax or structure, a missing, null, invalid, or duplicate record key, an incomplete or ambiguous record model, an enforced resource limit, resource exhaustion, an input/output failure, or an unexpected internal failure.
 
-**REQ-RUN-002.** Differences between valid, assessable reference and query content — including contract findings, missing or extra records, and value mismatches — MUST NOT by themselves change a run from `complete` to `incomplete` or `error`. The run status describes completeness and operational validity, not acceptability.
+**REQ-RUN-002.** Findings, whether classified as `comparison_difference` or `assessment_issue`, MUST NOT by themselves change a run from `complete` to `incomplete` or `error`. A finding may identify a not-assessable opportunity that independently makes the run incomplete under `REQ-RUN-003`. Run status describes completeness and operational validity, not acceptability.
 
 **REQ-RUN-003.** Any configured content classified as `not_assessable` MUST make the run `incomplete`.
 
@@ -935,23 +995,59 @@ difference = abs(reference - query)
 
 **REQ-RUN-005.** An incomplete report MUST identify the affected content. It MUST identify why the comparison prerequisite was not satisfied.
 
-**REQ-RUN-006.** Content that is parseable and attributable to an unambiguous record but violates the declared data contract MUST be recorded as a comparison finding rather than an error.
+**REQ-RUN-006.** Content that is parseable and attributable to an unambiguous record but violates the declared data contract MUST be recorded as an `assessment_issue` finding rather than an execution error.
 
 **REQ-RUN-007.** Comparisons that remain assessable MUST continue.
 
-**REQ-RUN-008.** An error report SHOULD be written where possible. When written, it MUST be identified as an error report.
+**REQ-RUN-008.** An errored run MUST write a concise diagnostic to standard error and MUST NOT publish an evidence-package directory or any filesystem report.
 
-An error report is a diagnostic artefact, not a comparison result or evidence package.
+**REQ-RUN-009.** The diagnostic MUST contain a stable execution-error code and category, a concise actionable message, and sufficient non-sensitive context to locate the cause.
 
-**REQ-RUN-009.** When an error report can be written safely, it MUST contain `run_status: error`, a stable execution error code and category, a concise actionable message, and sufficient non-sensitive context to locate the cause.
+**REQ-RUN-010.** The diagnostic MUST NOT contain findings, finding codes, comparison summary metrics, phase statuses, record identifiers, or source values.
 
-**REQ-RUN-010.** An error report MUST NOT contain findings, finding codes, comparison summary metrics, or phase statuses.
+**REQ-RUN-024.** Version 1 execution errors MUST use exactly one of the following category and code combinations:
+
+| Category | Code | Meaning |
+| --- | --- | --- |
+| `invocation` | `invalid_arguments` | Command-line arguments are missing, invalid, or mutually incompatible |
+| `configuration` | `unreadable` | The selected comparison configuration cannot be read |
+| `configuration` | `invalid_syntax` | The comparison configuration is not permitted YAML syntax |
+| `configuration` | `schema_violation` | The parsed comparison configuration does not satisfy its JSON Schema |
+| `configuration` | `semantic_violation` | The configuration is schema-valid but violates a semantic configuration rule |
+| `configuration` | `unsupported_version` | The configuration names an unsupported schema version |
+| `input` | `unreadable` | A reference or query input cannot be read |
+| `input` | `unsupported_format` | An input has a missing, unknown, or ambiguous filename extension |
+| `input` | `invalid_encoding` | An input is not valid UTF-8 |
+| `input` | `invalid_syntax` | Input text is malformed for the format selected by its extension |
+| `input` | `invalid_structure` | Parsed input does not satisfy the required dataset or record structure |
+| `input` | `invalid_record_key` | A record key is missing, null, invalid, or duplicated, or cannot form an unambiguous record model |
+| `resource` | `limit_exceeded` | A documented implementation safeguard stops assessment |
+| `resource` | `exhausted` | An unplanned resource exhaustion prevents completion |
+| `output` | `invalid_destination` | The selected output destination violates destination or overwrite rules |
+| `output` | `write_failed` | The evidence package cannot be written or published |
+| `internal` | `unexpected` | An unexpected implementation failure occurs, including generated-result self-validation failure |
+
+**REQ-RUN-025.** The execution-error code MUST be the dotted combination `<category>.<code>`. The first diagnostic line MUST have the exact form `ERROR [<category>.<code>]: <message>`. The message MUST be non-empty and MUST NOT contain a line break. Additional non-sensitive context MAY follow on subsequent lines.
+
+**REQ-RUN-026.** Every execution-error code except `internal.unexpected` MUST return exit code 2. `internal.unexpected` MUST return exit code 3.
 
 **REQ-RUN-011.** Findings accumulated internally before the error occurred MUST NOT be published as a partial comparison result.
 
 **REQ-RUN-012.** Each phase MUST record whether it was `complete` or `incomplete`.
 
 Overall status is `complete` only when all three phases are complete.
+
+**REQ-RUN-018.** The contract phase MUST be `complete` when every applicable contract check was performed. Contract findings, including missing-field, type, invalid-value, null-policy, mapping, and undeclared-field findings, MUST NOT by themselves make the contract phase incomplete.
+
+**REQ-RUN-019.** The records phase MUST be `complete` when valid record keys were constructed and every record was aligned and classified. Missing-record and extra-record findings MUST NOT make the records phase incomplete. A key or record-model failure that prevents this assessment is an execution error and produces no comparison phase statuses.
+
+**REQ-RUN-020.** The values phase MUST be `complete` when every applicable in-scope value opportunity was compared or deliberately excluded. It MUST be `incomplete` when at least one such opportunity is `not_assessable`.
+
+**REQ-RUN-021.** A finding MUST NOT by itself make a phase incomplete. A phase is incomplete only when an intended assessment within that phase could not be performed safely.
+
+**REQ-RUN-022.** Content classified as `not_assessed` by an explicit exclusion policy MUST NOT make any phase incomplete.
+
+**REQ-RUN-023.** Overall run status MUST be `complete` if and only if the contract, records, and values phases are all `complete`; otherwise a non-error comparison run MUST be `incomplete`.
 
 **REQ-RUN-013.** The tool MUST report raw findings and metrics without applying acceptance thresholds. It MUST NOT produce a pass/fail verdict.
 
@@ -965,13 +1061,21 @@ The run status and reported differences do not constitute a laboratory validatio
 
 **REQ-OUT-001.** A non-error comparison, whether `complete` or `incomplete`, MUST create an evidence-package directory at the destination selected by `--output`.
 
-**REQ-OUT-002.** The evidence package MUST contain the canonical JSON result. It MUST contain the HTML report. A CSV findings export MAY also be included.
+**REQ-OUT-002.** The evidence package MUST contain the canonical JSON result and the HTML report. Version 1 MUST NOT produce any additional report or findings-export format.
+
+**REQ-OUT-115.** The canonical JSON result MUST be named `comparison-results.json`, and the HTML report MUST be named `comparison-report.html`. These names are fixed for evidence-package version 1.
+
+No separate package manifest is required in version 1; `comparison-results.json` contains the comparison and provenance metadata.
 
 **REQ-OUT-003.** Package member names MUST be stable and documented. Package layout MUST be stable and documented.
 
 ### 9.1 Machine-readable output
 
 **REQ-OUT-004.** JSON MUST be the canonical output format. Its normative JSON Schema Draft 2020-12 definition is [`src/adviso_validation/schemas/comparison-results-v1.0.schema.json`](src/adviso_validation/schemas/comparison-results-v1.0.schema.json).
+
+**REQ-OUT-125.** `comparison-results.json` MUST be serialized as RFC 8259 JSON encoded as UTF-8 without a byte-order mark, using two-space indentation, LF line endings, and exactly one final newline. Non-ASCII characters MUST be emitted directly rather than escaped unless escaping is required by JSON syntax. Members of fixed-schema objects MUST be emitted in their documented schema order; members of dynamically named objects MUST be emitted in Unicode code-point order.
+
+**REQ-OUT-112.** The results schema MUST use `https://adviso-project.github.io/validation_toolkit/schemas/comparison-results-v1.0.schema.json` as its canonical `$id`.
 
 **REQ-OUT-005.** The standalone results-schema file MUST be version controlled. It MUST be included as package data in `adviso_validation.schemas`. It MUST be resolvable together with the comparison-configuration schema that it references.
 
@@ -997,13 +1101,21 @@ Every property is required, including empty `exclusions` and `findings` arrays.
 
 **REQ-OUT-008.** The schema accepts only non-error results with run status `complete` or `incomplete`. An execution-error diagnostic under Section 8.3 is not a canonical comparison result and MUST NOT validate against this schema.
 
-**REQ-OUT-009.** The `run` object MUST contain a randomly generated UUID `id`, `status`, and `completed_at`.
+**REQ-OUT-009.** The `run` object MUST contain `id`, `status`, and `completed_at`. `id` MUST be a randomly generated UUID version 4 in canonical lowercase hyphenated form.
 
-**REQ-OUT-010.** `completed_at` MUST be an RFC 3339 UTC timestamp using `Z`.
+**REQ-OUT-010.** `completed_at` MUST be an RFC 3339 UTC timestamp using `Z` and whole-second precision, in the exact form `YYYY-MM-DDTHH:MM:SSZ`.
 
 **REQ-OUT-011.** Start time MUST NOT be included. Elapsed duration MUST NOT be included.
 
-**REQ-OUT-012.** Run ID and completion time are deliberately variable metadata. They MAY be excluded from semantic-determinism comparisons.
+**REQ-OUT-012.** Run ID and completion time are deliberately variable metadata and MUST be excluded from repeat-determinism comparisons.
+
+**REQ-OUT-095.** For determinism requirements, the comparison outcome consists of run and phase statuses; summary counts; exclusions considered without input occurrence order; and each finding's classification, code, phase, affected side, record identity, canonical or source field identity, review priority, and value evidence. It excludes run ID, completion time, software-runtime provenance, input byte provenance, source locations, human-readable messages that reproduce variable locations, and report-local finding IDs.
+
+**REQ-OUT-096.** Given the same exact input bytes, input basenames, configuration document, toolkit version, and runtime identity, all canonical result content other than `run.id` and `run.completed_at` MUST be identical.
+
+**REQ-OUT-097.** Changing only input record order or accepted LF/CRLF line endings MUST leave the comparison outcome unchanged. Exact-byte input size and digest, source locations, location-dependent messages, and report-local finding IDs MAY change. The result for each particular ordered byte input MUST still satisfy all deterministic ordering rules.
+
+**REQ-OUT-098.** Across supported Python versions and operating systems, the comparison outcome MUST remain invariant for identical inputs and configuration. Recorded runtime provenance MAY differ. Release testing MUST verify that Unicode-data differences do not silently change comparison outcomes across the supported matrix.
 
 **REQ-OUT-013.** The `phases` object MUST contain `contract`, `records`, and `values`, each with status `complete` or `incomplete`.
 
@@ -1012,6 +1124,14 @@ Every property is required, including empty `exclusions` and `findings` arrays.
 **REQ-OUT-015.** The `software` object MUST identify `adviso-validation` and its version. A build identifier MAY be included when available.
 
 **REQ-OUT-016.** The `runtime` object MUST record Python version, a normalized non-identifying platform identifier, and the Unicode-data version.
+
+**REQ-OUT-121.** `runtime.python` MUST have the form `<implementation>-<major>.<minor>.<micro>`, using a lowercase implementation name and the full runtime version, for example `cpython-3.12.7`. A prerelease suffix MAY follow the micro version when applicable.
+
+**REQ-OUT-122.** `runtime.platform` MUST have the form `<operating-system-family>-<architecture>` using lowercase normalized names, for example `linux-x86_64`, `linux-aarch64`, `windows-x86_64`, or `macos-aarch64`. `amd64` MUST be normalized to `x86_64`, and `arm64` MUST be normalized to `aarch64`. The supported release matrix determines the permitted combinations.
+
+**REQ-OUT-123.** `runtime.platform` MUST NOT include a distribution name, distribution version, kernel version, hostname, or other host-specific detail.
+
+**REQ-OUT-124.** `runtime.unicode_version` MUST be the exact runtime Unicode database version in `<major>.<minor>.<patch>` form.
 
 **REQ-OUT-017.** Hostname, username, environment variables, working directory, absolute paths, raw command line, and a full dependency inventory MUST NOT be included.
 
@@ -1023,17 +1143,15 @@ Basenames form part of the potentially sensitive evidence covered by Section 11.
 
 **REQ-OUT-020.** V1 MUST use one fixed documented interpretation for CSV. It MUST use one fixed documented interpretation for TSV. Because format uniquely determines that interpretation, no dialect identifier appears in the result.
 
-**REQ-OUT-021.** `record_key_fields` MUST declare the ordered source key-field names for the reference and query and the ordered canonical key-field names. Findings identify records through corresponding ordered arrays of source lexical values and canonical textual values. A single-field key is represented by a one-element array. Each identity array MUST have the same length as its corresponding field-name array. The reference or query identity is JSON null when that record is absent on that side; the canonical identity is always present.
+**REQ-OUT-021.** `record_key_fields` MUST declare the ordered source key-field names for the reference and query and the ordered canonical key-field names. Findings identify records through corresponding ordered arrays of source lexical values and canonical textual values. Canonical key components MUST use the scalar rendering rules in `REQ-OUT-029`. A single-field key is represented by a one-element array. Each identity array MUST have the same length as its corresponding field-name array. The reference or query identity is JSON null when that record is absent on that side; the canonical identity is always present.
 
 **REQ-OUT-022.** `comparison_configuration.document` MUST contain the complete validated JSON-compatible representation of the comparison configuration, including the bundled configuration when no custom file was supplied.
 
 **REQ-OUT-023.** The embedded document MUST validate against the referenced comparison-configuration schema.
 
+**REQ-OUT-113.** A result with `results_schema_version: "1.0"` MUST embed a comparison configuration with `schema_version: "1.0"`. Support for a later comparison-configuration schema version requires a corresponding results-schema version that explicitly references that configuration-schema version.
+
 No comparison-configuration digest or command-invocation object is included in version 1.
-
-**REQ-OUT-024.** Consumers MUST validate `results_schema_version` before interpreting a result.
-
-**REQ-OUT-025.** Consumers MUST use structured properties and finding codes for program logic. They MUST NOT infer semantics by parsing human-readable finding messages.
 
 #### 9.1.1 Value evidence
 
@@ -1043,28 +1161,35 @@ No comparison-configuration digest or command-invocation object is included in v
 
 **REQ-OUT-028.** Object member order has no semantic significance. Object members MUST be serialized in Unicode code-point order.
 
-**REQ-OUT-029.** Canonical scalar values MUST contain their logical type and value. Strings use JSON strings, booleans use JSON booleans, and dates and datetimes use canonical ISO text. Integers and decimals use normalized exact decimal text: no leading plus sign or unnecessary leading or trailing zeros, zero represented as `"0"`, and normalized lowercase scientific notation permitted where needed. Canonical collections contain the collection logical type, scalar element type, and an array of compact canonical element values. Lists preserve order; sets and multisets use deterministic canonical order; multisets retain duplicates. Null uses the declared logical type with a JSON null value. A `preserved_exact` field has no typed canonical value.
+**REQ-OUT-029.** Canonical scalar values MUST contain their logical type and one uniquely rendered value:
+
+- **REQ-OUT-089.** A canonical integer MUST use ordinary base-10 text with no leading plus sign or unnecessary leading zeros; zero is `"0"`.
+- **REQ-OUT-090.** A canonical decimal zero, including negative zero, MUST be `"0"`. Every non-zero canonical decimal MUST use normalized scientific form with exactly one non-zero digit before the optional decimal point, no trailing fractional zeros, lowercase `e`, no `e0`, no positive exponent sign, and no exponent leading zeros. For example, `1.00`, `1000`, `12.30`, `0.0010`, and `-0.0` become `"1"`, `"1e3"`, `"1.23e1"`, `"1e-3"`, and `"0"` respectively.
+- **REQ-OUT-091.** A canonical date MUST use `YYYY-MM-DD`.
+- **REQ-OUT-092.** A canonical datetime MUST be converted to UTC, use uppercase `Z`, remove unnecessary trailing fractional-second zeros, and omit a zero-valued fractional component.
+- **REQ-OUT-093.** A canonical boolean MUST use a JSON boolean. A canonical string MUST contain its Unicode text after configured processing without any additional transformation.
+- **REQ-OUT-094.** Canonical collections MUST contain the collection logical type, scalar element type, and an array of compact canonical element values. Lists preserve order. Sets and multisets MUST be serialized in locale-independent Unicode code-point order of the canonical element strings; multiset duplicates remain adjacent. Null uses the declared logical type with a JSON null value. A `preserved_exact` field has no typed canonical value.
 
 **REQ-OUT-030.** Values MUST be included only as follows:
 
 - **REQ-OUT-061.** missing and extra record findings contain no field values;
-- **REQ-OUT-062.** missing-required-field findings contain presence states but do not reproduce the present side's value;
-- **REQ-OUT-063.** undeclared-field findings contain no field value;
+- **REQ-OUT-062.** record-specific missing-required-field findings contain presence states but do not reproduce the present side's value; the dataset-level zero-record form contains no value evidence;
+- **REQ-OUT-063.** dataset-level undeclared-field findings contain no field value;
 - **REQ-OUT-064.** type-mismatch findings contain source values for affected sides and canonical values only where parsing succeeded;
 - **REQ-OUT-065.** invalid-field-value and mapping-failure findings contain the affected source value and no failed canonical value;
 - **REQ-OUT-066.** null-policy-violation findings contain the affected source and canonical null representation;
-- **REQ-OUT-067.** value-mismatch findings contain source and canonical values for both sides;
-- **REQ-OUT-068.** not-assessable findings contain only values necessary to explain the failed prerequisite.
+- **REQ-OUT-067.** value-mismatch findings MUST state the presence state of both sides. Each present side MUST contain its source value and, for a declared typed field, its canonical value. An absent side contains neither value. A mismatch of two present untyped values contains no typed canonical values.
+- **REQ-OUT-068.** A causal finding for a not-assessable value opportunity MUST contain only the values permitted for that finding code and necessary to explain the failed prerequisite. It MUST NOT contain separate or duplicated not-assessable evidence.
 
 **REQ-OUT-031.** Implementations MUST NOT add additional source values merely for convenience.
 
 #### 9.1.2 Findings
 
-**REQ-OUT-032.** Every finding MUST contain a deterministic report-local ID, finding code, phase, human-readable English message, and affected side.
+**REQ-OUT-032.** Every finding MUST contain a deterministic report-local ID, finding classification, finding code, phase, human-readable English message, and affected side.
 
-**REQ-OUT-033.** A message is presentation text derived deterministically from structured properties. It MUST NOT add facts absent from those properties. Consumers MUST NOT parse it for program logic.
+**REQ-OUT-033.** A message is presentation text derived deterministically from structured properties. It MUST NOT add facts absent from those properties, and every machine-significant fact in a message MUST also be represented by a structured property or finding code.
 
-Specification-requirement identifiers and a separate finding category are not included in version 1.
+Specification-requirement identifiers are not included in version 1. Finding classification is included explicitly and MUST agree with the finding code according to Section 8.2.
 
 The closed version 1 finding-code vocabulary is:
 
@@ -1076,20 +1201,35 @@ The closed version 1 finding-code vocabulary is:
 - `invalid_field_value`;
 - `null_policy_violation`;
 - `mapping_failure`;
-- `value_mismatch`;
-- `not_assessable`.
+- `value_mismatch`.
 
-**REQ-OUT-034.** `affected_side` MUST be `reference`, `query`, or `both`. A finding attributable to a declared canonical field MUST contain that field name and its resolved review priority. An undeclared-field finding instead contains the source field name. Record-specific findings MUST contain record identity and source locations; dataset-level findings omit record identity.
+**REQ-OUT-034.** `affected_side` MUST be `reference`, `query`, or `both` as required by the finding code. A finding attributable to a declared canonical field MUST contain that field name and its resolved review priority. A dataset-level undeclared-field finding instead contains the source field name and record count. A value mismatch involving a shared undeclared field contains its source field name and no review priority. Record-specific findings MUST contain record identity and source locations; dataset-level findings omit record identity and source locations.
 
-For CSV and TSV, a source location records the one-based data-record number where applicable, the one-based starting physical line number, and the source field name where applicable. For JSON, it records an RFC 6901 JSON Pointer. The reference and query locations are represented independently; a location is null when the corresponding record or field does not exist.
+**REQ-OUT-117.** For CSV and TSV, every record-specific source location MUST contain the one-based data-record number, excluding the header, and the one-based physical line number on which the record begins. Embedded newlines in a quoted field do not change that record's starting line. A location for a present field MUST also contain its source field name; a record-level location or a location for an absent field MUST omit the field name.
 
-**REQ-OUT-035.** Findings MUST be sorted deterministically by phase, canonical record identity, canonical field name, finding code, affected side, and source location, using locale-independent Unicode code-point ordering. IDs `F000001`, `F000002`, and so on MUST be assigned after sorting. IDs are stable within one result but are not persistent identifiers across materially different comparisons.
+**REQ-OUT-118.** For JSON, a record-level source location MUST contain the RFC 6901 JSON Pointer to the array element, such as `/3`. A location for a present field MUST contain the full pointer to that member, such as `/3/result`, with `~` and `/` escaped as `~0` and `~1`. A location for an absent field MUST identify its containing record because the absent member has no source location.
+
+**REQ-OUT-119.** Reference and query locations MUST be represented independently. A location MUST be null when the corresponding record does not exist. If the record exists but the relevant field is absent, the location MUST identify the containing record as specified above.
+
+**REQ-OUT-035.** Findings MUST be sorted by this complete, locale-independent order:
+
+1. classification: `comparison_difference`, `assessment_issue`;
+2. phase: `contract`, `records`, `values`;
+3. dataset-level findings before record-specific findings;
+4. canonical record identity, compared component-by-component as Unicode strings;
+5. field identity, using the canonical field name for a declared field and otherwise the source field name;
+6. finding code in the fixed vocabulary order listed in Section 9.1.2;
+7. affected side: `reference`, `query`, `both`;
+8. source locations, comparing reference before query, with a null location before a present location; tabular locations compare by record number, physical line number, and field name, while JSON locations compare by JSON Pointer using Unicode code-point order; and
+9. canonical JSON serialization of all remaining structured finding properties except `id` and `message`.
+
+**REQ-OUT-099.** Two candidate findings identical under the final ordering key represent the same finding and MUST be coalesced rather than emitted twice. IDs `F000001`, `F000002`, and so on MUST be assigned only after coalescence and sorting. IDs are stable within one result but are not persistent identifiers across materially different comparisons.
 
 **REQ-OUT-036.** Comparator parameters, mappings, and normalisation declarations MUST NOT be repeated in findings. Consumers and the HTML renderer obtain them from the embedded configuration using the canonical field name. Source and canonical values show their effect for the affected record.
 
 #### 9.1.3 Summary and exclusions
 
-**REQ-OUT-037.** The summary MUST contain complete fixed-shape counts, including zero-valued entries. Record counts comprise reference records, query records, matched records, missing records, and extra records. Value counts comprise matched, mismatched, and not-assessable in-scope non-key value opportunities. Finding counts comprise total findings, every version 1 finding code, and review priorities `low`, `normal`, `high`, and `unassigned`.
+**REQ-OUT-037.** The summary MUST contain complete fixed-shape counts, including zero-valued entries. Record counts comprise reference records, query records, matched records, missing records, and extra records. Value counts comprise matched, mismatched, and not-assessable in-scope non-key value opportunities. Finding counts comprise total findings, both finding classifications, every version 1 finding code, and review priorities `low`, `normal`, `high`, and `unassigned`.
 
 **REQ-OUT-038.** Record counts MUST reconcile as follows:
 
@@ -1106,15 +1246,43 @@ query = matched + extra
 - **REQ-OUT-072.** absence on a required side is not assessable;
 - **REQ-OUT-073.** an invalid or prohibited value that prevents comparison is not assessable.
 
-Under `fields.undeclared: compare`, undeclared non-key fields in aligned records are value opportunities: fields present on both sides use `preserved_exact`; one-sided fields create an undeclared-field finding and are not assessable. Under `exclude`, they are not value opportunities. Under `fail`, they create undeclared-field findings, are not compared, and are counted as not assessable.
+Under `fields.undeclared: compare`, dataset-wide shared undeclared fields contribute value opportunities in aligned records where at least one side is present: two present values use `preserved_exact`, and one present and one absent value mismatch. A dataset-wide one-sided undeclared field creates one dataset-level `undeclared_field` finding and is not assessable in each aligned record containing it. Under `exclude`, undeclared fields are not value opportunities. Under `fail`, each undeclared field creates the dataset-level findings required by Section 6.2.5 and is not assessable in each aligned record where it occurs. Occurrences in missing or extra records do not contribute value opportunities.
 
-**REQ-OUT-040.** `summary.findings.total` MUST equal the number of emitted findings. Counts by code and counts by review priority MUST each sum to the total. Findings not attributable to a declared field, including record and undeclared-field findings, count as `unassigned` review priority.
+**REQ-OUT-040.** `summary.findings.total` MUST equal the number of emitted findings. Counts by classification, by code, and by review priority MUST each sum to the total. Findings not attributable to a declared field, including record and undeclared-field findings, count as `unassigned` review priority.
 
-**REQ-OUT-041.** `exclusions` MUST always be an array. Under `fields.undeclared: exclude`, it contains one entry per source field and dataset side, recording code `undeclared_field_excluded`, side, source field name, and the number of records containing the field. Entries MUST be ordered by side and source field name. Exclusions are not findings, do not have review priorities, and do not contribute to value counts. A column known from a zero-record CSV or TSV header has record count zero.
+**REQ-OUT-041.** `exclusions` MUST always be an array. Under `fields.undeclared: exclude`, it contains one entry per source field and dataset side, recording code `undeclared_field_excluded`, side, source field name, and the number of records containing the field. Entries MUST be ordered first by side (`reference`, then `query`) and then by source field name using Unicode code-point order. Exclusions are not findings, do not have review priorities, and do not contribute to value counts. A column known from a zero-record CSV or TSV header has record count zero.
+
+#### 9.1.4 Structural and semantic result validation
+
+**REQ-OUT-100.** The results schema MUST define each finding form as an exact alternative. For each finding code it MUST require the applicable classification and properties and reject properties that are not permitted for that form, including the declared-field and shared-undeclared-field forms of `value_mismatch` and the record-specific and dataset-level forms of `missing_required_field`.
+
+**REQ-OUT-101.** Schema validation alone is not sufficient to establish that a canonical result is internally coherent. The implementation MUST also apply semantic result validation.
+
+**REQ-OUT-102.** Semantic result validation MUST verify that overall run status agrees with all phase statuses.
+
+**REQ-OUT-103.** Semantic result validation MUST verify the record-count reconciliation equations in `REQ-OUT-038`.
+
+**REQ-OUT-104.** Semantic result validation MUST verify that every finding count agrees with the findings array and that counts by classification, code, and review priority each sum to the total.
+
+**REQ-OUT-105.** Semantic result validation MUST verify that every record-key field-name array and corresponding record-identity value array has the required common length and component order.
+
+**REQ-OUT-106.** Semantic result validation MUST verify that findings and exclusions use the required order, including classification-first finding order, that duplicate findings are absent, and that finding IDs are sequential after sorting.
+
+**REQ-OUT-107.** Semantic result validation MUST verify that each finding's classification, presence states, value evidence, locations, affected side, field identity, and review priority are consistent with its code, form, embedded configuration, and causal condition.
+
+**REQ-OUT-108.** Semantic result validation MUST verify that `record_key_fields`, finding field identities, review priorities, and other configuration-derived metadata agree with the embedded comparison configuration.
+
+**REQ-OUT-109.** Before publishing an evidence package, the tool MUST validate the generated canonical result against the results schema and every semantic result rule.
+
+**REQ-OUT-110.** Failure of generated-result validation MUST be treated as an unexpected internal error. The invalid canonical result and any HTML derived from it MUST NOT be published as an evidence package.
+
+**REQ-OUT-111.** The user guide MUST distinguish structural JSON Schema validation from semantic result validation and document the invariants checked by each layer.
+
+**REQ-OUT-114.** Generated-result schema validation MUST enable JSON Schema Draft 2020-12 format assertion. Invalid values for recognised formats, including UUIDs, dates, and date-times, MUST fail self-validation. The user guide's documented procedure for validating canonical results MUST instruct users to enable equivalent format assertion.
 
 ### 9.2 Human-readable output
 
-**REQ-OUT-042.** The first release MUST produce an HTML human-readable report. The report SHOULD include:
+**REQ-OUT-042.** The first release MUST produce an HTML human-readable report. The report MUST include:
 
 - **REQ-OUT-074.** purpose of the run and the three comparison phases performed;
 - **REQ-OUT-075.** prominent run status and per-phase completion status;
@@ -1126,20 +1294,20 @@ Under `fields.undeclared: compare`, undeclared non-key fields in aligned records
 - **REQ-OUT-081.** provenance and reproduction information;
 - **REQ-OUT-082.** space or linkage for review and approval outside the tool.
 
-**REQ-OUT-043.** CSV MAY be provided as an export of findings, but MUST:
+**REQ-OUT-127.** The report's headline summary MUST present run completeness, total `comparison_difference` findings, and total `assessment_issue` findings as distinct measures. It MUST NOT describe either finding count as an acceptance or validation verdict.
 
-- **REQ-OUT-083.** be produced using a conforming CSV writer;
-- **REQ-OUT-084.** preserve record identifiers;
-- **REQ-OUT-085.** quote delimiters, quotes, and newlines correctly;
-- **REQ-OUT-086.** use a stable documented column schema;
-- **REQ-OUT-087.** mitigate spreadsheet formula injection when intended for spreadsheet use;
-- **REQ-OUT-088.** never be the only canonical evidence format.
+**REQ-OUT-128.** Detailed findings MUST be organized primarily by classification, with comparison differences presented before assessment issues. Phase MUST remain visible as secondary traceability information and MAY be used for subgrouping within each classification.
+
+**REQ-OUT-120.** `comparison-report.html` MUST be generated solely from the validated contents of `comparison-results.json` and fixed renderer resources. It MUST NOT contain additional comparison facts, findings, metrics, provenance, or run metadata unavailable in the canonical JSON. Fixed explanatory text and blank or generic external review and approval space MAY be added by the renderer.
+
+**REQ-OUT-126.** `comparison-report.html` MUST be self-contained and fully usable offline. Required styling MUST be embedded. The report MUST NOT load external scripts, stylesheets, fonts, images, tracking resources, or any other network resource. Core content and navigation MUST remain usable with scripting disabled. Embedded scripting MAY provide non-essential navigation or filtering enhancements but MUST NOT change or supply comparison content.
 
 ### 9.3 Atomicity and overwrite protection
 
 - **REQ-OUT-044.** Output files MUST be written atomically where supported.
 - **REQ-OUT-045.** The complete evidence-package directory MUST be published atomically where the platform supports it.
-- **REQ-OUT-046.** An existing destination MUST NOT be overwritten unless the user supplies `--overwrite`.
+- **REQ-OUT-046.** Without `--overwrite`, any existing filesystem object at the selected destination MUST cause an output error. With `--overwrite`, the tool MAY replace only an existing regular directory that is recognisably a complete version 1 evidence package containing exactly `comparison-results.json` and `comparison-report.html`. It MUST reject an existing regular file, symbolic link, special filesystem object, empty directory, partial package, or directory containing any additional entry, even when `--overwrite` is supplied.
+- **REQ-OUT-116.** When replacing an existing evidence package, the tool MUST leave the existing package intact until the replacement package has been fully generated and has passed structural and semantic self-validation. A failed replacement MUST preserve the existing package.
 - **REQ-OUT-047.** The actual selected output directory MUST be reported clearly.
 - **REQ-OUT-048.** File suffixes MUST be handled structurally, not with character stripping.
 - **REQ-OUT-049.** A failed or interrupted write MUST NOT publish a partial directory at the selected destination as if it were a complete evidence package. Temporary output MUST be identifiable as temporary and cleaned up where possible.
@@ -1215,7 +1383,6 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 - **REQ-SEC-010.** Temporary files MUST be removed after successful completion.
 - **REQ-SEC-011.** Temporary files SHOULD be removed following an error where this can be done safely.
 - **REQ-SEC-012.** Comparison-configuration YAML MUST be parsed using the safe-loader rules in Section 6.2.1.
-- **REQ-SEC-013.** Spreadsheet-oriented exports MUST mitigate formula injection.
 - **REQ-SEC-014.** The tool SHOULD document filesystem permission expectations. The laboratory is responsible for supplying appropriately pseudonymised input data where required and for controlling access to, retention of, and disposal of inputs and evidence packages.
 - Automated redaction, identifier pseudonymisation, keyed hashing, and field-level sensitivity policies are outside the scope of version 1.0.
 
@@ -1238,9 +1405,9 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 
 **REQ-DEP-012.** Interrupted runs MUST NOT leave apparently complete reports.
 
-**REQ-DEP-013.** Results MUST remain deterministic across supported Python versions and operating systems.
+**REQ-DEP-013.** Comparison outcomes, as defined by `REQ-OUT-095`, MUST remain invariant across supported Python versions and operating systems. Runtime provenance MAY differ.
 
-**REQ-DEP-014.** Internal exceptions MUST be captured in an error report where safe. Concise diagnostics MUST be presented to the user.
+**REQ-DEP-014.** Internal exceptions MUST be converted into the standard-error diagnostic required by Section 8.3. A traceback MUST NOT be shown during ordinary CLI use.
 
 ## 13. Software quality and release requirements
 
@@ -1306,9 +1473,9 @@ In operational use, each laboratory is responsible for creating, approving, main
 - **REQ-DOC-008.** the supported input formats and their parsing, encoding, record, field, and filename-extension requirements;
 - **REQ-DOC-009.** how to use the bundled strict-exact comparison configuration and how to create, validate, and govern a custom comparison configuration;
 - **REQ-DOC-010.** every property in the comparison-configuration schema, including its purpose, permitted values, required or optional status, default or omission semantics, constraints, and interactions with other properties;
-- **REQ-DOC-011.** the comparison phases, processing order, comparators, mappings, normalisation operations, null handling, undeclared-field behaviour, and review priorities;
+- **REQ-DOC-011.** the translation-to-canonical comparison model, finding classifications, comparison phases, processing order, comparators, mappings, normalisation operations, null handling, undeclared-field behaviour, and review priorities;
 - **REQ-DOC-012.** the contents and interpretation of the evidence package;
-- **REQ-DOC-013.** every property in the canonical results JSON schema, including finding codes, typed source and canonical values, counts, exclusions, run and phase statuses, and provenance fields;
+- **REQ-DOC-013.** every property in the canonical results JSON schema, including finding classifications and codes, typed source and canonical values, counts, exclusions, run and phase statuses, and provenance fields; the guide MUST explain that software consuming a result must first validate `results_schema_version` and must use structured properties, classifications, and finding codes rather than parsing presentation messages;
 - **REQ-DOC-014.** execution-error diagnostics and common corrective actions;
 - **REQ-DOC-015.** the tool's intended use, non-claims, security and data-governance boundaries, and known limitations; and
 - **REQ-DOC-016.** the toolkit, comparison-configuration-schema, and results-schema versions to which the documentation applies.
@@ -1333,7 +1500,7 @@ In operational use, each laboratory is responsible for creating, approving, main
 - **REQ-REL-011.** a reproducible lockfile or equivalent dependency record;
 - **REQ-REL-012.** evidence that required verification tests passed.
 
-**REQ-REL-002.** Comparison-configuration schema versions, results-schema versions, and toolkit versions MUST be independent.
+**REQ-REL-002.** Comparison-configuration schemas, results schemas, and toolkit releases MUST each have their own version identifier and MUST NOT be assumed to advance in lockstep or to use matching version numbers. Each results-schema version nevertheless references the exact comparison-configuration schema version or versions permitted in that result, as required by `REQ-OUT-113`.
 
 **REQ-REL-003.** Each toolkit release MUST document the comparison-configuration schema versions it supports. It MUST document the results schema versions it supports.
 
@@ -1349,40 +1516,41 @@ This catalogue summarises minimum executable scenarios for the first release. It
 
 - **AT-CON-001:** Identical typed datasets satisfy their contract.
   - Verifies: `REQ-VAL-003`, `REQ-VAL-004`, `REQ-CMP-006`, `REQ-RUN-002`
-- **AT-CON-002:** Required missing fields produce contract findings in both directions and across heterogeneous records; optional missing fields do not. Observed undeclared fields are handled according to each `fields.undeclared` mode and aligned only by identical input names under `compare`. This consolidated parameterized scenario also covers: `fields.undeclared` is required and accepts only `compare`, `exclude`, or `fail`; omission and unknown policies are rejected. Every declared field supplies non-empty `source.reference` and `source.query` names, including when the field is optional on either side; the `required` flags govern record-level presence rather than whether a correspondence is declared.
-  - Verifies: `REQ-CFG-030`, `REQ-CFG-031`, `REQ-CFG-037`, `REQ-CFG-038`, `REQ-CFG-039`, `REQ-CMP-006`, `REQ-CMP-007`, `REQ-CMP-034`, `REQ-CMP-035`, `REQ-CMP-036`, `REQ-FND-010`, `REQ-FND-011`, `REQ-VAL-002`, `REQ-CFG-035`, `REQ-CFG-036`
-- **AT-CON-004:** Null, empty string, whitespace-only string, absent field, and configured missing tokens remain distinct according to policy. This consolidated parameterized scenario also covers: The bundled strict-exact configuration treats parser-native null as equal only to null and distinguishes null, absent fields, and empty strings.
-  - Verifies: `REQ-CFG-053`, `REQ-CFG-054`, `REQ-CFG-055`, `REQ-CFG-056`, `REQ-CFG-057`, `REQ-VAL-014`, `REQ-VAL-047`, `REQ-VAL-048`, `REQ-VAL-049`, `REQ-VAL-050`, `REQ-VAL-051`, `REQ-VAL-052`, `REQ-VAL-053`, `REQ-VAL-054`, `REQ-VAL-055`, `REQ-INP-028`, `REQ-CFG-113`
-- **AT-CON-005:** Unknown, conflicting, and incomplete mappings fail clearly; mapping to null differs from a missing map entry. This consolidated parameterized scenario also covers: Source-value descriptors distinguish strings, numbers, booleans, and null; mapping to null remains distinct from an absent mapping entry. Parameterized mapping fixtures verify reference/query-to-canonical field mapping, required-field reporting, undeclared-field handling, declared source and destination types, permitted intentional many-to-one mappings, and rejection of accidental non-one-to-one mappings.
-  - Verifies: `REQ-CFG-065`, `REQ-CFG-071`, `REQ-CFG-072`, `REQ-CFG-073`, `REQ-CFG-074`, `REQ-VAL-058`, `REQ-VAL-065`, `REQ-VAL-067`, `REQ-CFG-058`, `REQ-CFG-059`, `REQ-VAL-068`, `REQ-VAL-056`, `REQ-VAL-057`, `REQ-VAL-059`, `REQ-VAL-060`, `REQ-VAL-064`, `REQ-VAL-066`
-- **AT-CON-006:** Malformed syntax or structure, empty or duplicate column names, and irregular tabular rows receive their specified error classification without silent data loss. This consolidated parameterized scenario also covers: A table-driven parser suite verifies the fixed CSV and TSV dialects, UTF-8-only decoding, CRLF/LF equivalence, quoted delimiters, doubled quotes, embedded line breaks, source-row retention, and initial string preservation.
-  - Verifies: `REQ-INP-021`, `REQ-INP-022`, `REQ-INP-023`, `REQ-INP-024`, `REQ-INP-025`, `REQ-INP-034`, `REQ-INP-035`, `REQ-INP-036`, `REQ-INP-037`, `REQ-INP-038`, `REQ-CMP-028`, `REQ-CMP-029`, `REQ-PRN-002`, `REQ-PRN-008`, `REQ-INP-010`, `REQ-INP-011`, `REQ-INP-012`, `REQ-INP-014`, `REQ-INP-015`, `REQ-INP-016`, `REQ-INP-017`, `REQ-INP-018`, `REQ-INP-019`, `REQ-INP-020`, `REQ-INP-026`, `REQ-INP-027`, `REQ-INP-063`, `REQ-INP-064`
-- **AT-CON-007:** For two syntactically valid zero-record datasets, the records phase reports no missing or extra records and the values phase performs no comparisons under every configuration. Independently assessable contract requirements are still evaluated, and requirements that depend on examining a record are `not_assessable`. One-sided empty datasets produce all applicable missing or extra record findings.
-  - Verifies: `REQ-INP-052`, `REQ-INP-053`, `REQ-INP-054`, `REQ-INP-055`, `REQ-INP-056`, `REQ-INP-057`, `REQ-INP-058`, `REQ-INP-059`, `REQ-CMP-009`, `REQ-CMP-010`, `REQ-CFG-114`
+- **AT-CON-002:** Required missing fields produce side-specific contract findings in both directions and across heterogeneous records; optional missing fields do not. Dataset-wide field discovery uses tabular headers and the union of JSON record members. Observed undeclared fields are handled according to each `fields.undeclared` mode and aligned only by identical input names under `compare`: shared names use implicit `preserved_exact` comparison with present/absent mismatches, while dataset-wide one-sided names and `fail` findings are consolidated by side and field with accurate record counts. This consolidated parameterized scenario also covers: `fields.undeclared` is required and accepts only `compare`, `exclude`, or `fail`; omission and unknown policies are rejected. Every declared field supplies non-empty `source.reference` and `source.query` names, including when the field is optional on either side; the `required` flags govern record-level presence rather than whether a correspondence is declared.
+  - Verifies: `REQ-CFG-030`, `REQ-CFG-031`, `REQ-CFG-037`, `REQ-CFG-038`, `REQ-CFG-039`, `REQ-CFG-116`, `REQ-CFG-117`, `REQ-CFG-118`, `REQ-CFG-119`, `REQ-CFG-120`, `REQ-CFG-121`, `REQ-CMP-006`, `REQ-CMP-007`, `REQ-CMP-034`, `REQ-CMP-035`, `REQ-CMP-036`, `REQ-FND-010`, `REQ-FND-011`, `REQ-FND-021`, `REQ-VAL-002`, `REQ-CFG-035`, `REQ-CFG-036`
+- **AT-CON-004:** Null, empty string, whitespace-only string, absent field, and configured non-null missing tokens remain distinct according to policy. Parser-native null and recognised missing tokens bypass mapping and typed parsing; mapping to null applies the null policy and bypasses typed parsing; and null is rejected as a missing token or mapping source. This consolidated parameterized scenario also covers: The bundled strict-exact configuration treats parser-native null as equal only to null and distinguishes null, absent fields, and empty strings.
+  - Verifies: `REQ-CFG-053`, `REQ-CFG-054`, `REQ-CFG-055`, `REQ-CFG-056`, `REQ-CFG-057`, `REQ-CFG-122`, `REQ-VAL-014`, `REQ-VAL-047`, `REQ-VAL-048`, `REQ-VAL-049`, `REQ-VAL-050`, `REQ-VAL-051`, `REQ-VAL-052`, `REQ-VAL-053`, `REQ-VAL-054`, `REQ-VAL-055`, `REQ-VAL-086`, `REQ-INP-028`, `REQ-CFG-113`
+- **AT-CON-005:** Unknown, conflicting, and incomplete value mappings fail clearly; mapping to null differs from a missing map entry, and mapping from null is rejected. This consolidated parameterized scenario also covers: Source-value descriptors distinguish strings, numbers, booleans, and null in their permitted positions; mapping to null remains distinct from an absent mapping entry. Parameterized mapping fixtures verify reference/query-to-canonical field mapping, required-field reporting, undeclared-field handling, declared source and destination types, permitted intentional many-to-one value mappings, and rejection of reused source column names or any other non-one-to-one column mapping within either dataset side.
+  - Verifies: `REQ-CFG-065`, `REQ-CFG-071`, `REQ-CFG-072`, `REQ-CFG-073`, `REQ-CFG-074`, `REQ-CFG-127`, `REQ-VAL-058`, `REQ-VAL-065`, `REQ-VAL-067`, `REQ-CFG-058`, `REQ-CFG-059`, `REQ-VAL-068`, `REQ-VAL-056`, `REQ-VAL-057`, `REQ-VAL-059`, `REQ-VAL-060`, `REQ-VAL-064`, `REQ-VAL-066`
+- **AT-CON-006:** Malformed syntax or structure, non-array JSON roots (including a single record object), JSON arrays containing non-object items, duplicate JSON member names at any depth, empty or duplicate tabular column names, and irregular tabular rows receive their specified error classification without silent data loss. This consolidated parameterized scenario also covers: A table-driven parser suite verifies the fixed CSV and TSV dialects, UTF-8-only decoding, CRLF/LF equivalence, quoted delimiters, doubled quotes, embedded line breaks, retention of one-based data-record and starting physical line numbers, and initial string preservation.
+  - Verifies: `REQ-INP-021`, `REQ-INP-022`, `REQ-INP-023`, `REQ-INP-024`, `REQ-INP-025`, `REQ-INP-034`, `REQ-INP-035`, `REQ-INP-036`, `REQ-INP-037`, `REQ-INP-038`, `REQ-INP-070`, `REQ-CMP-028`, `REQ-CMP-029`, `REQ-PRN-002`, `REQ-PRN-008`, `REQ-INP-010`, `REQ-INP-011`, `REQ-INP-012`, `REQ-INP-014`, `REQ-INP-015`, `REQ-INP-016`, `REQ-INP-017`, `REQ-INP-018`, `REQ-INP-019`, `REQ-INP-020`, `REQ-INP-026`, `REQ-INP-027`, `REQ-INP-063`, `REQ-INP-064`
+- **AT-CON-007:** JSON `[]` and header-only CSV/TSV are valid zero-record datasets, while zero-byte inputs receive their format-specific input errors. For two valid zero-record datasets, the records and values phases are complete with no record differences or value opportunities. Per-record requirements produce neither findings nor not-assessable classifications; available tabular header structure still produces applicable dataset-level contract findings, while JSON `[]` exposes no field structure. One-sided zero-record datasets produce all applicable missing or extra record findings, zero value opportunities, and complete records and values phases.
+  - Verifies: `REQ-INP-052`, `REQ-INP-053`, `REQ-INP-054`, `REQ-INP-055`, `REQ-INP-056`, `REQ-INP-057`, `REQ-INP-058`, `REQ-INP-059`, `REQ-INP-066`, `REQ-INP-067`, `REQ-INP-068`, `REQ-INP-069`, `REQ-CMP-009`, `REQ-CMP-010`, `REQ-CFG-114`, `REQ-FND-022`
 - **AT-CON-008:** Comparison-configuration YAML scalar resolution and cross-format typed dataset parsing are deterministic across supported environments.
   - Verifies: `REQ-CFG-006`, `REQ-INP-039`, `REQ-INP-040`, `REQ-INP-041`, `REQ-INP-042`, `REQ-INP-043`, `REQ-INP-044`, `REQ-DEP-013`
 - **AT-CON-011:** A complete custom YAML configuration conforming to Section 6.2 validates; omitted optional processing properties and dataset sides expand to empty internal structures in the effective configuration, while explicitly empty placeholder lists or mappings are rejected.
   - Verifies: `REQ-CFG-003`, `REQ-CFG-005`, `REQ-CFG-014`, `REQ-CFG-060`, `REQ-CFG-061`, `REQ-CFG-062`, `REQ-CFG-063`, `REQ-CFG-069`, `REQ-CFG-070`, `REQ-CFG-075`, `REQ-CFG-076`
 - **AT-CON-012:** Duplicate or unknown YAML keys, unsafe YAML features, unsupported schema versions, invalid enumerations, and incompatible type/comparator combinations are rejected with precise configuration paths. This consolidated parameterized scenario also covers: Safe-loader tests confirm that configuration parsing cannot construct arbitrary objects or execute tagged payloads.
   - Verifies: `REQ-CFG-007`, `REQ-CFG-008`, `REQ-CFG-009`, `REQ-CFG-010`, `REQ-CFG-013`, `REQ-CFG-017`, `REQ-CFG-048`, `REQ-CFG-051`, `REQ-CFG-052`, `REQ-CFG-065`, `REQ-CFG-078`, `REQ-CFG-079`, `REQ-CFG-080`, `REQ-CFG-085`, `REQ-CFG-091`, `REQ-SEC-012`
-- **AT-CON-014:** The authoritative schema is present in the source tree and built distribution, can be loaded through the installed package-resource API, and validates every complete configuration example and controlled configuration fixture. This consolidated parameterized scenario also covers: The packaged results schema resolves its configuration-schema reference, accepts representative complete and incomplete canonical results, rejects unknown properties and execution-error diagnostics, and requires exactly the documented top-level result properties.
-  - Verifies: `REQ-CFG-016`, `REQ-CFG-087`, `REQ-CFG-088`, `REQ-OUT-004`, `REQ-OUT-005`, `REQ-OUT-006`, `REQ-OUT-007`, `REQ-OUT-050`, `REQ-OUT-051`, `REQ-OUT-052`, `REQ-OUT-053`, `REQ-OUT-054`, `REQ-OUT-055`, `REQ-OUT-056`, `REQ-OUT-057`, `REQ-OUT-058`, `REQ-OUT-059`, `REQ-OUT-060`
-- **AT-CON-015:** Configurations that are structurally schema-valid but violate a semantic rule in Section 6.2.9 are rejected with the relevant configuration path and rule.
-  - Verifies: `REQ-CFG-090`, `REQ-CFG-091`, `REQ-CFG-104`, `REQ-CFG-105`, `REQ-CFG-106`, `REQ-CFG-107`, `REQ-CFG-108`
+- **AT-CON-014:** Each authoritative schema has its specified canonical `$id`, is present in the source tree and built distribution, can be loaded through the installed package-resource API, and validates every complete configuration example and controlled configuration fixture. This consolidated parameterized scenario also covers: The packaged results schema resolves its configuration-schema reference, accepts representative complete and incomplete canonical results, rejects unknown properties and execution-error diagnostics, requires exactly the documented top-level result properties, and enforces the exact permitted shape of every finding form.
+  - Verifies: `REQ-CFG-128`, `REQ-OUT-004`, `REQ-OUT-005`, `REQ-OUT-100`, `REQ-OUT-112`
+  - Verifies: `REQ-CFG-016`, `REQ-CFG-087`, `REQ-CFG-088`, `REQ-OUT-004`, `REQ-OUT-005`, `REQ-OUT-006`, `REQ-OUT-007`, `REQ-OUT-050`, `REQ-OUT-051`, `REQ-OUT-052`, `REQ-OUT-053`, `REQ-OUT-054`, `REQ-OUT-055`, `REQ-OUT-056`, `REQ-OUT-057`, `REQ-OUT-058`, `REQ-OUT-059`, `REQ-OUT-060`, `REQ-OUT-100`
+- **AT-CON-015:** Configurations that are structurally schema-valid but violate a semantic rule in Section 6.2.9, including reuse of a source field name within one dataset side, are rejected with the relevant configuration path and rule.
+  - Verifies: `REQ-CFG-090`, `REQ-CFG-091`, `REQ-CFG-104`, `REQ-CFG-105`, `REQ-CFG-106`, `REQ-CFG-107`, `REQ-CFG-108`, `REQ-CFG-127`
 - **AT-CON-016:** `review_priority` accepts only `low`, `normal`, or `high`; omission resolves to `normal` in the effective configuration.
   - Verifies: `REQ-CFG-040`
 - **AT-CON-017:** `fields.record_key` is required, non-empty, ordered, and free of duplicate component fields; every entry names a field in `fields.definitions` that satisfies all key-field constraints.
   - Verifies: `REQ-CFG-024`, `REQ-CFG-025`, `REQ-CFG-026`, `REQ-CFG-027`, `REQ-CFG-029`, `REQ-CFG-034`, `REQ-CFG-104`, `REQ-CFG-105`
 - **AT-CON-018:** `metadata.id` and `metadata.revision` are required non-empty strings; title and description are optional, and metadata does not alter comparison behaviour.
   - Verifies: `REQ-CFG-018`, `REQ-CFG-020`, `REQ-CFG-022`
-- **AT-CON-021:** A table-driven JSON parser suite verifies the record-oriented root structure, preserved string-like tokens and numerical lexical forms, and the distinct finding, `not_assessable`, continuation, and execution-error outcomes for non-finite values in non-key fields and record keys.
+- **AT-CON-021:** A table-driven JSON parser suite verifies the record-oriented root structure, preserved string-like tokens and numerical lexical forms, and rejection of unquoted `NaN`, `Infinity`, and `-Infinity` as malformed JSON in every location. Results-schema fixtures accept only valid JSON integer lexical forms for `integer` source evidence and valid JSON numerical forms containing a fraction or exponent for `decimal` source evidence. Quoted non-finite representations remain strings; when explicitly parsed as decimals they produce an `invalid_field_value` and not-assessable opportunity in an attributable non-key field, but an execution error in a record-key field.
   - Verifies: `REQ-INP-029`, `REQ-INP-030`, `REQ-INP-033`, `REQ-INP-047`, `REQ-INP-048`, `REQ-INP-049`, `REQ-INP-050`, `REQ-INP-051`, `REQ-INP-065`
 - **AT-CON-022:** Every comparison resolves one effective configuration whose schema version, identifier, revision, record key, field definitions, undeclared-field policy, and comparison rules are validated before either dataset is read; unknown keys fail with actionable locations, and the validated configuration is embedded in results.
   - Verifies: `REQ-CFG-001`, `REQ-CFG-002`, `REQ-CFG-012`, `REQ-CFG-086`, `REQ-CFG-095`, `REQ-CFG-096`, `REQ-CFG-097`, `REQ-CFG-098`, `REQ-CFG-099`, `REQ-CFG-100`, `REQ-CFG-101`, `REQ-CFG-102`, `REQ-CFG-103`
-- **AT-CON-023:** Parameterized configuration fixtures verify canonical field-name mapping, collection logical-type structure, legal omission of `logical_type` and operation parameters, placement and side-specific application of source and typed normalisation, and the required comparator declaration.
+- **AT-CON-023:** Parameterized configuration fixtures verify canonical field-name mapping, collection logical-type structure, the bidirectional relationship between omission of `logical_type` and `preserved_exact`, rejection of every processing property on a `preserved_exact` field, legal omission of operation parameters, placement and side-specific application of source and typed normalisation, and the required comparator declaration.
   - Verifies: `REQ-CFG-028`, `REQ-CFG-032`, `REQ-CFG-033`, `REQ-CFG-049`, `REQ-CFG-050`, `REQ-CFG-064`, `REQ-CFG-066`, `REQ-CFG-067`, `REQ-CFG-077`
-- **AT-CON-024:** The bundled configuration is schema-valid and implements the documented strict-exact behavior: `record_id` is the key on both sides, shared non-key fields require no declarations, reference-only and query-only fields become contract findings, and cross-format parser-native type differences remain distinguishable. This consolidated parameterized scenario also covers: `preserved_exact` follows the parser-native category table, including deterministic same-format and cross-format comparisons.
-  - Verifies: `REQ-CFG-093`, `REQ-CFG-094`, `REQ-CFG-109`, `REQ-CFG-110`, `REQ-CFG-115`, `REQ-INP-039`, `REQ-INP-046`, `REQ-CFG-111`, `REQ-CFG-112`, `REQ-CMP-032`
+- **AT-CON-024:** The bundled configuration is schema-valid and implements the documented strict-exact behavior: `record_id` is the key on both sides, shared non-key fields require no declarations, reference-only and query-only fields become contract findings, and cross-format parser-native category differences remain distinguishable as `value_mismatch` findings rather than `type_mismatch` findings. This consolidated parameterized scenario also covers: `preserved_exact` follows the parser-native category table, including deterministic same-format and cross-format comparisons.
+  - Verifies: `REQ-CFG-093`, `REQ-CFG-094`, `REQ-CFG-109`, `REQ-CFG-110`, `REQ-CFG-115`, `REQ-INP-039`, `REQ-INP-046`, `REQ-CFG-111`, `REQ-CFG-112`, `REQ-CMP-032`, `REQ-FND-018`
 
 ### 14.2 Record scenarios
 
@@ -1397,22 +1565,22 @@ This catalogue summarises minimum executable scenarios for the first release. It
 
 ### 14.3 Typed value and comparator scenarios
 
-- **AT-VAL-001:** Boolean `true`, integer `1`, decimal `1.0`, and textual `"1"` remain distinct under the applicable exact comparator. The parameterized suite also verifies declared parsing rather than inference and enumerates the stable comparator registry.
-  - Verifies: `REQ-VAL-009`, `REQ-VAL-027`, `REQ-CMP-017`, `REQ-VAL-001`, `REQ-VAL-005`, `REQ-VAL-007`, `REQ-VAL-008`, `REQ-CMP-015`
+- **AT-VAL-001:** Boolean `true`, integer `1`, decimal `1.0`, and textual `"1"` remain distinct under the applicable exact comparator. A parameterized source-category matrix verifies every directly accepted category, exact integer-to-decimal widening, rejection of implicit narrowing and stringification, rejection of parser-native objects for typed fields, explicit mapping for representations outside the matrix, null handling before typed parsing, and element-wise application to collections. The suite also verifies declared parsing rather than inference and enumerates the stable comparator registry.
+  - Verifies: `REQ-VAL-009`, `REQ-VAL-027`, `REQ-CMP-017`, `REQ-VAL-001`, `REQ-VAL-005`, `REQ-VAL-007`, `REQ-VAL-008`, `REQ-VAL-076`, `REQ-VAL-077`, `REQ-VAL-078`, `REQ-VAL-079`, `REQ-VAL-080`, `REQ-VAL-081`, `REQ-VAL-082`, `REQ-VAL-083`, `REQ-VAL-084`, `REQ-VAL-085`, `REQ-CMP-015`
 - **AT-VAL-002:** Typed strings remain code-point-exact unless configured normalisations are applied in declared order.
   - Verifies: `REQ-INP-013`, `REQ-VAL-012`, `REQ-VAL-013`, `REQ-VAL-070`, `REQ-CMP-016`
 - **AT-VAL-003:** Integer parsing accepts signed ASCII decimal integers and leading zeros but rejects decimal points, exponents, booleans, and invalid text. This consolidated parameterized scenario also covers: Leading-zero identifiers remain strings unless explicitly transformed.
   - Verifies: `REQ-VAL-015`, `REQ-VAL-016`, `REQ-VAL-017`, `REQ-VAL-018`
-- **AT-VAL-004:** Decimal parsing is exact, accepts scientific notation, and rejects `NaN` and infinities. Invalid attributable non-key decimals are also checked as contract findings that become `not_assessable`, not execution errors.
-  - Verifies: `REQ-INP-031`, `REQ-INP-032`, `REQ-INP-045`, `REQ-INP-046`, `REQ-VAL-019`, `REQ-VAL-020`, `REQ-VAL-021`, `REQ-VAL-022`, `REQ-VAL-023`, `REQ-VAL-011`
+- **AT-VAL-004:** Decimal parsing is exact; accepts parser-native integers and decimals and textual forms such as `+1.2`, `01.2`, `1`, and `1E+2`; rejects `.5`, `1.`, `NaN`, and infinities; and never passes through binary floating-point. Invalid attributable non-key decimals are also checked as contract findings that become `not_assessable`, not execution errors.
+  - Verifies: `REQ-INP-031`, `REQ-INP-032`, `REQ-INP-045`, `REQ-INP-046`, `REQ-VAL-019`, `REQ-VAL-020`, `REQ-VAL-021`, `REQ-VAL-022`, `REQ-VAL-023`, `REQ-VAL-078`, `REQ-VAL-011`
 - **AT-VAL-005:** Boolean parsing accepts native booleans and lowercase textual `true` or `false`; other representations require a mapping.
   - Verifies: `REQ-VAL-024`, `REQ-VAL-025`, `REQ-VAL-026`, `REQ-VAL-027`
 - **AT-VAL-006:** Dates reject invalid or non-ISO full dates; datetimes require offsets and compare as instants.
   - Verifies: `REQ-VAL-028`, `REQ-VAL-029`, `REQ-VAL-030`, `REQ-VAL-031`, `REQ-VAL-032`, `REQ-VAL-033`, `REQ-VAL-034`, `REQ-VAL-035`, `REQ-VAL-036`, `REQ-CMP-024`
-- **AT-VAL-007:** Lists preserve order and duplicates, sets reject duplicates and ignore order, and multisets ignore order while preserving occurrence counts. This consolidated parameterized scenario also covers: Collection parsing accepts JSON arrays in JSON and JSON-array cell syntax in CSV/TSV, rejects ordinary delimited text, and rejects null collection elements with the specified finding and `not_assessable` evidence. The suite covers every supported typed collection kind and its required element declaration.
-  - Verifies: `REQ-VAL-037`, `REQ-VAL-038`, `REQ-VAL-039`, `REQ-VAL-040`, `REQ-VAL-041`, `REQ-VAL-042`, `REQ-CMP-025`, `REQ-VAL-043`, `REQ-VAL-044`, `REQ-VAL-045`, `REQ-VAL-046`, `REQ-VAL-006`
-- **AT-VAL-008:** Typed transformations follow Section 6.8 and retain evidence of the attributable source value. This consolidated parameterized scenario also covers: Parameterized normalisation fixtures exercise every registered source-text and typed-value operation, including Unicode, whitespace, case, datetime offset, precision, and unordered-collection ordering, and verify that rounding or significant-figure changes occur only when explicitly configured. The suite also verifies retention of source lexical evidence.
-  - Verifies: `REQ-VAL-061`, `REQ-VAL-062`, `REQ-VAL-063`, `REQ-VAL-069`, `REQ-VAL-070`, `REQ-VAL-072`, `REQ-VAL-073`, `REQ-VAL-074`, `REQ-VAL-075`, `REQ-VAL-071`, `REQ-CMP-023`, `REQ-VAL-010`
+- **AT-VAL-007:** Lists preserve order and duplicates, sets reject typed-canonical duplicates and ignore order, and multisets ignore order while preserving occurrence counts. List elements support positional typed-exact comparison and numeric tolerance for numeric element types; sets and multisets accept only typed-exact element comparison, and every other element-comparator combination is rejected. This consolidated parameterized scenario also covers: Collection parsing accepts JSON arrays in JSON and JSON-array cell syntax in CSV/TSV, rejects ordinary delimited text, and rejects null collection elements with the specified finding and `not_assessable` evidence. The suite covers every supported typed collection kind and its required element declaration.
+  - Verifies: `REQ-CFG-124`, `REQ-CFG-125`, `REQ-CFG-126`, `REQ-VAL-037`, `REQ-VAL-038`, `REQ-VAL-039`, `REQ-VAL-040`, `REQ-VAL-041`, `REQ-VAL-042`, `REQ-CMP-025`, `REQ-CMP-040`, `REQ-CMP-041`, `REQ-VAL-043`, `REQ-VAL-044`, `REQ-VAL-045`, `REQ-VAL-046`, `REQ-VAL-006`
+- **AT-VAL-008:** Typed transformations follow Section 6.8 and retain evidence of the attributable source value. This consolidated parameterized scenario also covers: Parameterized normalisation fixtures exercise every registered source-text and typed-value operation, verify that source-text operations affect strings but pass non-strings through unchanged, and cover Unicode normalization, whitespace trimming, case folding, decimal quantisation, and datetime truncation. Rounding or precision reduction occurs only when explicitly configured. Deterministic set and multiset output ordering is verified as canonical serialization rather than configured normalisation. The suite also verifies retention of source lexical evidence.
+  - Verifies: `REQ-CFG-123`, `REQ-VAL-061`, `REQ-VAL-062`, `REQ-VAL-063`, `REQ-VAL-069`, `REQ-VAL-070`, `REQ-VAL-072`, `REQ-VAL-073`, `REQ-VAL-074`, `REQ-VAL-075`, `REQ-VAL-071`, `REQ-CMP-023`, `REQ-VAL-010`
 - **AT-VAL-009:** Numeric tolerance accepts exactly one absolute or relative tolerance and rejects configurations containing neither or both. Each form uses exact decimal arithmetic and an inclusive boundary, with below, at, and above boundary cases; relative tolerance is reference-directed and permits no non-zero difference when the reference is zero.
   - Verifies: `REQ-CFG-081`, `REQ-CFG-082`, `REQ-CFG-083`, `REQ-CFG-084`, `REQ-CMP-018`, `REQ-CMP-019`, `REQ-CMP-020`, `REQ-CMP-021`, `REQ-CMP-022`
 - **AT-VAL-010:** All assessable differences are collected in one run.
@@ -1422,37 +1590,35 @@ This catalogue summarises minimum executable scenarios for the first release. It
 
 ### 14.4 Phase and run-status scenarios
 
-- **AT-OUT-001:** Every comparison performs the contract, records, and values phases in order and records a completion status for each.
-  - Verifies: `REQ-CMP-001`, `REQ-RUN-012`, `REQ-OUT-013`
+- **AT-OUT-001:** Every comparison performs the contract, records, and values phases in order and records a completion status for each. Overall status is complete if and only if all three phase statuses are complete.
+  - Verifies: `REQ-CMP-001`, `REQ-RUN-012`, `REQ-RUN-023`, `REQ-OUT-013`, `REQ-OUT-014`
 - **AT-OUT-002:** A finding or `not_assessable` item in an earlier phase does not prevent later assessment where prerequisites remain satisfied.
   - Verifies: `REQ-CMP-002`, `REQ-CMP-003`, `REQ-RUN-007`
-- **AT-OUT-005:** Complete, incomplete, invocation or input error, and unexpected internal error produce their documented exit behaviour. This consolidated parameterized scenario also covers: A fully performed comparison is `complete` whether it finds no differences or any combination of contract findings, missing records, extra records, and value mismatches.
-  - Verifies: `REQ-RUN-001`, `REQ-RUN-015`, `REQ-RUN-016`, `REQ-RUN-017`, `REQ-CLI-014`, `REQ-CLI-015`, `REQ-CLI-016`, `REQ-RUN-002`
-- **AT-OUT-006:** Configured `not_assessable` content produces `incomplete`; deliberately `not_assessed` content does not. This consolidated parameterized scenario also covers: Content excluded deliberately is `not_assessed`; configured content blocked by a failed prerequisite is `not_assessable`.
-  - Verifies: `REQ-RUN-003`, `REQ-RUN-004`, `REQ-RUN-005`, `REQ-RUN-016`, `REQ-CMP-004`
+- **AT-OUT-005:** Complete, incomplete, invocation or input error, and unexpected internal error produce their documented exit behaviour. This consolidated parameterized scenario also covers: Fully performed contract and record phases remain complete despite their findings, and a fully performed comparison is `complete` whether it finds no differences or any combination of contract findings, missing records, extra records, and value mismatches.
+  - Verifies: `REQ-RUN-001`, `REQ-RUN-015`, `REQ-RUN-016`, `REQ-RUN-017`, `REQ-RUN-018`, `REQ-RUN-019`, `REQ-RUN-021`, `REQ-CLI-014`, `REQ-CLI-015`, `REQ-CLI-016`, `REQ-RUN-002`
+- **AT-OUT-006:** A not-assessable value opportunity makes the values phase and run incomplete while leaving a fully performed contract phase complete; deliberately `not_assessed` content does not make any phase incomplete. This consolidated parameterized scenario also covers: Content excluded deliberately is `not_assessed`; configured content blocked by a failed prerequisite is `not_assessable`.
+  - Verifies: `REQ-RUN-003`, `REQ-RUN-004`, `REQ-RUN-005`, `REQ-RUN-016`, `REQ-RUN-018`, `REQ-RUN-020`, `REQ-RUN-021`, `REQ-RUN-022`, `REQ-CMP-004`
 - **AT-OUT-007:** Invalid configuration, malformed or unreadable input, an incomplete or ambiguous record model, an enforced resource limit, and resource exhaustion produce `error`, never `incomplete` or a partial comparison result.
   - Verifies: `REQ-RUN-017`, `REQ-RUN-010`, `REQ-RUN-011`, `REQ-DEP-011`
 - **AT-OUT-008:** An end-to-end mixed-defect comparison exercises every conceptual processing step, including invalid contract values, deliberate exclusions, failed prerequisites, mandatory key processing, and continued comparison of unaffected values. This consolidated parameterized scenario also covers: A large mixed-content fixture verifies that every configured value opportunity is either assessed or explicitly classified and that no valid accepted content is silently skipped.
   - Verifies: `REQ-CMP-005`, `REQ-CMP-008`, `REQ-CMP-014`, `REQ-CMP-030`, `REQ-CMP-037`, `REQ-CMP-038`, `REQ-CMP-039`, `REQ-RUN-006`, `REQ-DEP-010`
-- **AT-OUT-010:** A table-driven finding suite generates every finding code and verifies its structured fields, required contextual evidence, deterministic local ID, human-readable message, summary-only successful matches, and absence of message-only semantics. This consolidated parameterized scenario also covers: For every finding code, result fixtures enforce the code-specific inclusion and omission of source and canonical values, deterministic messages derived from structured data, deterministic sorting, and sequential report-local finding IDs.
-  - Verifies: `REQ-PRN-006`, `REQ-FND-001`, `REQ-FND-002`, `REQ-FND-003`, `REQ-FND-004`, `REQ-FND-005`, `REQ-FND-006`, `REQ-FND-012`, `REQ-FND-013`, `REQ-FND-014`, `REQ-FND-015`, `REQ-FND-016`, `REQ-FND-017`, `REQ-OUT-032`, `REQ-OUT-033`, `REQ-OUT-035`, `REQ-OUT-061`, `REQ-OUT-062`, `REQ-OUT-063`, `REQ-OUT-064`, `REQ-OUT-065`, `REQ-OUT-066`, `REQ-OUT-067`, `REQ-OUT-068`
+- **AT-OUT-010:** A table-driven finding suite generates every finding code and verifies its fixed classification, structured fields, required contextual evidence, deterministic local ID, human-readable message, summary-only successful matches, and absence of message-only semantics. `missing_record`, `extra_record`, and `value_mismatch` are always `comparison_difference`; every other finding code is always `assessment_issue`; and phase remains independently correct. This consolidated parameterized scenario also covers: For every finding code, result fixtures enforce the code-specific inclusion and omission of source and canonical values, deterministic messages derived from structured data, classification-first total finding order, duplicate coalescence, and sequential post-sort report-local IDs. Category incompatibility, invalid content within an accepted category, and comparison of two valid unequal values produce mutually exclusive `type_mismatch`, `invalid_field_value`, and `value_mismatch` findings. Independent reference and query contract violations produce separate side-specific findings, while comparison of two valid unequal values produces one `both` finding. Each not-assessable value opportunity has one applicable causal finding and does not generate a separate `not_assessable` finding.
+  - Verifies: `REQ-PRN-006`, `REQ-FND-001`, `REQ-FND-002`, `REQ-FND-003`, `REQ-FND-004`, `REQ-FND-005`, `REQ-FND-006`, `REQ-FND-012`, `REQ-FND-013`, `REQ-FND-014`, `REQ-FND-015`, `REQ-FND-016`, `REQ-FND-017`, `REQ-FND-018`, `REQ-FND-019`, `REQ-FND-020`, `REQ-FND-023`, `REQ-FND-024`, `REQ-FND-025`, `REQ-OUT-032`, `REQ-OUT-033`, `REQ-OUT-034`, `REQ-OUT-035`, `REQ-OUT-099`, `REQ-OUT-061`, `REQ-OUT-062`, `REQ-OUT-063`, `REQ-OUT-064`, `REQ-OUT-065`, `REQ-OUT-066`, `REQ-OUT-067`, `REQ-OUT-068`
 
 ### 14.5 Evidence, CLI, and packaging scenarios
 
-- **AT-EVD-001:** Identical runs produce semantically identical canonical results except for explicitly variable run metadata. This consolidated parameterized scenario also covers: Record order does not alter findings, metrics, or run and phase statuses.
-  - Verifies: `REQ-PRN-005`, `REQ-CMP-033`, `REQ-OUT-012`, `REQ-DEP-013`, `REQ-CMP-032`
+- **AT-EVD-001:** Runs with identical exact bytes, basenames, configuration, toolkit version, and runtime identity produce byte-identical canonical JSON after normalizing only run ID and completion time. Serialization fixtures verify UTF-8 without a byte-order mark, two-space indentation, LF line endings, exactly one final newline, direct non-ASCII output, fixed-schema member order, and Unicode code-point order for dynamic members. Parameterized record-order and LF/CRLF variants preserve the defined comparison outcome while permitting only the documented byte-provenance, source-location, location-dependent message, and report-local ID differences. The comparison outcome also remains invariant across every supported Python and operating-system environment, including Unicode-sensitive fixtures.
+  - Verifies: `REQ-PRN-005`, `REQ-INP-014`, `REQ-CMP-033`, `REQ-OUT-012`, `REQ-OUT-095`, `REQ-OUT-096`, `REQ-OUT-097`, `REQ-OUT-098`, `REQ-OUT-125`, `REQ-DEP-013`, `REQ-CMP-032`
 - **AT-EVD-002:** Results contain exact-byte SHA-256 input digests and input basenames without exposing absolute paths, raw command lines, environment variables, or secrets; the complete validated comparison configuration is embedded without a separate configuration digest.
   - Verifies: `REQ-CFG-023`, `REQ-OUT-017`, `REQ-OUT-018`, `REQ-OUT-019`, `REQ-OUT-022`, `REQ-OUT-023`, `REQ-SEC-007`, `REQ-SEC-008`
-- **AT-EVD-003:** If the optional CSV findings export is provided, findings containing commas, quotes, newlines, or formula prefixes are exported safely.
-  - Verifies: `REQ-OUT-043`, `REQ-OUT-083`, `REQ-OUT-084`, `REQ-OUT-085`, `REQ-OUT-087`, `REQ-SEC-013`
-- **AT-EVD-004:** An output failure or interrupted write cannot leave an evidence package that appears complete. This consolidated parameterized scenario also covers: Success and injected-failure runs verify that temporary files are no more accessible than the destination and are removed after success and, where safe, after errors.
-  - Verifies: `REQ-OUT-044`, `REQ-OUT-045`, `REQ-OUT-049`, `REQ-DEP-012`, `REQ-SEC-009`, `REQ-SEC-010`, `REQ-SEC-011`
+- **AT-EVD-004:** An output failure or interrupted write cannot leave an evidence package that appears complete. This consolidated parameterized scenario also covers: Success and injected-failure runs verify that temporary files are no more accessible than the destination and are removed after success and, where safe, after errors; a failed attempted replacement preserves the existing evidence package byte for byte.
+  - Verifies: `REQ-OUT-044`, `REQ-OUT-045`, `REQ-OUT-049`, `REQ-OUT-116`, `REQ-DEP-012`, `REQ-SEC-009`, `REQ-SEC-010`, `REQ-SEC-011`
 - **AT-EVD-005:** Every complete comparison exits with code 0 and produces its evidence package, including when differences are reported.
   - Verifies: `REQ-PRN-004`, `REQ-RUN-002`, `REQ-OUT-001`, `REQ-OUT-002`, `REQ-CLI-016`
-- **AT-EVD-008:** A complete or incomplete run creates the documented JSON and HTML evidence package, refuses an existing destination by default, and replaces it only with `--overwrite`. This consolidated parameterized scenario also covers: Output-directory reporting and filename handling preserve the exact selected destination and manipulate suffixes structurally rather than by character stripping.
-  - Verifies: `REQ-OUT-001`, `REQ-OUT-002`, `REQ-OUT-046`, `REQ-CLI-011`, `REQ-CLI-012`, `REQ-OUT-047`, `REQ-OUT-048`
-- **AT-EVD-009:** When an output location can be established and an error report can be written, invocation, configuration, input, resource, output, and internal errors produce a clearly identified diagnostic artefact with a stable execution error code. It contains no findings, finding codes, comparison summary metrics, or phase statuses and cannot be mistaken for a comparison result or evidence package.
-  - Verifies: `REQ-FND-007`, `REQ-RUN-008`, `REQ-RUN-009`, `REQ-RUN-010`, `REQ-RUN-011`, `REQ-OUT-008`, `REQ-DEP-014`
+- **AT-EVD-008:** A complete or incomplete run creates the documented two-file evidence package containing `comparison-results.json` and `comparison-report.html`, with no separate manifest or additional report or findings-export format. It refuses every existing destination by default. With `--overwrite`, it replaces a complete two-file v1 evidence-package directory but rejects regular files, symbolic links, special filesystem objects, empty directories, partial packages, and directories with additional entries. This consolidated parameterized scenario also covers: Output-directory reporting and filename handling preserve the exact selected destination and manipulate suffixes structurally rather than by character stripping.
+  - Verifies: `REQ-OUT-001`, `REQ-OUT-002`, `REQ-OUT-044`, `REQ-OUT-045`, `REQ-OUT-046`, `REQ-OUT-047`, `REQ-OUT-048`, `REQ-OUT-115`, `REQ-CLI-011`, `REQ-CLI-012`
+- **AT-EVD-009:** A parameterized suite produces every version 1 invocation, configuration, input, resource, output, and internal execution-error code. Each case writes the exact `ERROR [<category>.<code>]: <message>` first-line form and only permitted non-sensitive continuation context, returns exit code 2 except for `internal.unexpected`, which returns 3, and publishes no evidence-package directory or filesystem report. Diagnostics contain no findings, finding codes, comparison summary metrics, phase statuses, record identifiers, source values, or ordinary-use traceback. Representative failures at each classification boundary verify that the most specific applicable code is selected.
+  - Verifies: `REQ-FND-007`, `REQ-RUN-008`, `REQ-RUN-009`, `REQ-RUN-010`, `REQ-RUN-011`, `REQ-RUN-024`, `REQ-RUN-025`, `REQ-RUN-026`, `REQ-OUT-008`, `REQ-DEP-014`
 - **AT-EVD-010:** Routine logs, progress output, terminal diagnostics, and execution-error diagnostics omit record identifiers and source values.
   - Verifies: `REQ-PRN-007`, `REQ-SEC-004`, `REQ-VAL-075`
 - **AT-EVD-011:** Evidence packages warn that they may contain sensitive information, and findings contain record identifiers or source values only where needed to identify or explain the finding.
@@ -1463,28 +1629,30 @@ This catalogue summarises minimum executable scenarios for the first release. It
   - Verifies: `REQ-CFG-041`, `REQ-CFG-042`, `REQ-CFG-043`, `REQ-CFG-044`, `REQ-CFG-045`, `REQ-OUT-034`
 - **AT-PKG-001:** The built distribution is named `adviso-validation`, contains an importable `adviso_validation` package and every required subpackage, installs the `adviso-validation` executable, and completes an end-to-end comparison through that executable. This consolidated parameterized scenario also covers: The release artefact can be installed and used without network access, contains offline documentation and integrity information, and supports an end-to-end comparison in an isolated environment.
   - Verifies: `REQ-PRD-001`, `REQ-PRD-003`, `REQ-CFG-087`, `REQ-TST-013`, `REQ-TST-030`, `REQ-DEP-003`, `REQ-DEP-007`
-- **AT-EVD-015:** Canonical results contain valid run, phase, software, runtime, and fixed-dialect metadata; timestamps are UTC RFC 3339 values; start time and duration are absent; and overall status reconciles with phase statuses.
-  - Verifies: `REQ-OUT-009`, `REQ-OUT-010`, `REQ-OUT-011`, `REQ-OUT-014`, `REQ-OUT-015`, `REQ-OUT-016`, `REQ-OUT-020`
-- **AT-EVD-016:** Parameterized single and composite record identities verify ordered source and canonical key arrays, null identities for an absent side, presence-state distinctions, recursive parser-native typed values, canonical scalar and collection encodings, and deterministic object-member ordering.
-  - Verifies: `REQ-OUT-021`, `REQ-OUT-026`, `REQ-OUT-027`, `REQ-OUT-028`, `REQ-OUT-029`
-- **AT-EVD-018:** Parameterized result fixtures verify fixed-shape zero-inclusive summaries, record-count reconciliation, finding totals by code and priority, and exactly one matched, mismatched, or not-assessable classification for every in-scope non-key value opportunity, including optional, required, invalid, and prohibited values.
-  - Verifies: `REQ-OUT-037`, `REQ-OUT-038`, `REQ-OUT-039`, `REQ-OUT-040`, `REQ-OUT-069`, `REQ-OUT-070`, `REQ-OUT-071`, `REQ-OUT-072`, `REQ-OUT-073`
-- **AT-EVD-019:** HTML generated solely from canonical JSON uses an open non-proprietary format and presents the run purpose, phase and run statuses, input and configuration identities, counts, findings, discrepancies, limitations, exclusions, unassessed content, provenance, and no acceptance verdict; HTML is never the sole canonical evidence format. This consolidated parameterized scenario also covers: Complete and incomplete reports contain raw findings and metrics but no acceptance threshold, pass/fail verdict, or equivalent inferred laboratory decision.
-  - Verifies: `REQ-OUT-042`, `REQ-OUT-074`, `REQ-OUT-075`, `REQ-OUT-076`, `REQ-OUT-077`, `REQ-OUT-078`, `REQ-OUT-079`, `REQ-OUT-080`, `REQ-OUT-081`, `REQ-OUT-088`, `REQ-DEP-004`, `REQ-DEP-005`, `REQ-RUN-013`
+- **AT-EVD-015:** Canonical results contain valid run, phase, software, runtime, and fixed-dialect metadata; run IDs are canonical lowercase UUIDv4 values; completion timestamps are UTC RFC 3339 values using `Z` and whole-second precision; Python implementation/version, normalized platform, and Unicode database version use their prescribed forms without identifying host details; start time and duration are absent; and overall status reconciles with phase statuses.
+  - Verifies: `REQ-OUT-009`, `REQ-OUT-010`, `REQ-OUT-011`, `REQ-OUT-014`, `REQ-OUT-015`, `REQ-OUT-016`, `REQ-OUT-020`, `REQ-OUT-121`, `REQ-OUT-122`, `REQ-OUT-123`, `REQ-OUT-124`
+- **AT-EVD-016:** Parameterized single and composite record identities verify ordered source and canonical key arrays, null identities for an absent side, presence-state distinctions, recursive parser-native typed values, unique canonical rendering of every scalar type, UTC datetime rendering, canonical key-component rendering, deterministic set and multiset element order, and deterministic object-member ordering. Source-location fixtures verify tabular data-record and starting-line numbers across multiline records, field-name inclusion only for present fields, record-level locations for absent fields, JSON record and field pointers, RFC 6901 escaping, and null locations for absent records.
+  - Verifies: `REQ-OUT-021`, `REQ-OUT-026`, `REQ-OUT-027`, `REQ-OUT-028`, `REQ-OUT-029`, `REQ-OUT-089`, `REQ-OUT-090`, `REQ-OUT-091`, `REQ-OUT-092`, `REQ-OUT-093`, `REQ-OUT-094`, `REQ-OUT-117`, `REQ-OUT-118`, `REQ-OUT-119`
+- **AT-EVD-018:** Parameterized result fixtures verify fixed-shape zero-inclusive summaries, record-count reconciliation, finding totals by classification, code, and priority, and exactly one matched, mismatched, or not-assessable classification for every in-scope non-key value opportunity, including optional, required, invalid, and prohibited values.
+  - Verifies: `REQ-OUT-037`, `REQ-OUT-038`, `REQ-OUT-039`, `REQ-OUT-040`, `REQ-OUT-069`, `REQ-OUT-070`, `REQ-OUT-071`, `REQ-OUT-072`, `REQ-OUT-073`, `REQ-OUT-101`, `REQ-OUT-102`, `REQ-OUT-103`, `REQ-OUT-104`, `REQ-OUT-105`, `REQ-OUT-106`, `REQ-OUT-107`, `REQ-OUT-108`
+- **AT-EVD-022:** Before publication, representative generated results pass both structural and semantic self-validation with Draft 2020-12 format assertion enabled. Injected schema and semantic inconsistencies, including malformed UUIDs, dates, and date-times, produce an unexpected internal error and publish no canonical result, HTML report, or evidence-package directory.
+  - Verifies: `REQ-OUT-109`, `REQ-OUT-110`, `REQ-OUT-114`
+- **AT-EVD-019:** HTML generated solely from canonical JSON uses an open non-proprietary format and presents the run purpose, phase and run statuses, input and configuration identities, counts, findings, discrepancies, limitations, exclusions, unassessed content, provenance, and no acceptance verdict; HTML is never the sole canonical evidence format. Its headline distinguishes run completeness, comparison-difference count, and assessment-issue count. Detailed findings are organized primarily by classification with comparison differences first and phase retained as secondary traceability information. This consolidated parameterized scenario also covers: Complete and incomplete reports contain raw findings and metrics but no acceptance threshold, pass/fail verdict, or equivalent inferred laboratory decision.
+  - Verifies: `REQ-PRN-009`, `REQ-OUT-042`, `REQ-OUT-074`, `REQ-OUT-075`, `REQ-OUT-076`, `REQ-OUT-077`, `REQ-OUT-078`, `REQ-OUT-079`, `REQ-OUT-080`, `REQ-OUT-081`, `REQ-OUT-120`, `REQ-OUT-126`, `REQ-OUT-127`, `REQ-OUT-128`, `REQ-DEP-004`, `REQ-DEP-005`, `REQ-RUN-013`
 - **AT-EVD-021:** Installed-CLI tests cover the required `adviso-validation compare` form, required reference, query, and output arguments, optional configuration, enumerated choices, invalid combinations before input access, normal summaries on standard output, and optional progress that never contaminates machine-readable output. This consolidated parameterized scenario also covers: Omitting `--configuration` selects and records the bundled strict-exact configuration; a supplied value is treated only as a custom comparison-configuration path. The reference and query formats are independently determined and recorded from recognised, case-insensitive filename extensions; a missing, unknown, or ambiguous extension causes an input error, and content that does not conform to the indicated format is rejected. Command-line `--help` describes every version 1 command and option and directs users to the full guide.
   - Verifies: `REQ-PRD-002`, `REQ-INP-001`, `REQ-INP-002`, `REQ-INP-004`, `REQ-INP-060`, `REQ-INP-061`, `REQ-INP-062`, `REQ-CLI-001`, `REQ-CLI-002`, `REQ-CLI-003`, `REQ-CLI-006`, `REQ-CLI-007`, `REQ-CLI-008`, `REQ-INP-003`, `REQ-CFG-092`, `REQ-CLI-009`, `REQ-CLI-010`, `REQ-INP-005`, `REQ-INP-006`, `REQ-INP-007`, `REQ-INP-008`, `REQ-INP-009`, `REQ-CLI-013`, `REQ-CLI-004`, `REQ-DOC-005`
 
 ### 14.6 Documentation scenarios
 
 - **AT-DOC-001:** The built distribution contains an offline user guide covering every topic required by Section 13.4, and the guide identifies the toolkit and schema versions to which it applies. This consolidated parameterized scenario also covers: Every complete comparison-configuration and canonical-results example in the guide validates against its corresponding packaged schema, and every documented command-line invocation uses the version 1 interface.
-  - Verifies: `REQ-DOC-001`, `REQ-DOC-006`, `REQ-DOC-007`, `REQ-DOC-008`, `REQ-DOC-009`, `REQ-DOC-010`, `REQ-DOC-011`, `REQ-DOC-012`, `REQ-DOC-013`, `REQ-DOC-014`, `REQ-DOC-015`, `REQ-DOC-016`, `REQ-DOC-002`, `REQ-DOC-003`, `REQ-DOC-004`
+  - Verifies: `REQ-DOC-001`, `REQ-DOC-006`, `REQ-DOC-007`, `REQ-DOC-008`, `REQ-DOC-009`, `REQ-DOC-010`, `REQ-DOC-011`, `REQ-DOC-012`, `REQ-DOC-013`, `REQ-DOC-014`, `REQ-DOC-015`, `REQ-DOC-016`, `REQ-DOC-002`, `REQ-DOC-003`, `REQ-DOC-004`, `REQ-OUT-111`
 
 ### 14.7 Fixture and compatibility scenarios
 
 - **AT-TRC-002:** Regenerating every generated fixture from its recorded source or generator produces byte-identical or semantically identical controlled test data, as applicable.
   - Verifies: `REQ-TST-005`
-- **AT-TRC-003:** Every supported and unsupported comparison-configuration and results-schema version is exercised to confirm exact supported-version handling and clear rejection of unsupported versions.
-  - Verifies: `REQ-REL-004`
+- **AT-TRC-003:** Every supported and unsupported comparison-configuration and results-schema version is exercised to confirm exact supported-version handling and clear rejection of unsupported versions. A version 1.0 result accepts only an embedded version 1.0 comparison configuration.
+  - Verifies: `REQ-REL-002`, `REQ-REL-004`, `REQ-OUT-113`
 
 ## 15. Status of the current prototype
 

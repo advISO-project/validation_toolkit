@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adviso-project.github.io/validation_toolkit/schemas/comparison-configuration-v1.0.schema.json",
   "title": "AdvISO comparison configuration",
   "description": "Normative structural schema for comparison-configuration schema version 1.0.",
   "type": "object",
@@ -211,6 +212,63 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "comparator": {
+                "properties": {
+                  "name": {
+                    "const": "preserved_exact"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            },
+            "required": [
+              "comparator"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "logical_type"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_normalisation"
+                  ]
+                },
+                {
+                  "required": [
+                    "value_mapping"
+                  ]
+                },
+                {
+                  "required": [
+                    "typed_normalisation"
+                  ]
+                },
+                {
+                  "properties": {
+                    "nulls": {
+                      "required": [
+                        "missing_tokens"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "nulls"
+                  ]
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -251,7 +309,81 @@
             "element_comparator": {
               "$ref": "#/$defs/comparator"
             }
-          }
+          },
+          "allOf": [
+            {
+              "properties": {
+                "element_comparator": {
+                  "properties": {
+                    "name": {
+                      "enum": [
+                        "typed_exact",
+                        "numeric_tolerance"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "set",
+                      "multiset"
+                    ]
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "element_comparator": {
+                    "properties": {
+                      "name": {
+                        "const": "typed_exact"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "element_comparator": {
+                    "properties": {
+                      "name": {
+                        "const": "numeric_tolerance"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ]
+                  }
+                },
+                "required": [
+                  "element_comparator"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "name": {
+                    "const": "list"
+                  },
+                  "element_type": {
+                    "enum": [
+                      "integer",
+                      "decimal"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
         }
       ]
     },
@@ -278,14 +410,14 @@
               "type": "array",
               "minItems": 1,
               "items": {
-                "$ref": "#/$defs/sourceValueDescriptor"
+                "$ref": "#/$defs/nonNullSourceValueDescriptor"
               }
             },
             "query": {
               "type": "array",
               "minItems": 1,
               "items": {
-                "$ref": "#/$defs/sourceValueDescriptor"
+                "$ref": "#/$defs/nonNullSourceValueDescriptor"
               }
             }
           }
@@ -391,6 +523,25 @@
             "category": {
               "const": "null"
             }
+          }
+        }
+      ]
+    },
+    "nonNullSourceValueDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sourceValueDescriptor"
+        },
+        {
+          "not": {
+            "properties": {
+              "category": {
+                "const": "null"
+              }
+            },
+            "required": [
+              "category"
+            ]
           }
         }
       ]
@@ -571,7 +722,7 @@
       ],
       "properties": {
         "from": {
-          "$ref": "#/$defs/sourceValueDescriptor"
+          "$ref": "#/$defs/nonNullSourceValueDescriptor"
         },
         "to": {
           "$ref": "#/$defs/sourceValueDescriptor"
