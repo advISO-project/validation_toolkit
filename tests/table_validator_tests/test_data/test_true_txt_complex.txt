@@ -1,2 +1,0 @@
-Hello, world! This is a sample text file.
-Basically, I want to challenge the program with actual commas.

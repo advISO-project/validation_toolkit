@@ -1,8 +1,0 @@
-## prog: TableValidator_pytest
-## prog_version: 0.0.1dev
-sample_id,field1,field2,field3
-ValueMatch,ValueMatch,ValueMatch,ValueMatch
-ValueMatch,ValueMatch,ValueMatch,ValueMatch
-ValueMatch,ValueMatch,ValueMatch,ValueMatch
-ValueMatch,ValueMatch,ValueMatch,ValueMatch
-ValueMatch,ValueMatch,ValueMatch,ValueMatch
