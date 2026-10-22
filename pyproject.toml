@@ -1,48 +1,67 @@
 [build-system]
-requires = ["setuptools >= 61.0",
-            "setuptools_scm[toml] >= 4, <6",
-            "setuptools_scm_git_archive",
-            "wheel >= 0.29.0"
-            ]
+requires = [
+    "setuptools>=69",
+    "setuptools-scm>=8",
+    "wheel",
+]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
-# setuptools_scm obtains the package version number from Git tags so we don't
-# have to have a version number hardcoded in scripts in the package 
-# upon installation, the version is written (from git tag) to this file
-write_to = "validation_toolkit/version.py"
-git_describe_command = "git describe --dirty --tags --long --match v* --first-parent"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["validation_toolkit"]
-exclude = []
-namespaces = false
-
 [project]
-name = "validation_toolkit"
-authors = [
-    {name = "Bruhad Dave", email = "bd8@sanger.ac.uk"},
-]
-description = "Compare (verify/validate) analysis outputs against ISO-in-a-Box standard references."
+name = "adviso-validation"
+dynamic = ["version"]
+description = "Translate, compare, and report differences between structured bioinformatics datasets."
 readme = "README.md"
 requires-python = ">=3.10"
-keywords = [""]
+authors = [
+    { name = "Bruhad Dave", email = "bd8@sanger.ac.uk" },
+]
+keywords = [
+    "bioinformatics",
+    "data validation",
+    "ISO 15189",
+]
 classifiers = [
-    "Programming Language :: Python :: 3.11",
-    "Operating System :: OS Independent"
-
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    ##TODO: Add as needed
-	"flake8>=7.0.0",
-	"pytest>=6.2.2",
-    "pyyaml",
-    "importlib-resources>=5.1.0"
+    "jsonschema[format-nongpl]>=4.23,<5",
+    "PyYAML>=6.0,<7",
 ]
 
-dynamic = ["version"]
+[project.optional-dependencies]
+dev = [
+    "build>=1.2,<2",
+    "pytest>=8,<9",
+]
 
 [project.scripts]
-# create an executable for the CLI
-validation_toolkit = "validation_toolkit.cli:main"
+adviso-validation = "adviso_validation.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["adviso_validation*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"adviso_validation.schemas" = ["*.json"]
+
+[tool.setuptools_scm]
+write_to = "src/adviso_validation/_version.py"
+fallback_version = "0.0.0"
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+]
+testpaths = ["tests"]
+tmp_path_retention_policy = "failed"

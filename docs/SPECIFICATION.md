@@ -592,7 +592,7 @@ The first-release typed-value operation identifiers are:
 
 #### 6.2.9 Normative machine-readable schema and semantic validation
 
-The normative JSON Schema Draft 2020-12 definition of comparison-configuration schema version `1.0` is [`src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json`](src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json).
+The normative JSON Schema Draft 2020-12 definition of comparison-configuration schema version `1.0` is [`src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json`](../src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json).
 
 **REQ-CFG-128.** The schema MUST use `https://adviso-project.github.io/validation_toolkit/schemas/comparison-configuration-v1.0.schema.json` as its canonical `$id`.
 
@@ -1071,7 +1071,7 @@ No separate package manifest is required in version 1; `comparison-results.json`
 
 ### 9.1 Machine-readable output
 
-**REQ-OUT-004.** JSON MUST be the canonical output format. Its normative JSON Schema Draft 2020-12 definition is [`src/adviso_validation/schemas/comparison-results-v1.0.schema.json`](src/adviso_validation/schemas/comparison-results-v1.0.schema.json).
+**REQ-OUT-004.** JSON MUST be the canonical output format. Its normative JSON Schema Draft 2020-12 definition is [`src/adviso_validation/schemas/comparison-results-v1.0.schema.json`](../src/adviso_validation/schemas/comparison-results-v1.0.schema.json).
 
 **REQ-OUT-125.** `comparison-results.json` MUST be serialized as RFC 8259 JSON encoded as UTF-8 without a byte-order mark, using two-space indentation, LF line endings, and exactly one final newline. Non-ASCII characters MUST be emitted directly rather than escaped unless escaping is required by JSON syntax. Members of fixed-schema objects MUST be emitted in their documented schema order; members of dynamically named objects MUST be emitted in Unicode code-point order.
 
@@ -1653,7 +1653,3 @@ This catalogue summarises minimum executable scenarios for the first release. It
   - Verifies: `REQ-TST-005`
 - **AT-TRC-003:** Every supported and unsupported comparison-configuration and results-schema version is exercised to confirm exact supported-version handling and clear rejection of unsupported versions. A version 1.0 result accepts only an embedded version 1.0 comparison configuration.
   - Verifies: `REQ-REL-002`, `REQ-REL-004`, `REQ-OUT-113`
-
-## 15. Status of the current prototype
-
-**REQ-PRD-011.** The existing prototype was created only to stimulate requirements analysis and has never been used operationally. Its code, command-line interface, outputs, Python APIs, module structure, terminology, and behaviour impose no compatibility requirements on version 1. The version 1 implementation is not required to reuse any prototype code. Version 1 behaviour MUST NOT be derived implicitly from the prototype.

@@ -1,29 +1,24 @@
-# Agent guidance for `validation_toolkit`
+# Agent guidance for `adviso-validation`
 
 ## Purpose and authority
 
-This repository is being reimplemented as `adviso-validation`, a tool that translates reference and query datasets from their source dialects into a declared canonical representation, compares them, and reports both post-translation differences and assessment issues.
+This repository is being implemented as `adviso-validation`, a tool that translates reference and query datasets from their source dialects into a declared canonical representation, compares them, and reports both post-translation differences and assessment issues.
 
 For version 1 behaviour, use this order of authority:
 
-1. `SPECIFICATION.md` — normative behaviour and requirement identifiers.
+1. `docs/SPECIFICATION.md` — normative behaviour and requirement identifiers.
 2. `src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json` — normative structural schema for comparison configurations.
 3. `src/adviso_validation/schemas/comparison-results-v1.0.schema.json` — normative structural schema for canonical results.
 4. Version 1 tests and controlled fixtures, once created — executable verification of the sources above.
 5. User documentation — explanatory material that must agree with the normative sources.
 
-Do not infer version 1 behaviour from the prototype, its README, or its tests. If the specification and a schema appear inconsistent, stop and report the conflict. Do not silently choose one, weaken either, or invent compatibility behaviour.
+If the specification and a schema appear inconsistent, stop and report the conflict. Do not silently choose one, weaken either, or invent compatibility behaviour.
 
 ## Repository state
 
-The repository currently contains two generations of work:
+This is a clean-slate version 1 implementation. Do not recover behaviour, interfaces, tests, fixtures, terminology, or implementation patterns from Git history unless the repository owner explicitly requests historical investigation.
 
-- `SPECIFICATION.md` and `src/adviso_validation/schemas/` define the intended version 1 product.
-- `validation_toolkit/`, `tests/table_validator_tests/`, the current `README.md`, and parts of the packaging configuration describe an unused exploratory prototype.
-
-The prototype has no compatibility status. Its CLI, APIs, output formats, terminology, internal structure, and tests are not version 1 requirements. Do not copy prototype code merely to accelerate implementation. Reuse something only after confirming that it satisfies the version 1 specification and improves the new design.
-
-Do not delete or rewrite prototype material unless the assigned task or an approved implementation plan explicitly calls for it. Keeping old and new work separate during the transition is preferable to partially converting legacy modules.
+The behaviour specification and schemas are substantially developed; production code and the version 1 test suite are not. Do not describe the package as operational until the specified implementation, verification, documentation, and packaging work is complete.
 
 ## Product identities
 
@@ -33,7 +28,7 @@ Preserve these distinct names:
 - Python import package: `adviso_validation`
 - Sole version 1 subcommand: `compare`
 
-New production code belongs under `src/adviso_validation/`. Do not add new production modules under the legacy `validation_toolkit/` package.
+Production code belongs under `src/adviso_validation/`.
 
 ## Working method
 
@@ -46,13 +41,13 @@ Before implementing behaviour:
 5. Implement until those tests pass.
 6. Run the proportionate wider test suite and static checks.
 
-Use test-driven development for the reimplementation. A failing test is useful only when it represents current specified behaviour. Do not add tests for discarded design ideas, prototype compatibility, renamed properties that never entered version 1, or other historical “fossils.”
+Use test-driven development for the implementation. A failing test is useful only when it represents current specified behaviour. Do not add tests for discarded design ideas, renamed properties that never entered version 1, or other historical “fossils.”
 
 Tests should cite the requirement IDs they verify. Prefer a focused parameterized test that covers a coherent rule table over many near-duplicate tests. Do not merge unrelated behaviours merely to reduce the test count. Not every implementation, documentation, release-process, or quality requirement needs a direct automated test.
 
 ## Change control
 
-- Do not change `SPECIFICATION.md`, either schema, or established requirement semantics unless the task explicitly authorizes a specification change.
+- Do not change `docs/SPECIFICATION.md`, either schema, or established requirement semantics unless the task explicitly authorizes a specification change.
 - Behaviour changes must update all affected normative text, schemas, tests, fixtures, and user documentation together.
 - Preserve existing requirement IDs. Add new IDs rather than renumbering requirements after insertion or deletion.
 - Preserve schema version identifiers and canonical `$id` values unless a deliberate schema-version change has been approved.
@@ -82,7 +77,7 @@ When a requirement is ambiguous, contradictory, or not implementable as written,
 Configuration processing has two mandatory layers:
 
 1. structural validation against the packaged comparison-configuration schema;
-2. semantic validation of the cross-property rules in `SPECIFICATION.md`.
+2. semantic validation of the cross-property rules in `docs/SPECIFICATION.md`.
 
 Canonical-result validation likewise has two layers:
 
@@ -110,7 +105,7 @@ Do not introduce a formatter, linter, type checker, build backend, or supported-
 
 ## Testing guardrails
 
-The version 1 suite should be organized around public behaviour and stable internal contracts, not private implementation details. It must eventually include the test families specified in Section 14 of `SPECIFICATION.md`.
+The version 1 suite should be organized around public behaviour and stable internal contracts, not private implementation details. It must eventually include the test families specified in Section 14 of `docs/SPECIFICATION.md`.
 
 In particular:
 
@@ -123,8 +118,6 @@ In particular:
 - Test the installed `adviso-validation` entry point, not only direct Python calls.
 - Test the built wheel and source distribution rather than relying only on an editable source checkout.
 - Do not update expected outputs blindly. Review semantic changes in canonical JSON fixtures field by field.
-
-Until a new v1 suite is established, do not treat passing `tests/table_validator_tests/` as evidence that v1 requirements are satisfied.
 
 ## Security and clinical-data handling
 
@@ -141,7 +134,7 @@ Assume inputs and evidence packages may contain sensitive clinical or laboratory
 
 The eventual user guide must describe the released behaviour, complete CLI, configuration schema, results schema, finding taxonomy, evidence package, and corrective guidance for execution errors. Documentation examples must validate against the packaged schemas.
 
-Do not update the current prototype README piecemeal so that it appears to describe a usable hybrid product. Replace it as a deliberate implementation milestone when the corresponding v1 interface is ready.
+Keep the root README concise and truthful about implementation status. Expand installation and usage instructions only when the corresponding v1 interface is implemented and verified.
 
 ## Before declaring work complete
 
