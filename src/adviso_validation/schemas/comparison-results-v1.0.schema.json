@@ -320,7 +320,6 @@
         "missing_record",
         "extra_record",
         "missing_required_field",
-        "undeclared_field",
         "type_mismatch",
         "invalid_field_value",
         "null_policy_violation",
@@ -335,9 +334,6 @@
           "$ref": "#/$defs/nonNegativeInteger"
         },
         "missing_required_field": {
-          "$ref": "#/$defs/nonNegativeInteger"
-        },
-        "undeclared_field": {
           "$ref": "#/$defs/nonNegativeInteger"
         },
         "type_mismatch": {
@@ -442,31 +438,51 @@
       }
     },
     "exclusion": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "code",
-        "side",
-        "source_field",
-        "record_count"
-      ],
-      "properties": {
-        "code": {
-          "const": "undeclared_field_excluded"
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "canonical_field"
+          ],
+          "properties": {
+            "code": {
+              "const": "configured_field_excluded"
+            },
+            "canonical_field": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
         },
-        "side": {
-          "enum": [
-            "reference",
-            "query"
-          ]
-        },
-        "source_field": {
-          "$ref": "#/$defs/nonEmptyString"
-        },
-        "record_count": {
-          "$ref": "#/$defs/nonNegativeInteger"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "side",
+            "source_field",
+            "record_count"
+          ],
+          "properties": {
+            "code": {
+              "const": "undeclared_field_excluded"
+            },
+            "side": {
+              "enum": [
+                "reference",
+                "query"
+              ]
+            },
+            "source_field": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "record_count": {
+              "$ref": "#/$defs/nonNegativeInteger"
+            }
+          }
         }
-      }
+      ]
     },
     "recordIdentityValues": {
       "type": "array",
@@ -1088,8 +1104,6 @@
               "not": {
                 "anyOf": [
                   { "required": ["field"] },
-                  { "required": ["source_field"] },
-                  { "required": ["record_count"] },
                   { "required": ["review_priority"] },
                   { "required": ["values"] }
                 ]
@@ -1114,8 +1128,6 @@
               "not": {
                 "anyOf": [
                   { "required": ["field"] },
-                  { "required": ["source_field"] },
-                  { "required": ["record_count"] },
                   { "required": ["review_priority"] },
                   { "required": ["values"] }
                 ]
@@ -1141,13 +1153,7 @@
                 "field",
                 "review_priority",
                 "values"
-              ],
-              "not": {
-                "anyOf": [
-                  { "required": ["source_field"] },
-                  { "required": ["record_count"] }
-                ]
-              }
+              ]
             }
           ]
         },
@@ -1171,8 +1177,6 @@
                 "anyOf": [
                   { "required": ["record_identity"] },
                   { "required": ["source_locations"] },
-                  { "required": ["source_field"] },
-                  { "required": ["record_count"] },
                   { "required": ["values"] }
                 ]
               }
@@ -1202,41 +1206,7 @@
                 "field",
                 "review_priority",
                 "values"
-              ],
-              "not": {
-                "anyOf": [
-                  { "required": ["source_field"] },
-                  { "required": ["record_count"] }
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "allOf": [
-            {
-              "$ref": "#/$defs/findingShape"
-            },
-            {
-              "properties": {
-                "code": {
-                  "const": "undeclared_field"
-                }
-              },
-              "required": [
-                "code",
-                "source_field",
-                "record_count"
-              ],
-              "not": {
-                "anyOf": [
-                  { "required": ["record_identity"] },
-                  { "required": ["source_locations"] },
-                  { "required": ["field"] },
-                  { "required": ["review_priority"] },
-                  { "required": ["values"] }
-                ]
-              }
+              ]
             }
           ]
         },
@@ -1258,41 +1228,7 @@
                 "field",
                 "review_priority",
                 "values"
-              ],
-              "not": {
-                "anyOf": [
-                  { "required": ["source_field"] },
-                  { "required": ["record_count"] }
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "allOf": [
-            {
-              "$ref": "#/$defs/findingShape"
-            },
-            {
-              "properties": {
-                "code": {
-                  "const": "value_mismatch"
-                }
-              },
-              "required": [
-                "code",
-                "record_identity",
-                "source_locations",
-                "source_field",
-                "values"
-              ],
-              "not": {
-                "anyOf": [
-                  { "required": ["field"] },
-                  { "required": ["record_count"] },
-                  { "required": ["review_priority"] }
-                ]
-              }
+              ]
             }
           ]
         }
@@ -1325,7 +1261,6 @@
             "missing_record",
             "extra_record",
             "missing_required_field",
-            "undeclared_field",
             "type_mismatch",
             "invalid_field_value",
             "null_policy_violation",
@@ -1358,12 +1293,6 @@
         },
         "field": {
           "$ref": "#/$defs/nonEmptyString"
-        },
-        "source_field": {
-          "$ref": "#/$defs/nonEmptyString"
-        },
-        "record_count": {
-          "$ref": "#/$defs/nonNegativeInteger"
         },
         "review_priority": {
           "enum": [
@@ -1561,38 +1490,6 @@
           "if": {
             "properties": {
               "code": {
-                "const": "undeclared_field"
-              }
-            },
-            "required": [
-              "code"
-            ]
-          },
-          "then": {
-            "required": [
-              "source_field",
-              "record_count"
-            ],
-            "properties": {
-              "classification": {
-                "const": "assessment_issue"
-              },
-              "phase": {
-                "const": "contract"
-              },
-              "affected_side": {
-                "enum": [
-                  "reference",
-                  "query"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "code": {
                 "const": "value_mismatch"
               }
             },
@@ -1604,39 +1501,9 @@
             "required": [
               "record_identity",
               "source_locations",
+              "field",
+              "review_priority",
               "values"
-            ],
-            "oneOf": [
-              {
-                "required": [
-                  "field",
-                  "review_priority"
-                ],
-                "not": {
-                  "required": [
-                    "source_field"
-                  ]
-                }
-              },
-              {
-                "required": [
-                  "source_field"
-                ],
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "field"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "review_priority"
-                      ]
-                    }
-                  ]
-                }
-              }
             ],
             "properties": {
               "classification": {

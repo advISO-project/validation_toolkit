@@ -61,19 +61,15 @@
       "additionalProperties": false,
       "required": [
         "record_key",
-        "undeclared",
+        "in_scope",
         "definitions"
       ],
       "properties": {
         "record_key": {
           "$ref": "#/$defs/uniqueNonEmptyStrings"
         },
-        "undeclared": {
-          "enum": [
-            "compare",
-            "exclude",
-            "fail"
-          ]
+        "in_scope": {
+          "$ref": "#/$defs/uniqueNonEmptyStrings"
         },
         "definitions": {
           "type": "object",
@@ -91,13 +87,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "source",
+        "source_fields",
         "required",
-        "nulls",
+        "null_policy",
         "comparator"
       ],
       "properties": {
-        "source": {
+        "source_fields": {
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -132,7 +128,7 @@
         "logical_type": {
           "$ref": "#/$defs/logicalType"
         },
-        "nulls": {
+        "null_policy": {
           "$ref": "#/$defs/nullPolicy"
         },
         "source_normalisation": {
@@ -155,6 +151,9 @@
               }
             }
           }
+        },
+        "collection_representation": {
+          "$ref": "#/$defs/collectionRepresentation"
         },
         "value_mapping": {
           "$ref": "#/$defs/valueMapping"
@@ -208,6 +207,11 @@
                   "required": [
                     "typed_normalisation"
                   ]
+                },
+                {
+                  "required": [
+                    "collection_representation"
+                  ]
                 }
               ]
             }
@@ -255,15 +259,70 @@
                   ]
                 },
                 {
+                  "required": [
+                    "collection_representation"
+                  ]
+                },
+                {
                   "properties": {
-                    "nulls": {
+                    "null_policy": {
                       "required": [
                         "missing_tokens"
                       ]
                     }
                   },
                   "required": [
-                    "nulls"
+                    "null_policy"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "collection_representation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "logical_type": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "logical_type"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "logical_type": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "logical_type"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "source_normalisation"
+                  ]
+                },
+                {
+                  "required": [
+                    "value_mapping"
+                  ]
+                },
+                {
+                  "required": [
+                    "typed_normalisation"
                   ]
                 }
               ]
@@ -291,12 +350,12 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "name",
+            "collection_type",
             "element_type",
             "element_comparator"
           ],
           "properties": {
-            "name": {
+            "collection_type": {
               "enum": [
                 "list",
                 "set",
@@ -328,7 +387,7 @@
             {
               "if": {
                 "properties": {
-                  "name": {
+                  "collection_type": {
                     "enum": [
                       "set",
                       "multiset"
@@ -336,7 +395,7 @@
                   }
                 },
                 "required": [
-                  "name"
+                  "collection_type"
                 ]
               },
               "then": {
@@ -371,7 +430,7 @@
               },
               "then": {
                 "properties": {
-                  "name": {
+                  "collection_type": {
                     "const": "list"
                   },
                   "element_type": {
@@ -625,6 +684,78 @@
         }
       ]
     },
+    "collectionRepresentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/collectionRepresentationSide"
+        },
+        "query": {
+          "$ref": "#/$defs/collectionRepresentationSide"
+        }
+      }
+    },
+    "collectionRepresentationSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format"
+      ],
+      "properties": {
+        "format": {
+          "enum": [
+            "json_array",
+            "delimited_text"
+          ]
+        },
+        "delimiter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "element_normalisation": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sourceNormalisation"
+          }
+        },
+        "element_mapping": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonNullValueMappingEntry"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "delimited_text"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "required": [
+              "delimiter"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "delimiter"
+              ]
+            }
+          }
+        }
+      ]
+    },
     "typedNormalisation": {
       "oneOf": [
         {
@@ -726,6 +857,22 @@
         },
         "to": {
           "$ref": "#/$defs/sourceValueDescriptor"
+        }
+      }
+    },
+    "nonNullValueMappingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/nonNullSourceValueDescriptor"
+        },
+        "to": {
+          "$ref": "#/$defs/nonNullSourceValueDescriptor"
         }
       }
     },
