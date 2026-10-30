@@ -55,7 +55,9 @@ namespaces = false
 "adviso_compare.schemas" = ["*.json"]
 
 [tool.setuptools_scm]
-write_to = "src/adviso_compare/_version.py"
+root = "../.."
+relative_to = "pyproject.toml"
+version_file = "src/adviso_compare/_version.py"
 fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]

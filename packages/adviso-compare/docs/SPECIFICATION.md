@@ -2,7 +2,7 @@
 
 **Document status:** Draft for review  
 **Specification version:** 0.1.0-draft  
-**Applies to:** The `adviso-compare` command and its supporting comparison engine
+**Applies to:** The `adviso-compare` command and its supporting comparison engine<br>
 **Normative language:** The terms **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** indicate requirement strength.
 
 ## 1. Purpose
@@ -28,15 +28,21 @@ Responsibility for the provenance and suitability of reference material, the com
 
 ### 2.1 Product structure
 
-The organisation of the tool within the AdvISO GitHub organisation is:
+The product identities and their roles are:
 
-```text
-adviso-project
-└── validation_toolkit repository
-    └── adviso-compare distribution and executable
-        └── adviso_compare Python import package
-            └── internal comparison, configuration, provenance, findings, and reporting components
-```
+| Concept | Name | Role |
+| --- | --- | --- |
+| Product | **AdvISO Compare** | User-facing comparison tool |
+| Distribution | `adviso-compare` | Installable Python distribution |
+| Executable | `adviso-compare` | Direct command-line interface |
+| Import package | `adviso_compare` | Python implementation package |
+| Comparison engine | Internal component | Implements the comparison behaviour |
+
+The distribution contains the `adviso_compare` import package and installs the
+`adviso-compare` executable. The executable delegates to a thin command-line
+layer in that package. The comparison engine and supporting configuration,
+provenance, findings, and reporting components are internal modules rather than
+separate products.
 
 **REQ-PRD-001.** **AdvISO Compare** is the user-facing product. The installable distribution package MUST be named **`adviso-compare`**. The command-line executable MUST be named **`adviso-compare`**. The other components, including the **comparison engine**, are internal reusable software components and are not separate products.
 

@@ -1,16 +1,16 @@
-# Agent guidance for `adviso-compare`
+# Agent guidance for the AdvISO validation toolkit
 
 ## Purpose of this file
 
-This file governs how agents work in this repository. It does not define product behaviour. Product requirements belong in `docs/SPECIFICATION.md` and the normative schemas; do not duplicate them here.
+This file governs how agents work in this monorepo. It does not define product behaviour. Product requirements belong in the applicable package specification and normative schemas; do not duplicate them here.
 
 ## Sources of truth
 
-Use this order of authority:
+For `adviso-compare`, use this order of authority:
 
-1. `docs/SPECIFICATION.md` — normative behaviour and requirement identifiers.
-2. `src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
-3. `src/adviso_compare/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
+1. `packages/adviso-compare/docs/SPECIFICATION.md` — normative behaviour and requirement identifiers.
+2. `packages/adviso-compare/src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
+3. `packages/adviso-compare/src/adviso_compare/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
 4. Version 1 tests and controlled fixtures — executable verification of the normative sources.
 5. User documentation — explanatory material that must agree with the sources above.
 
@@ -18,13 +18,17 @@ If these sources appear inconsistent, stop and report the exact conflict and its
 
 ## Repository layout
 
-- Put production code under `src/adviso_compare/`.
-- Put automated tests under `tests/`.
-- Put maintained user and developer documentation under `docs/`.
-- Keep runtime package resources inside `src/adviso_compare/`.
+- Keep each independently installable tool under `packages/<distribution-name>/`.
+- Give each tool its own `pyproject.toml`, README, `docs/`, `src/`, and `tests/`.
+- For `adviso-compare`, put production code and runtime resources under
+  `packages/adviso-compare/src/adviso_compare/`, tests under
+  `packages/adviso-compare/tests/`, and maintained product documentation under
+  `packages/adviso-compare/docs/`.
+- Keep repository-wide guidance at the repository root. Do not place
+  product-specific requirements there.
 - Treat generated version files, build outputs, caches, coverage output, and virtual environments as generated artefacts rather than source.
 
-Do not create new top-level directories or reorganize established modules without a concrete need in the approved implementation plan.
+Do not create a package for a proposed tool until its scope and implementation work have been approved. Do not create new top-level directories or reorganize established modules without a concrete need in an approved plan.
 
 ## Working method
 
@@ -42,7 +46,7 @@ Use test-driven development for the version 1 implementation. A failing test is 
 
 ## Change control
 
-- Do not change `docs/SPECIFICATION.md`, either normative schema, or established requirement semantics unless the task explicitly authorizes a specification change.
+- Do not change a package specification, its normative schemas, or established requirement semantics unless the task explicitly authorizes a specification change.
 - Preserve existing requirement IDs. Add new IDs rather than renumbering requirements.
 - Preserve schema version identifiers and canonical `$id` values unless a deliberate version change has been approved.
 - When behaviour changes are authorized, update all affected normative text, schemas, tests, fixtures, and user documentation together.
