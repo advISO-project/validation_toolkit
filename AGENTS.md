@@ -1,4 +1,4 @@
-# Agent guidance for `adviso-validation`
+# Agent guidance for `adviso-compare`
 
 ## Purpose of this file
 
@@ -9,8 +9,8 @@ This file governs how agents work in this repository. It does not define product
 Use this order of authority:
 
 1. `docs/SPECIFICATION.md` — normative behaviour and requirement identifiers.
-2. `src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
-3. `src/adviso_validation/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
+2. `src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
+3. `src/adviso_compare/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
 4. Version 1 tests and controlled fixtures — executable verification of the normative sources.
 5. User documentation — explanatory material that must agree with the sources above.
 
@@ -18,10 +18,10 @@ If these sources appear inconsistent, stop and report the exact conflict and its
 
 ## Repository layout
 
-- Put production code under `src/adviso_validation/`.
+- Put production code under `src/adviso_compare/`.
 - Put automated tests under `tests/`.
 - Put maintained user and developer documentation under `docs/`.
-- Keep runtime package resources inside `src/adviso_validation/`.
+- Keep runtime package resources inside `src/adviso_compare/`.
 - Treat generated version files, build outputs, caches, coverage output, and virtual environments as generated artefacts rather than source.
 
 Do not create new top-level directories or reorganize established modules without a concrete need in the approved implementation plan.

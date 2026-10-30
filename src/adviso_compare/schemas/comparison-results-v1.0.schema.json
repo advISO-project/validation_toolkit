@@ -127,7 +127,7 @@
       ],
       "properties": {
         "name": {
-          "const": "adviso-validation"
+          "const": "adviso-compare"
         },
         "version": {
           "$ref": "#/$defs/nonEmptyString"

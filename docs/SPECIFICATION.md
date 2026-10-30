@@ -1,21 +1,21 @@
-# AdvISO Validation Toolkit: `compare` Behaviour Specification
+# AdvISO Compare Behaviour Specification
 
 **Document status:** Draft for review  
 **Specification version:** 0.1.0-draft  
-**Applies to:** The `compare` command and its supporting comparison engine  
+**Applies to:** The `adviso-compare` command and its supporting comparison engine
 **Normative language:** The terms **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** indicate requirement strength.
 
 ## 1. Purpose
 
-This document defines a specification for version 1.0 of the AdvISO Validation Toolkit: a command-line namespace for cohesive capabilities that support bioinformatics validation and verification activities associated with ISO 15189 accreditation.
+This document defines a specification for version 1.0 of AdvISO Compare, a command-line tool that supports bioinformatics validation and verification activities associated with ISO 15189 accreditation.
 
-The initial sole user-facing subcommand within the toolkit is `compare`. It is designed for two datasets that describe the same kinds of samples or observations but may express their fields and values using different names, types, vocabularies, or other source dialects. The declared comparison configuration translates those representations into a common canonical representation, after which the tool compares the canonical records and values. It produces deterministic, machine-readable findings and a human-readable summary suitable for review and retention as one component of a bioinformatics pipeline validation or verification record.
+AdvISO Compare is designed for two datasets that describe the same kinds of samples or observations but may express their fields and values using different names, types, vocabularies, or other source dialects. The declared comparison configuration translates those representations into a common canonical representation, after which the tool compares the canonical records and values. It produces deterministic, machine-readable findings and a human-readable summary suitable for review and retention as one component of a bioinformatics pipeline validation or verification record.
 
 The tool distinguishes differences that remain after successful translation from issues that prevented some intended translation or assessment. It is intended to answer these questions:
 
 > Given these identified inputs and declared translation and comparison rules, which expected and observed records and values are equivalent, different, missing, or extra after translation? Which input or configuration-related issues prevented an intended assessment?
 
-Given this narrow and precisely defined scope, the toolkit cannot be used _alone_ to assert that:
+Given this narrow and precisely defined scope, the tool cannot be used _alone_ to assert that:
 
 - a pipeline is clinically or analytically valid
 - a pipeline conforms with ISO 15189 or any other standard
@@ -28,44 +28,43 @@ Responsibility for the provenance and suitability of reference material, the com
 
 ### 2.1 Product structure
 
-The organisation of the toolkit within the AdvISO GitHub organisation is:
+The organisation of the tool within the AdvISO GitHub organisation is:
 
 ```text
 adviso-project
 └── validation_toolkit repository
-    └── adviso-validation distribution and executable
-        └── adviso_validation Python import package
-            ├── internal comparison, configuration, provenance, findings, and reporting components
-            └── compare subcommand
+    └── adviso-compare distribution and executable
+        └── adviso_compare Python import package
+            └── internal comparison, configuration, provenance, findings, and reporting components
 ```
 
-**REQ-PRD-001.** The **AdvISO Validation Toolkit** is the user-facing product and a minimal command namespace. The installable distribution package MUST be named **`adviso-validation`**. The command-line executable MUST be named **`adviso-validation`**. **`compare`** is currently the sole specified subcommand. The other components, including the **comparison engine**, are internal reusable software components and are not separate products.
+**REQ-PRD-001.** **AdvISO Compare** is the user-facing product. The installable distribution package MUST be named **`adviso-compare`**. The command-line executable MUST be named **`adviso-compare`**. The other components, including the **comparison engine**, are internal reusable software components and are not separate products.
 
 **REQ-PRD-002.** The command-line form MUST be:
 
 ```text
-adviso-validation compare ...
+adviso-compare ...
 ```
 
-**REQ-PRD-003.** The Python import package MUST be named `adviso_validation`.
+**REQ-PRD-003.** The Python import package MUST be named `adviso_compare`.
 
 **REQ-PRD-004.** The repository name MAY differ from the distribution and import-package names. Any difference between these names MUST be documented clearly.
 
 **REQ-PRD-005.** Once released, changes to the distribution name MUST follow the documented compatibility policy. Changes to the executable name MUST follow that policy. Changes to the import-package name MUST follow that policy.
 
-**REQ-PRD-006.** Additional commands are not a development objective for the first release. They MUST NOT be added speculatively.
+**REQ-PRD-006.** The executable MUST perform its comparison operation directly and MUST NOT expose a subcommand hierarchy.
 
-**REQ-PRD-007.** A future command MAY be introduced only for a demonstrated, materially distinct operation in the same validation-evidence workflow.
+**REQ-PRD-007.** Any future proposal to expand this executable to multiple comparison operations MUST define and justify a cohesive revised command-line interface rather than reserve speculative subcommands in version 1.
 
-**REQ-PRD-008.** The top-level dispatcher MUST remain thin. It MUST NOT create speculative shared abstractions.
+**REQ-PRD-008.** The command-line layer MUST remain thin. It MUST NOT create speculative shared abstractions.
 
 **REQ-PRD-009.** The initial implementation SHOULD use ordinary modules and a small comparator registry rather than a general plugin framework.
 
 **REQ-PRD-010.** Capabilities with materially different purposes, dependencies, governance, or release lifecycles SHOULD be separate AdvISO packages.
 
-### 2.2 Scope of the `compare` subcommand
+### 2.2 Scope of `adviso-compare`
 
-The first-release scope of `compare` is:
+The first-release scope of `adviso-compare` is:
 
 - comparison of structured records represented in CSV, TSV or JSON;
 - configuration-defined record keys and conservative single-field key selection in automatic mode;
@@ -80,7 +79,7 @@ The first-release scope of `compare` is:
 
 ### 2.3 Out of scope
 
-The `compare` command does not:
+`adviso-compare` does not:
 
 - establish analytical sensitivity, analytical specificity, precision, limit of detection, reportable range, clinical validity, or clinical utility;
 - generate or adjudicate truth data;
@@ -100,7 +99,7 @@ The following principles govern all requirements:
 3. **REQ-PRN-003.** **Symmetry:** Missing and extra content MUST be assessed in both directions.
 4. **REQ-PRN-009.** **Separation of concerns:** Run status, comparison evidence, and the laboratory's acceptance decision MUST remain distinct concepts.
 5. **REQ-PRN-004.** **Complete evidence:** A normal comparison mismatch MUST still produce a complete report.
-6. **REQ-PRN-005.** **Determinism:** The same exact input bytes, input basenames, configuration selection, toolkit version, and runtime identity MUST produce identical result content except for the explicitly variable run identifier and completion time. Configuration selection includes omission of `--configuration`, in which case automatic construction MUST itself be deterministic. Comparison outcomes MUST additionally satisfy the invariance rules in Section 9.1.
+6. **REQ-PRN-005.** **Determinism:** The same exact input bytes, input basenames, configuration selection, software version, and runtime identity MUST produce identical result content except for the explicitly variable run identifier and completion time. Configuration selection includes omission of `--configuration`, in which case automatic construction MUST itself be deterministic. Comparison outcomes MUST additionally satisfy the invariance rules in Section 9.1.
 7. **REQ-PRN-006.** **Traceability:** Findings MUST identify the rule, record, and field that produced them.
 8. **REQ-PRN-007.** **Data minimisation:** Reports MUST include only the source identifiers and values necessary to explain and review the comparison. Routine logs, progress output, terminal diagnostics, and execution-error diagnostics MUST NOT reproduce them.
 9. **REQ-PRN-008.** **Fail clearly:** Invalid or ambiguous input MUST produce an explicit error rather than an assumed interpretation.
@@ -122,7 +121,7 @@ The following principles govern all requirements:
 - **Field:** A named value within a record.
 - **Finding:** A structured observation generated by applying one comparison rule to a record, field, dataset, or run.
 - **Run status:** Whether the requested comparison is `complete`, `incomplete`, or ended in `error`.
-- **Laboratory decision:** The externally reviewed conclusion about validation or verification. The toolkit does not make this decision.
+- **Laboratory decision:** The externally reviewed conclusion about validation or verification. The tool does not make this decision.
 - **Missing:** Expected in the reference but absent from the query.
 - **Extra:** Present in the query but absent from the reference.
 - **Null:** A present field with an explicitly empty/no-value representation defined by the input format or comparison configuration.
@@ -251,7 +250,7 @@ For CSV and TSV:
 
 **REQ-CFG-001.** Every comparison uses an effective comparison configuration. A custom configuration MUST:
 
-- **REQ-CFG-095.** use a published, independently versioned comparison-configuration schema supported by the installed toolkit release;
+- **REQ-CFG-095.** use a published, independently versioned comparison-configuration schema supported by the installed software release;
 - **REQ-CFG-096.** declare its schema version and a stable configuration identifier and revision;
 - **REQ-CFG-097.** be validated fully before either dataset is compared;
 - **REQ-CFG-098.** reject unknown configuration keys by default;
@@ -656,7 +655,7 @@ The first-release typed-value operation identifiers are:
 
 #### 6.2.9 Normative machine-readable schema and semantic validation
 
-The normative JSON Schema Draft 2020-12 definition of comparison-configuration schema version `1.0` is [`src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json`](../src/adviso_validation/schemas/comparison-configuration-v1.0.schema.json).
+The normative JSON Schema Draft 2020-12 definition of comparison-configuration schema version `1.0` is [`src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json`](../src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json).
 
 **REQ-CFG-128.** The schema MUST use `https://adviso-project.github.io/validation_toolkit/schemas/comparison-configuration-v1.0.schema.json` as its canonical `$id`.
 
@@ -664,7 +663,7 @@ The normative JSON Schema Draft 2020-12 definition of comparison-configuration s
 
 The standalone schema file is the authoritative machine-readable definition.
 
-**REQ-CFG-087.** It MUST be version controlled in the source repository. It MUST be included as package data in the installed `adviso_validation.schemas` package. It MUST be loaded at runtime through the package-resource API rather than through a path relative to the working directory.
+**REQ-CFG-087.** It MUST be version controlled in the source repository. It MUST be included as package data in the installed `adviso_compare.schemas` package. It MUST be loaded at runtime through the package-resource API rather than through a path relative to the working directory.
 
 **REQ-CFG-088.** CI MUST verify the schema's presence in built distributions. CI MUST validate every documented example against it. CI MUST validate every controlled configuration fixture against it.
 
@@ -1159,13 +1158,13 @@ No separate package manifest is required in version 1; `comparison-results.json`
 
 ### 9.1 Machine-readable output
 
-**REQ-OUT-004.** JSON MUST be the canonical output format. Its normative JSON Schema Draft 2020-12 definition is [`src/adviso_validation/schemas/comparison-results-v1.0.schema.json`](../src/adviso_validation/schemas/comparison-results-v1.0.schema.json).
+**REQ-OUT-004.** JSON MUST be the canonical output format. Its normative JSON Schema Draft 2020-12 definition is [`src/adviso_compare/schemas/comparison-results-v1.0.schema.json`](../src/adviso_compare/schemas/comparison-results-v1.0.schema.json).
 
 **REQ-OUT-125.** `comparison-results.json` MUST be serialized as RFC 8259 JSON encoded as UTF-8 without a byte-order mark, using two-space indentation, LF line endings, and exactly one final newline. Non-ASCII characters MUST be emitted directly rather than escaped unless escaping is required by JSON syntax. Members of fixed-schema objects MUST be emitted in their documented schema order; members of dynamically named objects MUST be emitted in Unicode code-point order.
 
 **REQ-OUT-112.** The results schema MUST use `https://adviso-project.github.io/validation_toolkit/schemas/comparison-results-v1.0.schema.json` as its canonical `$id`.
 
-**REQ-OUT-005.** The standalone results-schema file MUST be version controlled. It MUST be included as package data in `adviso_validation.schemas`. It MUST be resolvable together with the comparison-configuration schema that it references.
+**REQ-OUT-005.** The standalone results-schema file MUST be version controlled. It MUST be included as package data in `adviso_compare.schemas`. It MUST be resolvable together with the comparison-configuration schema that it references.
 
 The result-schema version and comparison-configuration-schema version are independent.
 
@@ -1199,7 +1198,7 @@ Every property is required, including empty `exclusions` and `findings` arrays.
 
 **REQ-OUT-095.** For determinism requirements, the comparison outcome consists of run and phase statuses; summary counts; exclusions considered without input occurrence order; and each finding's classification, code, phase, affected side, record identity, canonical or source field identity, review priority, and value evidence. It excludes run ID, completion time, software-runtime provenance, input byte provenance, source locations, human-readable messages that reproduce variable locations, and report-local finding IDs.
 
-**REQ-OUT-096.** Given the same exact input bytes, input basenames, configuration selection, toolkit version, and runtime identity, all canonical result content other than `run.id` and `run.completed_at` MUST be identical. Repeated automatic-mode runs therefore MUST generate byte-identical effective configuration documents.
+**REQ-OUT-096.** Given the same exact input bytes, input basenames, configuration selection, software version, and runtime identity, all canonical result content other than `run.id` and `run.completed_at` MUST be identical. Repeated automatic-mode runs therefore MUST generate byte-identical effective configuration documents.
 
 **REQ-OUT-097.** Changing only input record order or accepted LF/CRLF line endings MUST leave the comparison outcome unchanged. Exact-byte input size and digest, source locations, location-dependent messages, and report-local finding IDs MAY change. The result for each particular ordered byte input MUST still satisfy all deterministic ordering rules.
 
@@ -1209,7 +1208,7 @@ Every property is required, including empty `exclusions` and `findings` arrays.
 
 **REQ-OUT-014.** Overall run status MUST be `complete` if and only if all three phases are complete.
 
-**REQ-OUT-015.** The `software` object MUST identify `adviso-validation` and its version. A build identifier MAY be included when available.
+**REQ-OUT-015.** The `software` object MUST identify `adviso-compare` and its version. A build identifier MAY be included when available.
 
 **REQ-OUT-016.** The `runtime` object MUST record Python version, a normalized non-identifying platform identifier, and the Unicode-data version.
 
@@ -1407,7 +1406,7 @@ Configured-field exclusions MUST be ordered first by `canonical_field` using Uni
 
 ### 10.1 General behaviour
 
-- **REQ-CLI-001.** A subcommand MUST be required.
+- **REQ-CLI-001.** Comparison arguments MUST be accepted directly by the `adviso-compare` executable without a subcommand.
 - **REQ-CLI-002.** Invalid argument combinations MUST be rejected before input processing.
 - **REQ-CLI-003.** Modes and formats MUST use enumerated choices.
 - **REQ-CLI-004.** `--help` and `--version` MUST work without other arguments.
@@ -1416,12 +1415,12 @@ Configured-field exclusions MUST be ordered first by `canonical_field` using Uni
 - **REQ-CLI-007.** Comparison progress SHOULD be optional.
 - **REQ-CLI-008.** Comparison progress MUST NOT contaminate machine-readable output.
 
-### 10.2 Proposed comparison interface
+### 10.2 Comparison interface
 
 The conceptual interface is:
 
 ```text
-adviso-validation compare \
+adviso-compare \
   --reference REFERENCE \
   --query QUERY \
   --output OUTPUT \
@@ -1456,9 +1455,9 @@ adviso-validation compare \
 
 Error classes represented by exit codes 2 and 3 have run status `error`. The distinct codes allow automation to distinguish expected operational errors from unexpected implementation failures.
 
-### 10.4 Additional commands
+### 10.4 Command hierarchy
 
-**REQ-CLI-017.** The version 1 executable MUST expose no user-facing subcommand other than `compare`.
+**REQ-CLI-017.** The version 1 executable MUST NOT expose user-facing subcommands.
 
 ## 11. Security and data governance
 
@@ -1480,7 +1479,7 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 ## 12. Deployment, accessibility, and reliability
 
 - **REQ-DEP-001.** all core comparison functionality MUST operate fully offline;
-- **REQ-DEP-002.** the toolkit MUST NOT require a hosted service, account, licence server, or telemetry connection;
+- **REQ-DEP-002.** the tool MUST NOT require a hosted service, account, licence server, or telemetry connection;
 - **REQ-DEP-003.** an offline-installable artefact with integrity information SHOULD be provided;
 - **REQ-DEP-004.** reports MUST use open formats;
 - **REQ-DEP-005.** reports MUST NOT require proprietary software;
@@ -1569,13 +1568,13 @@ In operational use, each laboratory is responsible for creating, approving, main
 - **REQ-DOC-013.** every property in the canonical results JSON schema, including finding classifications and codes, typed source and canonical values, counts, exclusions, run and phase statuses, and provenance fields; the guide MUST explain that software consuming a result must first validate `results_schema_version` and must use structured properties, classifications, and finding codes rather than parsing presentation messages;
 - **REQ-DOC-014.** execution-error diagnostics and common corrective actions;
 - **REQ-DOC-015.** the tool's intended use, non-claims, security and data-governance boundaries, and known limitations; and
-- **REQ-DOC-016.** the toolkit, comparison-configuration-schema, and results-schema versions to which the documentation applies.
+- **REQ-DOC-016.** the software, comparison-configuration-schema, and results-schema versions to which the documentation applies.
 
 **REQ-DOC-002.** The guide MUST include complete, runnable examples covering automatic strict-exact mode, including automatic key discovery, and representative custom configuration features.
 
 **REQ-DOC-003.** Configuration examples MUST validate against the published comparison-configuration schema. Results examples MUST validate against the published results schema.
 
-**REQ-DOC-004.** Documentation MUST distinguish machine-enforced schema constraints from explanatory guidance. It MUST accurately describe the behaviour of the documented toolkit version and MUST NOT contradict the machine-readable schemas it supports. Any material inconsistency is a release-blocking documentation defect.
+**REQ-DOC-004.** Documentation MUST distinguish machine-enforced schema constraints from explanatory guidance. It MUST accurately describe the behaviour of the documented software version and MUST NOT contradict the machine-readable schemas it supports. Any material inconsistency is a release-blocking documentation defect.
 
 **REQ-DOC-005.** Command-line `--help` output MUST provide a concise description of every command and option. It MUST direct users to the full guide.
 
@@ -1591,9 +1590,9 @@ In operational use, each laboratory is responsible for creating, approving, main
 - **REQ-REL-011.** a reproducible lockfile or equivalent dependency record;
 - **REQ-REL-012.** evidence that required verification tests passed.
 
-**REQ-REL-002.** Comparison-configuration schemas, results schemas, and toolkit releases MUST each have their own version identifier and MUST NOT be assumed to advance in lockstep or to use matching version numbers. Each results-schema version nevertheless references the exact comparison-configuration schema version or versions permitted in that result, as required by `REQ-OUT-113`.
+**REQ-REL-002.** Comparison-configuration schemas, results schemas, and software releases MUST each have their own version identifier and MUST NOT be assumed to advance in lockstep or to use matching version numbers. Each results-schema version nevertheless references the exact comparison-configuration schema version or versions permitted in that result, as required by `REQ-OUT-113`.
 
-**REQ-REL-003.** Each toolkit release MUST document the comparison-configuration schema versions it supports. It MUST document the results schema versions it supports.
+**REQ-REL-003.** Each software release MUST document the comparison-configuration schema versions it supports. It MUST document the results schema versions it supports.
 
 **REQ-REL-004.** An unsupported schema version MUST be rejected clearly rather than interpreted approximately.
 
@@ -1698,7 +1697,7 @@ This catalogue summarises minimum executable scenarios for the first release. It
 
 ### 14.5 Evidence, CLI, and packaging scenarios
 
-- **AT-EVD-001:** Runs with identical exact bytes, basenames, configuration, toolkit version, and runtime identity produce byte-identical canonical JSON after normalizing only run ID and completion time. Serialization fixtures verify UTF-8 without a byte-order mark, two-space indentation, LF line endings, exactly one final newline, direct non-ASCII output, fixed-schema member order, and Unicode code-point order for dynamic members. Parameterized record-order and LF/CRLF variants preserve the defined comparison outcome while permitting only the documented byte-provenance, source-location, location-dependent message, and report-local ID differences. The comparison outcome also remains invariant across every supported Python and operating-system environment, including Unicode-sensitive fixtures.
+- **AT-EVD-001:** Runs with identical exact bytes, basenames, configuration, software version, and runtime identity produce byte-identical canonical JSON after normalizing only run ID and completion time. Serialization fixtures verify UTF-8 without a byte-order mark, two-space indentation, LF line endings, exactly one final newline, direct non-ASCII output, fixed-schema member order, and Unicode code-point order for dynamic members. Parameterized record-order and LF/CRLF variants preserve the defined comparison outcome while permitting only the documented byte-provenance, source-location, location-dependent message, and report-local ID differences. The comparison outcome also remains invariant across every supported Python and operating-system environment, including Unicode-sensitive fixtures.
   - Verifies: `REQ-PRN-005`, `REQ-INP-014`, `REQ-CMP-033`, `REQ-OUT-012`, `REQ-OUT-095`, `REQ-OUT-096`, `REQ-OUT-097`, `REQ-OUT-098`, `REQ-OUT-125`, `REQ-DEP-013`, `REQ-CMP-032`
 - **AT-EVD-002:** Results contain exact-byte SHA-256 input digests and input basenames without exposing absolute paths, raw command lines, environment variables, or secrets; the complete validated comparison configuration is embedded without a separate configuration digest.
   - Verifies: `REQ-CFG-023`, `REQ-OUT-017`, `REQ-OUT-018`, `REQ-OUT-019`, `REQ-OUT-022`, `REQ-OUT-023`, `REQ-SEC-007`, `REQ-SEC-008`
@@ -1718,7 +1717,7 @@ This catalogue summarises minimum executable scenarios for the first release. It
   - Verifies: `REQ-SEC-002`, `REQ-SEC-003`, `REQ-DEP-001`, `REQ-DEP-002`
 - **AT-EVD-013:** Findings attributable to declared fields inherit their resolved review priority; other findings do not. HTML presentation may distinguish priorities but does not rely on colour alone, and priority never changes findings, counts, status, or exit code.
   - Verifies: `REQ-CFG-041`, `REQ-CFG-042`, `REQ-CFG-043`, `REQ-CFG-044`, `REQ-CFG-045`, `REQ-OUT-034`
-- **AT-PKG-001:** The built distribution is named `adviso-validation`, contains an importable `adviso_validation` package and every required subpackage, installs the `adviso-validation` executable, and completes an end-to-end comparison through that executable. This consolidated parameterized scenario also covers: The release artefact can be installed and used without network access, contains offline documentation and integrity information, and supports an end-to-end comparison in an isolated environment.
+- **AT-PKG-001:** The built distribution is named `adviso-compare`, contains an importable `adviso_compare` package and every required subpackage, installs the `adviso-compare` executable, and completes an end-to-end comparison through that executable. This consolidated parameterized scenario also covers: The release artefact can be installed and used without network access, contains offline documentation and integrity information, and supports an end-to-end comparison in an isolated environment.
   - Verifies: `REQ-PRD-001`, `REQ-PRD-003`, `REQ-CFG-087`, `REQ-TST-013`, `REQ-TST-030`, `REQ-DEP-003`, `REQ-DEP-007`
 - **AT-EVD-015:** Canonical results contain valid run, phase, software, runtime, and fixed-dialect metadata; run IDs are canonical lowercase UUIDv4 values; completion timestamps are UTC RFC 3339 values using `Z` and whole-second precision; Python implementation/version, normalized platform, and Unicode database version use their prescribed forms without identifying host details; start time and duration are absent; and overall status reconciles with phase statuses.
   - Verifies: `REQ-OUT-009`, `REQ-OUT-010`, `REQ-OUT-011`, `REQ-OUT-014`, `REQ-OUT-015`, `REQ-OUT-016`, `REQ-OUT-020`, `REQ-OUT-121`, `REQ-OUT-122`, `REQ-OUT-123`, `REQ-OUT-124`
@@ -1730,12 +1729,12 @@ This catalogue summarises minimum executable scenarios for the first release. It
   - Verifies: `REQ-OUT-109`, `REQ-OUT-110`, `REQ-OUT-114`
 - **AT-EVD-019:** HTML generated solely from canonical JSON uses an open non-proprietary format and presents the run purpose, phase and run statuses, input and configuration identities, counts, findings, discrepancies, limitations, exclusions, unassessed content, provenance, and no acceptance verdict; HTML is never the sole canonical evidence format. Its headline distinguishes run completeness, comparison-difference count, and assessment-issue count. Detailed findings are organized primarily by classification with comparison differences first and phase retained as secondary traceability information. This consolidated parameterized scenario also covers: Complete and incomplete reports contain raw findings and metrics but no acceptance threshold, pass/fail verdict, or equivalent inferred laboratory decision.
   - Verifies: `REQ-PRN-009`, `REQ-OUT-042`, `REQ-OUT-074`, `REQ-OUT-075`, `REQ-OUT-076`, `REQ-OUT-077`, `REQ-OUT-078`, `REQ-OUT-079`, `REQ-OUT-080`, `REQ-OUT-081`, `REQ-OUT-120`, `REQ-OUT-126`, `REQ-OUT-127`, `REQ-OUT-128`, `REQ-DEP-004`, `REQ-DEP-005`, `REQ-RUN-013`
-- **AT-EVD-021:** Installed-CLI tests cover the required `adviso-validation compare` form, required reference, query, and output arguments, optional configuration, enumerated choices, invalid combinations before input access, normal summaries on standard output, and optional progress that never contaminates machine-readable output. This consolidated parameterized scenario also covers: Omitting `--configuration` selects automatic strict-exact mode and records its generated effective configuration; a supplied value is treated only as a custom comparison-configuration path. The reference and query formats are independently determined and recorded from recognised, case-insensitive filename extensions; a missing, unknown, or ambiguous extension causes an input error, and content that does not conform to the indicated format is rejected. Command-line `--help` describes every version 1 command and option and directs users to the full guide.
+- **AT-EVD-021:** Installed-CLI tests cover the required direct `adviso-compare` form, required reference, query, and output arguments, optional configuration, enumerated choices, invalid combinations before input access, rejection of subcommands, normal summaries on standard output, and optional progress that never contaminates machine-readable output. This consolidated parameterized scenario also covers: Omitting `--configuration` selects automatic strict-exact mode and records its generated effective configuration; a supplied value is treated only as a custom comparison-configuration path. The reference and query formats are independently determined and recorded from recognised, case-insensitive filename extensions; a missing, unknown, or ambiguous extension causes an input error, and content that does not conform to the indicated format is rejected. Command-line `--help` describes every version 1 option and directs users to the full guide.
   - Verifies: `REQ-PRD-002`, `REQ-INP-001`, `REQ-INP-002`, `REQ-INP-004`, `REQ-INP-060`, `REQ-INP-061`, `REQ-INP-062`, `REQ-CLI-001`, `REQ-CLI-002`, `REQ-CLI-003`, `REQ-CLI-006`, `REQ-CLI-007`, `REQ-CLI-008`, `REQ-INP-003`, `REQ-CFG-092`, `REQ-CLI-009`, `REQ-CLI-010`, `REQ-INP-005`, `REQ-INP-006`, `REQ-INP-007`, `REQ-INP-008`, `REQ-INP-009`, `REQ-CLI-013`, `REQ-CLI-004`, `REQ-DOC-005`
 
 ### 14.6 Documentation scenarios
 
-- **AT-DOC-001:** The built distribution contains an offline user guide covering every topic required by Section 13.4, and the guide identifies the toolkit and schema versions to which it applies. This consolidated parameterized scenario also covers: Every complete comparison-configuration and canonical-results example in the guide validates against its corresponding packaged schema, and every documented command-line invocation uses the version 1 interface.
+- **AT-DOC-001:** The built distribution contains an offline user guide covering every topic required by Section 13.4, and the guide identifies the software and schema versions to which it applies. This consolidated parameterized scenario also covers: Every complete comparison-configuration and canonical-results example in the guide validates against its corresponding packaged schema, and every documented command-line invocation uses the version 1 interface.
   - Verifies: `REQ-DOC-001`, `REQ-DOC-006`, `REQ-DOC-007`, `REQ-DOC-008`, `REQ-DOC-009`, `REQ-DOC-010`, `REQ-DOC-011`, `REQ-DOC-012`, `REQ-DOC-013`, `REQ-DOC-014`, `REQ-DOC-015`, `REQ-DOC-016`, `REQ-DOC-002`, `REQ-DOC-003`, `REQ-DOC-004`, `REQ-OUT-111`
 
 ### 14.7 Fixture and compatibility scenarios

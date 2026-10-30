@@ -7,7 +7,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "adviso-validation"
+name = "adviso-compare"
 dynamic = ["version"]
 description = "Translate, compare, and report differences between structured bioinformatics datasets."
 readme = "README.md"
@@ -40,7 +40,7 @@ dev = [
 ]
 
 [project.scripts]
-adviso-validation = "adviso_validation.cli:main"
+adviso-compare = "adviso_compare.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -48,14 +48,14 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["adviso_validation*"]
+include = ["adviso_compare*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-"adviso_validation.schemas" = ["*.json"]
+"adviso_compare.schemas" = ["*.json"]
 
 [tool.setuptools_scm]
-write_to = "src/adviso_validation/_version.py"
+write_to = "src/adviso_compare/_version.py"
 fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]
