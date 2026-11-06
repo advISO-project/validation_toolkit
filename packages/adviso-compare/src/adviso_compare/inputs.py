@@ -228,6 +228,7 @@ def _parse_table(
     side: InputSide,
 ) -> tuple[tuple[str, ...], tuple[ParsedRecord, ...]]:
     """Parse one CSV or TSV document using the fixed version 1 dialect."""
+    _validate_tabular_lexical_syntax(text, delimiter, side)
     reader = csv.reader(
         io.StringIO(text, newline=""),
         delimiter=delimiter,
@@ -297,6 +298,64 @@ def _parse_table(
         )
         previous_ending_line = ending_line
     return tuple(header), tuple(records)
+
+
+def _validate_tabular_lexical_syntax(
+    text: str,
+    delimiter: str,
+    side: InputSide,
+) -> None:
+    """Reject quote and line-ending forms accepted by permissive CSV readers."""
+    start_field = "start_field"
+    unquoted = "unquoted"
+    quoted = "quoted"
+    after_quote = "after_quote"
+    state = start_field
+    line_number = 1
+    quoted_start_line: int | None = None
+    index = 0
+
+    while index < len(text):
+        character = text[index]
+        if character == "\r":
+            if index + 1 >= len(text) or text[index + 1] != "\n":
+                raise _tabular_syntax_error(side, line_number)
+            if state != quoted:
+                state = start_field
+            line_number += 1
+            index += 2
+            continue
+        if character == "\n":
+            if state != quoted:
+                state = start_field
+            line_number += 1
+            index += 1
+            continue
+        if character == delimiter:
+            if state != quoted:
+                state = start_field
+            index += 1
+            continue
+        if character == '"':
+            if state == start_field:
+                state = quoted
+                quoted_start_line = line_number
+            elif state == unquoted:
+                raise _tabular_syntax_error(side, line_number)
+            elif state == quoted:
+                state = after_quote
+            else:
+                state = quoted
+            index += 1
+            continue
+        if state == start_field:
+            state = unquoted
+        elif state == after_quote:
+            raise _tabular_syntax_error(side, line_number)
+        index += 1
+
+    if state == quoted:
+        raise _tabular_syntax_error(side, quoted_start_line or line_number)
 
 
 def _tabular_syntax_error(side: InputSide, line_number: int) -> InputError:

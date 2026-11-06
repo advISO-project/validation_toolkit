@@ -213,25 +213,152 @@ def test_structurally_valid_empty_datasets_remain_valid(
     assert dataset.field_names == expected_fields
 
 
+@pytest.mark.parametrize(("suffix", "delimiter"), [("csv", ","), ("tsv", "\t")])
+@pytest.mark.parametrize(
+    ("body", "line_number"),
+    [
+        ('"unterminated', 2),
+        ('unquoted"quote', 2),
+        ('"closed"trailing', 2),
+        ('"backslash\\"escape"', 2),
+        ("bare\rcarriage-return", 2),
+    ],
+)
+def test_malformed_tabular_quote_and_line_syntax_is_rejected_for_each_dialect(
+    tmp_path: Path,
+    suffix: str,
+    delimiter: str,
+    body: str,
+    line_number: int,
+) -> None:
+    """Both fixed dialects reject non-standard quoting and record endings."""
+    content = f"record_id{delimiter}value\nS1{delimiter}{body}\n".encode()
+    path = _write_bytes(tmp_path / f"records.{suffix}", content)
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(path, InputSide.QUERY)
+
+    assert raised.value.code == "invalid_syntax"
+    assert f"physical line {line_number}" in raised.value.message
+
+
+@pytest.mark.parametrize(("suffix", "delimiter"), [("csv", ","), ("tsv", "\t")])
+@pytest.mark.parametrize(
+    ("document_template", "message_fragment"),
+    [
+        ("field{d}field\n", "duplicate column names"),
+        ("field{d}\n", "empty column name"),
+        ("field{d}other\none\n", "has 1 fields; expected 2"),
+        ("field{d}other\none{d}two{d}three\n", "has 3 fields; expected 2"),
+        ("field{d}other\n\n", "has 0 fields; expected 2"),
+    ],
+)
+def test_invalid_tabular_structure_is_rejected_for_each_dialect(
+    tmp_path: Path,
+    suffix: str,
+    delimiter: str,
+    document_template: str,
+    message_fragment: str,
+) -> None:
+    """Headers, row widths, and blank physical records are checked symmetrically."""
+    content = document_template.format(d=delimiter)
+    path = _write_bytes(tmp_path / f"records.{suffix}", content.encode())
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(path, InputSide.REFERENCE)
+
+    assert raised.value.code == "invalid_structure"
+    assert message_fragment in raised.value.message
+
+
+@pytest.mark.parametrize("suffix", ["csv", "tsv", "json"])
+def test_invalid_utf8_is_rejected_before_format_parsing(
+    tmp_path: Path,
+    suffix: str,
+) -> None:
+    """The UTF-8 requirement is identical for every supported format."""
+    path = _write_bytes(tmp_path / f"records.{suffix}", b"\xff")
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(path, InputSide.REFERENCE)
+
+    assert raised.value.code == "invalid_encoding"
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+@pytest.mark.parametrize(
+    "document_template",
+    [
+        "{}",
+        '[{{"value":{}}}]',
+        '[{{"value":{{"nested":{}}}}}]',
+        '[{{"value":[{}]}}]',
+    ],
+)
+def test_non_finite_json_tokens_are_rejected_in_every_structural_context(
+    tmp_path: Path,
+    token: str,
+    document_template: str,
+) -> None:
+    """No parser location enables non-standard JSON numerical constants."""
+    document = document_template.format(token).encode()
+    path = _write_bytes(tmp_path / "records.json", document)
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(path, InputSide.QUERY)
+
+    assert raised.value.code == "invalid_syntax"
+    assert raised.value.message == "query JSON input contains a non-finite number"
+
+
+@pytest.mark.parametrize(
+    ("content", "message_fragment"),
+    [
+        (b"{}", "JSON root is object"),
+        (b"1", "JSON root is integer"),
+        (b'"record"', "JSON root is string"),
+        (b"[1]", "array item 0 is integer"),
+        (b'[{"record_id":"S1"},[]]', "array item 1 is array"),
+    ],
+)
+def test_invalid_json_roots_identify_the_value_and_required_structure(
+    tmp_path: Path,
+    content: bytes,
+    message_fragment: str,
+) -> None:
+    """Root errors identify the safe structural category and offending index."""
+    path = _write_bytes(tmp_path / "records.json", content)
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(path, InputSide.REFERENCE)
+
+    assert raised.value.code == "invalid_structure"
+    assert message_fragment in raised.value.message
+    assert "record object" in raised.value.message
+
+
+def test_malformed_json_reports_its_parser_location(tmp_path: Path) -> None:
+    """JSON syntax errors retain safe one-based line and column context."""
+    path = _write_bytes(tmp_path / "records.json", b'[\n {"a": 1},\n]')
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(path, InputSide.QUERY)
+
+    assert raised.value.code == "invalid_syntax"
+    assert raised.value.message == (
+        "query JSON input has invalid syntax at line 3, column 1"
+    )
+
+
 @pytest.mark.parametrize(
     ("filename", "content", "expected_code"),
     [
         ("records", b"record_id\n", "unsupported_format"),
         ("records.txt", b"record_id\n", "unsupported_format"),
-        ("records.csv", b"record_id\n\xff", "invalid_encoding"),
         ("records.json", b"[", "invalid_syntax"),
-        ("records.json", b"[NaN]", "invalid_syntax"),
         ("records.json", b"", "invalid_syntax"),
         ("records.csv", b"", "invalid_structure"),
         ("records.tsv", b"", "invalid_structure"),
-        ("records.csv", b'a,b\n"unterminated,b\n', "invalid_syntax"),
-        ("records.csv", b"a,a\n1,2\n", "invalid_structure"),
-        ("records.csv", b"a,\n1,2\n", "invalid_structure"),
-        ("records.csv", b"a,b\n1\n", "invalid_structure"),
-        ("records.tsv", b"a\tb\n1\t2\t3\n", "invalid_structure"),
-        ("records.json", b"{}", "invalid_structure"),
-        ("records.json", b"1", "invalid_structure"),
-        ("records.json", b"[1]", "invalid_structure"),
         ("records.json", b'[{"a":1,"a":2}]', "invalid_structure"),
         ("records.json", b'[{"a":{"b":1,"b":2}}]', "invalid_structure"),
     ],
