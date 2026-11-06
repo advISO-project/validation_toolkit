@@ -112,12 +112,14 @@ def test_collection_representation_resolves_omitted_side_to_json_array(
     )
 
     field = configuration.field("measured_value")
-    assert field.collection_representation.reference.format == "json_array"
-    assert field.collection_representation.reference.delimiter is None
-    assert field.collection_representation.reference.element_normalisation == ()
-    assert field.collection_representation.query.format == "delimited_text"
-    assert field.collection_representation.query.delimiter == "/"
-    assert field.collection_representation.query.element_normalisation[0].name == (
+    representations = field.collection_representation
+    assert representations is not None
+    assert representations.reference.format == "json_array"
+    assert representations.reference.delimiter is None
+    assert representations.reference.element_normalisation == ()
+    assert representations.query.format == "delimited_text"
+    assert representations.query.delimiter == "/"
+    assert representations.query.element_normalisation[0].name == (
         "case_fold"
     )
 
@@ -186,7 +188,7 @@ def test_yaml_12_leading_zero_integer_is_decimal_not_yaml_11_octal(
     configuration = load_comparison_configuration(path)
 
     operation = configuration.field("measured_value").typed_normalisation[0]
-    assert operation.parameters == (("places", 1), ("rounding", "half_even"))
+    assert operation.parameters == {"places": 1, "rounding": "half_even"}
 
 
 @pytest.mark.parametrize(
@@ -413,12 +415,17 @@ def _duplicate_mapping_source(document: JsonObject) -> None:
 
 def _mapping_sources_collide_after_normalisation(document: JsonObject) -> None:
     field = _add_mapping_field(document)["fields"]["definitions"]["measured_value"]
+    field["value_mapping"]["reference"][0]["from"]["value"] = " É "
     field["source_normalisation"] = {
-        "reference": [{"operation": "case_fold"}]
+        "reference": [
+            {"operation": "unicode_normalise", "parameters": {"form": "NFC"}},
+            {"operation": "trim", "parameters": {"side": "both"}},
+            {"operation": "case_fold"},
+        ]
     }
     field["value_mapping"]["reference"].append(
         {
-            "from": {"category": "string", "value": "POSITIVE"},
+            "from": {"category": "string", "value": "e\u0301"},
             "to": {"category": "string", "value": "present"},
         }
     )

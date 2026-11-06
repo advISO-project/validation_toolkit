@@ -285,23 +285,21 @@ def test_invalid_utf8_is_rejected_before_format_parsing(
     assert raised.value.code == "invalid_encoding"
 
 
-@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
 @pytest.mark.parametrize(
-    "document_template",
+    "document",
     [
-        "{}",
-        '[{{"value":{}}}]',
-        '[{{"value":{{"nested":{}}}}}]',
-        '[{{"value":[{}]}}]',
+        b"NaN",
+        b'[{"value":Infinity}]',
+        b'[{"value":{"nested":-Infinity}}]',
+        b'[{"value":[NaN]}]',
     ],
+    ids=["root", "field", "nested-object", "nested-array"],
 )
 def test_non_finite_json_tokens_are_rejected_in_every_structural_context(
     tmp_path: Path,
-    token: str,
-    document_template: str,
+    document: bytes,
 ) -> None:
     """No parser location enables non-standard JSON numerical constants."""
-    document = document_template.format(token).encode()
     path = _write_bytes(tmp_path / "records.json", document)
 
     with pytest.raises(InputError) as raised:

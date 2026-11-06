@@ -5,18 +5,24 @@ from __future__ import annotations
 import copy
 import json
 import re
-import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from decimal import Decimal
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Generic, Iterator, Mapping, TypeVar
+from types import MappingProxyType
+from typing import Any, Generic, Mapping, TypeVar
 
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode, ScalarNode
 from yaml.tokens import AliasToken, AnchorToken, TagToken
+
+from adviso_compare.processing import (
+    apply_source_text_operation,
+    field_comparator_is_compatible,
+    typed_normalisation_is_compatible,
+)
 
 
 CONFIGURATION_SCHEMA_FILE = "comparison-configuration-v1.0.schema.json"
@@ -41,7 +47,9 @@ class Operation:
     """One registered processing operation and its immutable parameters."""
 
     name: str
-    parameters: tuple[tuple[str, object], ...] = ()
+    parameters: Mapping[str, object] = dataclass_field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +73,9 @@ class Comparator:
     """A comparator declaration and its immutable parameters."""
 
     name: str
-    parameters: tuple[tuple[str, object], ...] = ()
+    parameters: Mapping[str, object] = dataclass_field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +116,7 @@ class FieldDefinition:
     logical_type: str | CollectionLogicalType | None
     null_policy: NullPolicy
     source_normalisation: DatasetSides[tuple[Operation, ...]]
-    collection_representation: DatasetSides[CollectionRepresentation | None]
+    collection_representation: DatasetSides[CollectionRepresentation] | None
     value_mapping: DatasetSides[tuple[ValueMappingEntry, ...]]
     typed_normalisation: tuple[Operation, ...]
     comparator: Comparator
@@ -131,21 +141,13 @@ class EffectiveConfiguration:
     metadata: ConfigurationMetadata
     record_key: tuple[str, ...]
     in_scope: tuple[str, ...]
-    _fields: tuple[tuple[str, FieldDefinition], ...]
-    _document_json: str
+    fields: Mapping[str, FieldDefinition]
+    _document: JsonObject = dataclass_field(repr=False, compare=False)
 
     @property
     def document(self) -> JsonObject:
         """Return a fresh JSON-compatible copy of the validated source document."""
-        document = json.loads(self._document_json)
-        if not isinstance(document, dict):
-            raise AssertionError("validated configuration document is not an object")
-        return document
-
-    @property
-    def fields(self) -> Mapping[str, FieldDefinition]:
-        """Return the resolved field definitions as a read-only mapping."""
-        return _TupleMapping(self._fields)
+        return copy.deepcopy(self._document)
 
     def field(self, name: str) -> FieldDefinition:
         """Return one resolved canonical field definition."""
@@ -153,25 +155,6 @@ class EffectiveConfiguration:
             return self.fields[name]
         except KeyError as error:
             raise KeyError(f"unknown canonical field: {name}") from error
-
-
-class _TupleMapping(Mapping[str, T]):
-    """A minimal immutable mapping backed by ordered key-value tuples."""
-
-    def __init__(self, items: tuple[tuple[str, T], ...]) -> None:
-        self._items = items
-
-    def __getitem__(self, key: str) -> T:
-        for candidate, value in self._items:
-            if candidate == key:
-                return value
-        raise KeyError(key)
-
-    def __iter__(self) -> Iterator[str]:
-        return (key for key, _ in self._items)
-
-    def __len__(self) -> int:
-        return len(self._items)
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,21 +524,17 @@ def _validate_comparator_compatibility(
 ) -> None:
     """Require the field comparator to match its resolved logical type."""
     comparator = field["comparator"]["name"]
-    if logical_type is None:
-        permitted = {"preserved_exact"}
-    elif isinstance(logical_type, str):
-        permitted_by_type = {
-            "string": {"typed_exact", "normalised_string"},
-            "integer": {"typed_exact", "numeric_exact", "numeric_tolerance"},
-            "decimal": {"typed_exact", "numeric_exact", "numeric_tolerance"},
-            "boolean": {"typed_exact"},
-            "date": {"typed_exact", "date_exact"},
-            "datetime": {"typed_exact", "datetime_exact"},
-        }
-        permitted = permitted_by_type[logical_type]
+    if isinstance(logical_type, dict):
+        compatible = field_comparator_is_compatible(
+            comparator,
+            collection_type=logical_type["collection_type"],
+        )
     else:
-        permitted = {f"{logical_type['collection_type']}_exact"}
-    if comparator not in permitted:
+        compatible = field_comparator_is_compatible(
+            comparator,
+            scalar_type=logical_type,
+        )
+    if not compatible:
         _semantic_error(
             f"{path}.comparator.name",
             "comparator is incompatible with the field logical type",
@@ -577,12 +556,11 @@ def _validate_typed_normalisation(
     field: JsonObject,
 ) -> None:
     """Require each typed operation to match the scalar destination type."""
-    compatible_type = {
-        "decimal_quantise": "decimal",
-        "datetime_truncate": "datetime",
-    }
     for index, operation in enumerate(field.get("typed_normalisation", [])):
-        if logical_type != compatible_type[operation["operation"]]:
+        if not typed_normalisation_is_compatible(
+            operation["operation"],
+            logical_type if isinstance(logical_type, str) else None,
+        ):
             _semantic_error(
                 f"{path}.typed_normalisation[{index}].operation",
                 "typed normalisation is incompatible with the field logical type",
@@ -650,26 +628,12 @@ def _descriptor_key(
         value = Decimal(value)
     elif category == "string":
         for operation in operations:
-            value = _normalise_configuration_text(value, operation)
+            value = apply_source_text_operation(
+                value,
+                operation["operation"],
+                operation.get("parameters", {}),
+            )
     return category, value
-
-
-def _normalise_configuration_text(value: str, operation: JsonObject) -> str:
-    """Apply source-text operation semantics needed for mapping reachability."""
-    name = operation["operation"]
-    parameters = operation.get("parameters", {})
-    if name == "unicode_normalise":
-        return unicodedata.normalize(parameters["form"], value)
-    if name == "trim":
-        side = parameters["side"]
-        if side == "leading":
-            return value.lstrip()
-        if side == "trailing":
-            return value.rstrip()
-        return value.strip()
-    if name == "case_fold":
-        return value.casefold()
-    raise AssertionError(f"unexpected validated source operation: {name}")
 
 
 def _field_path(field_name: str) -> str:
@@ -680,10 +644,10 @@ def _field_path(field_name: str) -> str:
 def _build_effective_configuration(document: JsonObject) -> EffectiveConfiguration:
     """Resolve optional declarations into immutable application values."""
     metadata = document["metadata"]
-    fields = tuple(
-        (name, _build_field(name, field))
+    fields = {
+        name: _build_field(name, field)
         for name, field in document["fields"]["definitions"].items()
-    )
+    }
     return EffectiveConfiguration(
         schema_version=document["schema_version"],
         metadata=ConfigurationMetadata(
@@ -694,13 +658,8 @@ def _build_effective_configuration(document: JsonObject) -> EffectiveConfigurati
         ),
         record_key=tuple(document["fields"]["record_key"]),
         in_scope=tuple(document["fields"]["in_scope"]),
-        _fields=fields,
-        _document_json=json.dumps(
-            document,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        ),
+        fields=MappingProxyType(fields),
+        _document=copy.deepcopy(document),
     )
 
 
@@ -724,16 +683,15 @@ def _build_field(name: str, field: JsonObject) -> FieldDefinition:
     value_mapping = field.get("value_mapping", {})
     collection_document = field.get("collection_representation", {})
     if isinstance(logical_type, CollectionLogicalType):
-        collection_representation: DatasetSides[
-            CollectionRepresentation | None
-        ] = DatasetSides(
+        collection_representation: DatasetSides[CollectionRepresentation] | None
+        collection_representation = DatasetSides(
             reference=_build_collection_representation(
                 collection_document.get("reference")
             ),
             query=_build_collection_representation(collection_document.get("query")),
         )
     else:
-        collection_representation = DatasetSides(reference=None, query=None)
+        collection_representation = None
 
     return FieldDefinition(
         name=name,
@@ -784,7 +742,7 @@ def _build_operation(document: JsonObject) -> Operation:
     """Build one immutable processing operation."""
     return Operation(
         name=document["operation"],
-        parameters=tuple(document.get("parameters", {}).items()),
+        parameters=MappingProxyType(dict(document.get("parameters", {}))),
     )
 
 
@@ -792,7 +750,7 @@ def _build_comparator(document: JsonObject) -> Comparator:
     """Build one immutable comparator declaration."""
     return Comparator(
         name=document["name"],
-        parameters=tuple(document.get("parameters", {}).items()),
+        parameters=MappingProxyType(dict(document.get("parameters", {}))),
     )
 
 
