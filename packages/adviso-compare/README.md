@@ -14,4 +14,7 @@ The current normative artefacts are:
 - [Comparison-configuration schema](src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json)
 - [Canonical-results schema](src/adviso_compare/schemas/comparison-results-v1.0.schema.json)
 
+The proposed staged delivery sequence is documented in the
+[version 1 implementation plan](docs/IMPLEMENTATION_PLAN.md).
+
 The planned distribution and executable are named `adviso-compare`; the Python import package is `adviso_compare`.

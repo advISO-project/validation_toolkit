@@ -1531,8 +1531,8 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 
 **REQ-TST-004.** Controlled test cases SHOULD record:
 
-- **REQ-TST-020.** stable scenario identifier;
-- **REQ-TST-021.** requirement(s) tested;
+- **REQ-TST-020.** stable, descriptive test or fixture name independent of the identifiers used in this specification;
+- **REQ-TST-021.** behaviour under test, expressed in domain terms that remain meaningful without this specification;
 - **REQ-TST-022.** purpose and rationale;
 - **REQ-TST-023.** input data and comparison configuration;
 - **REQ-TST-024.** expected findings, counts, run status, per-phase statuses, and exit code;
@@ -1545,6 +1545,8 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 **REQ-TST-006.** Clinically derived fixtures MUST be appropriately de-identified and governed.
 
 **REQ-TST-007.** Controlled test fixtures, including test comparison configurations, MUST be maintained by the development team under version control and its documented review process.
+
+**REQ-TST-035.** Traceability to this specification MUST be one-way. The acceptance-test catalogue and development review records MAY map specified requirements to tests, but production code, test code, test names, markers, fixtures, snapshots, package metadata, and runtime artefacts MUST NOT embed specification requirement identifiers or acceptance-scenario identifiers. Archiving or removing this development specification MUST NOT require changes to those software artefacts.
 
 In operational use, each laboratory is responsible for creating, approving, maintaining, and retaining its own comparison configurations under its local quality-management arrangements. The AdvISO project does not centrally approve or manage laboratory configurations.
 
@@ -1606,7 +1608,7 @@ In operational use, each laboratory is responsible for creating, approving, main
 
 ## 14. Acceptance-test catalogue
 
-This catalogue summarises minimum executable scenarios for the first release. It verifies, but does not independently define, the normative behaviour above. Every scenario lists the requirements it verifies.
+This catalogue summarises minimum executable scenarios for the first release. It verifies, but does not independently define, the normative behaviour above. Every scenario lists the requirements it verifies. The scenario and requirement identifiers are development traceability within this specification; they are not identifiers for use in test or runtime artefacts.
 
 ### 14.1 Input and contract scenarios
 

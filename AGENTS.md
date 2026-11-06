@@ -8,7 +8,7 @@ This file governs how agents work in this monorepo. It does not define product b
 
 For `adviso-compare`, use this order of authority:
 
-1. `packages/adviso-compare/docs/SPECIFICATION.md` — normative behaviour and requirement identifiers.
+1. `packages/adviso-compare/docs/SPECIFICATION.md` — normative behaviour.
 2. `packages/adviso-compare/src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
 3. `packages/adviso-compare/src/adviso_compare/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
 4. Version 1 tests and controlled fixtures — executable verification of the normative sources.
@@ -36,8 +36,8 @@ Before changing behaviour:
 
 1. Read the relevant specification sections in full, including referenced requirements elsewhere in the document.
 2. Read the relevant schema definitions.
-3. Identify the requirement IDs affected by the work.
-4. Add or update the smallest coherent set of tests that verifies those requirements.
+3. Identify the specified behaviours affected by the work.
+4. Add or update the smallest coherent set of tests that verifies those behaviours.
 5. Implement until those tests pass.
 6. Run proportionate wider tests, static checks, schema checks, and packaging checks.
 7. Update affected documentation and controlled fixtures.
@@ -47,7 +47,6 @@ Use test-driven development for the version 1 implementation. A failing test is 
 ## Change control
 
 - Do not change a package specification, its normative schemas, or established requirement semantics unless the task explicitly authorizes a specification change.
-- Preserve existing requirement IDs. Add new IDs rather than renumbering requirements.
 - Preserve schema version identifiers and canonical `$id` values unless a deliberate version change has been approved.
 - When behaviour changes are authorized, update all affected normative text, schemas, tests, fixtures, and user documentation together.
 - Do not add speculative features, extension points, compatibility layers, dependencies, or abstractions.
@@ -78,7 +77,8 @@ Do not introduce or replace a formatter, linter, type checker, build backend, te
 
 ## Testing practice
 
-- Cite the requirement IDs verified by each behavioural test or coherent parameterized scenario.
+- Give tests descriptive behavioural names that remain meaningful without the specification.
+- Do not embed specification requirement identifiers or acceptance-scenario identifiers in code, tests, fixtures, snapshots, or package metadata. Development traceability belongs in the specification and review records, and must remain a one-way reference from those records to the software artefacts.
 - Prefer parameterization when it expresses one rule table clearly; do not merge unrelated behaviours merely to reduce test count.
 - Test public behaviour and stable internal contracts rather than private implementation details.
 - Use controlled, synthetic, non-sensitive fixtures.
@@ -111,7 +111,7 @@ Refer to the specification for the software's normative security and data-govern
 
 Report:
 
-- the requirement IDs affected;
+- the specified behaviours affected;
 - tests added or updated and why they are sufficient;
 - commands run and their results;
 - schema, static, packaging, and documentation checks performed;

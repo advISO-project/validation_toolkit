@@ -37,6 +37,9 @@ dependencies = [
 dev = [
     "build>=1.2,<2",
     "pytest>=8,<9",
+    "setuptools>=69",
+    "setuptools-scm>=8",
+    "wheel",
 ]
 
 [project.scripts]
