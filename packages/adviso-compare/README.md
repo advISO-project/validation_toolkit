@@ -6,7 +6,9 @@ The project is intended to support bioinformatics validation and verification ac
 
 ## Project status
 
-Version 1 is currently specified but not yet implemented. The package is being prepared for a test-driven implementation.
+Version 1 implementation is in progress. The schema-validation baseline and
+command-line invocation layer are implemented; input processing, the comparison
+kernel, and evidence generation are not yet available.
 
 The current normative artefacts are:
 
