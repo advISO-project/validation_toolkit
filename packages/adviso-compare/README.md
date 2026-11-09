@@ -8,9 +8,11 @@ The project is intended to support bioinformatics validation and verification ac
 
 Version 1 implementation is in progress. The schema-validation baseline,
 command-line invocation layer, deterministic CSV, TSV, and JSON input parser,
-and custom comparison-configuration loader are implemented. Automatic
-configuration generation, the comparison kernel, and evidence generation are
-not yet available.
+custom comparison-configuration loader, and source-to-canonical field
+translation pipeline are implemented. Automatic strict-exact configuration
+generation and unambiguous custom or automatic record identity are also
+implemented. Contract assessment, record alignment, value comparison, and
+evidence generation are not yet available.
 
 The current normative artefacts are:
 
