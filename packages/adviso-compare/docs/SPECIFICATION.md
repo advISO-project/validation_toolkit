@@ -1306,7 +1306,10 @@ No comparison-configuration digest or command-invocation object is included in v
 - **REQ-OUT-062.** record-specific missing-required-field findings contain presence states but do not reproduce the present side's value; the dataset-level zero-record form contains no value evidence;
 - **REQ-OUT-064.** type-mismatch findings contain source values for affected sides and canonical values only where parsing succeeded;
 - **REQ-OUT-065.** invalid-field-value and mapping-failure findings contain the affected source value and no failed canonical value;
-- **REQ-OUT-066.** null-policy-violation findings contain the affected source and canonical null representation;
+- **REQ-OUT-066.** A null-policy-violation finding contains the affected
+  parser-native source null. For a field with a declared logical type, it also
+  contains that type's canonical null representation. A `preserved_exact`
+  field has no logical type and therefore contains no canonical value.
 - **REQ-OUT-067.** value-mismatch findings MUST state the presence state of both sides. Each present side MUST contain its source value and, for a declared typed field, its canonical value. An absent side contains neither value. A mismatch of two present untyped values contains no typed canonical values.
 - **REQ-OUT-068.** A causal finding for a not-assessable value opportunity MUST contain only the values permitted for that finding code and necessary to explain the failed prerequisite. It MUST NOT contain separate or duplicated not-assessable evidence.
 

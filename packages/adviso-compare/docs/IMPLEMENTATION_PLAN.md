@@ -294,7 +294,8 @@ Work in this step:
 **Approval demonstration:** representative complete and incomplete documents
 validate structurally and semantically, summaries reconcile with findings and
 opportunities, and repeated/order-varied runs differ only in the explicitly
-permitted runtime and location evidence.
+permitted runtime metadata, byte provenance, source locations,
+location-dependent messages, and report-local finding IDs.
 
 ### Step 10 — Produce the evidence package and HTML report
 

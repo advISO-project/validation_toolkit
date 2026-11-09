@@ -16,8 +16,9 @@ both sides, retains causal assessment issues, and consolidates field exclusions
 without blocking unaffected content. The records phase deterministically aligns
 canonical identities and retains every matched, missing, and extra record. Value
 comparison now applies every version 1 comparator and accounts for matched,
-mismatched, and not-assessable opportunities. Canonical evidence generation is
-not yet available.
+mismatched, and not-assessable opportunities. The comparison core now assembles
+and self-validates deterministic canonical JSON results. Evidence-package
+publication and the HTML report are not yet available.
 
 The current normative artefacts are:
 
