@@ -17,8 +17,10 @@ without blocking unaffected content. The records phase deterministically aligns
 canonical identities and retains every matched, missing, and extra record. Value
 comparison now applies every version 1 comparator and accounts for matched,
 mismatched, and not-assessable opportunities. The comparison core now assembles
-and self-validates deterministic canonical JSON results. Evidence-package
-publication and the HTML report are not yet available.
+and self-validates deterministic canonical JSON results. It can also render the
+self-contained HTML view and atomically publish the validated, two-file evidence
+package with strict overwrite protection. End-to-end command-line integration
+and execution-error handling remain to be implemented.
 
 The current normative artefacts are:
 
