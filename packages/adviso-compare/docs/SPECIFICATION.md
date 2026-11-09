@@ -214,6 +214,11 @@ For CSV and TSV:
 - **REQ-INP-037.** An invalid-root error MUST identify the invalid root value or array item.
 - **REQ-INP-038.** An invalid-root error MUST explain the required structure.
 - **REQ-INP-070.** Duplicate member names in any JSON object MUST cause an input error, including duplicates in record objects and nested object-valued fields. A parser MUST detect duplicates before constructing a mapping that could overwrite an earlier member.
+- **REQ-INP-072.** A top-level JSON record object MUST NOT contain an empty
+  member name, because record member names participate in dataset-wide field
+  discovery and configuration. An empty member name in a nested object-valued
+  field remains valid data content. An empty record member name MUST produce an
+  `input.invalid_structure` execution error.
 
 ### 5.6 Parser-native value model
 
@@ -590,6 +595,32 @@ The first-release typed-value operation identifiers are:
 - `decimal_quantise`, requiring a non-negative integer `places` and `rounding` with one of `half_even`, `half_up`, or `down`; and
 - `datetime_truncate`, requiring `precision` with one of `second`, `millisecond`, or `microsecond`.
 
+**REQ-CFG-146.** For `decimal_quantise`, `places` is the number of
+digits after the decimal point to which the value is quantised. `half_even`
+MUST round to the nearest value, with an exact tie resolved to the value whose
+final retained digit is even. `half_up` MUST round to the nearest value, with
+an exact tie resolved away from zero. `down` MUST discard excess fractional
+digits towards zero.
+
+**REQ-CFG-147.** The `trim` operation MUST recognise exactly the characters
+with the Unicode `White_Space` property in the Unicode version recorded in the
+results. It MUST remove the maximal sequence of those characters from the
+configured leading end, trailing end, or both ends. It MUST NOT remove other
+characters merely because the implementation language treats them as
+whitespace.
+
+**REQ-CFG-148.** `datetime_truncate` MUST operate on the canonical UTC instant
+after offset normalisation. `second` MUST discard the complete fractional-second
+component, `millisecond` MUST retain at most three fractional digits, and
+`microsecond` MUST retain at most six fractional digits. Discarded digits MUST
+be removed without rounding.
+
+**REQ-CFG-149.** `case_fold` MUST apply locale-independent Unicode Default Case
+Folding using the Unicode version recorded in the results. It MUST use full
+case folding, including mappings that expand one character into multiple
+characters. It MUST NOT apply Unicode normalisation implicitly; normalisation
+occurs only through a separately configured `unicode_normalise` operation.
+
 **REQ-CFG-066.** A source-text operation MUST appear only in `source_normalisation.reference`, `source_normalisation.query`, or a side's `collection_representation.<side>.element_normalisation`. It applies only to values or decoded elements, respectively, from the corresponding dataset side.
 
 **REQ-CFG-123.** A source-text operation MUST apply only when the current parser-native value is a string. A non-string value MUST pass through the source-normalisation stage unchanged; it MUST NOT be stringified, transformed, or rejected merely because a source-text operation is configured.
@@ -792,6 +823,12 @@ The accepted parser-native inputs for each declared logical type are fixed as fo
 - **REQ-VAL-034.** Equivalent instants expressed with different offsets MUST have the same canonical value.
 - **REQ-VAL-035.** Supplied fractional-second precision MUST remain available in the source lexical evidence. The canonical datetime representation MUST remove unnecessary trailing fractional-second zeros and omit a zero-valued fractional component. Any reduction that changes the represented instant, rather than only its redundant lexical form, MUST require explicit precision normalisation.
 - **REQ-VAL-036.** Leap-second representations MUST be invalid in the first release.
+- **REQ-VAL-092.** Datetime input MUST accept uppercase or lowercase `T` and
+  `Z`, but MUST NOT accept a space in place of `T`. Numeric offsets from
+  `+00:00` through `+23:59` and from `-00:01` through `-23:59` MUST be
+  accepted. `-00:00` MUST be invalid because it denotes an unknown local
+  offset rather than a known UTC instant. Canonical output continues to use
+  uppercase `T` and `Z`.
 
 #### 6.5.7 Collections
 
@@ -1620,8 +1657,8 @@ This catalogue summarises minimum executable scenarios for the first release. It
   - Verifies: `REQ-CFG-053`, `REQ-CFG-054`, `REQ-CFG-055`, `REQ-CFG-056`, `REQ-CFG-057`, `REQ-CFG-122`, `REQ-VAL-014`, `REQ-VAL-047`, `REQ-VAL-048`, `REQ-VAL-049`, `REQ-VAL-050`, `REQ-VAL-051`, `REQ-VAL-052`, `REQ-VAL-053`, `REQ-VAL-054`, `REQ-VAL-055`, `REQ-VAL-086`, `REQ-INP-028`
 - **AT-CON-005:** Unknown, conflicting, and incomplete value mappings fail clearly; mapping to null differs from a missing map entry, and mapping from null is rejected. This consolidated parameterized scenario also covers: Source-value descriptors distinguish strings, numbers, booleans, and null in their permitted positions; mapping to null remains distinct from an absent mapping entry. Parameterized mapping fixtures verify reference/query-to-canonical field mapping, required-field reporting, exclusion of unknown source fields, declared source and destination types, permitted intentional many-to-one value mappings, and rejection of reused source column names or any other non-one-to-one column mapping within either dataset side.
   - Verifies: `REQ-CFG-065`, `REQ-CFG-071`, `REQ-CFG-072`, `REQ-CFG-073`, `REQ-CFG-074`, `REQ-CFG-127`, `REQ-VAL-058`, `REQ-VAL-065`, `REQ-VAL-067`, `REQ-CFG-058`, `REQ-CFG-059`, `REQ-VAL-068`, `REQ-VAL-056`, `REQ-VAL-057`, `REQ-VAL-059`, `REQ-VAL-060`, `REQ-VAL-064`, `REQ-VAL-066`
-- **AT-CON-006:** Malformed syntax or structure, non-array JSON roots (including a single record object), JSON arrays containing non-object items, duplicate JSON member names at any depth, empty or duplicate tabular column names, and irregular tabular rows receive their specified error classification without silent data loss. This consolidated parameterized scenario also covers: A table-driven parser suite verifies the fixed CSV and TSV dialects, UTF-8-only decoding, CRLF/LF equivalence, quoted delimiters, doubled quotes, embedded line breaks, retention of one-based data-record and starting physical line numbers, and initial string preservation.
-  - Verifies: `REQ-INP-021`, `REQ-INP-022`, `REQ-INP-023`, `REQ-INP-024`, `REQ-INP-025`, `REQ-INP-034`, `REQ-INP-035`, `REQ-INP-036`, `REQ-INP-037`, `REQ-INP-038`, `REQ-INP-070`, `REQ-CMP-028`, `REQ-CMP-029`, `REQ-PRN-002`, `REQ-PRN-008`, `REQ-INP-010`, `REQ-INP-011`, `REQ-INP-012`, `REQ-INP-014`, `REQ-INP-015`, `REQ-INP-016`, `REQ-INP-017`, `REQ-INP-018`, `REQ-INP-019`, `REQ-INP-020`, `REQ-INP-026`, `REQ-INP-027`, `REQ-INP-063`, `REQ-INP-064`
+- **AT-CON-006:** Malformed syntax or structure, non-array JSON roots (including a single record object), JSON arrays containing non-object items, duplicate JSON member names at any depth, empty top-level JSON record member names, empty or duplicate tabular column names, and irregular tabular rows receive their specified error classification without silent data loss. Empty member names in nested JSON object values remain valid data content. This consolidated parameterized scenario also covers: A table-driven parser suite verifies the fixed CSV and TSV dialects, UTF-8-only decoding, CRLF/LF equivalence, quoted delimiters, doubled quotes, embedded line breaks, retention of one-based data-record and starting physical line numbers, and initial string preservation.
+  - Verifies: `REQ-INP-021`, `REQ-INP-022`, `REQ-INP-023`, `REQ-INP-024`, `REQ-INP-025`, `REQ-INP-034`, `REQ-INP-035`, `REQ-INP-036`, `REQ-INP-037`, `REQ-INP-038`, `REQ-INP-070`, `REQ-INP-072`, `REQ-CMP-028`, `REQ-CMP-029`, `REQ-PRN-002`, `REQ-PRN-008`, `REQ-INP-010`, `REQ-INP-011`, `REQ-INP-012`, `REQ-INP-014`, `REQ-INP-015`, `REQ-INP-016`, `REQ-INP-017`, `REQ-INP-018`, `REQ-INP-019`, `REQ-INP-020`, `REQ-INP-026`, `REQ-INP-027`, `REQ-INP-063`, `REQ-INP-064`
 - **AT-CON-007:** JSON `[]` and header-only CSV/TSV are valid zero-record datasets, while zero-byte inputs receive their format-specific input errors. With a custom configuration, two valid zero-record datasets have complete records and values phases with no record differences or value opportunities. In automatic mode, two header-only tabular datasets containing `record_id` behave likewise, while two empty JSON arrays produce `input.invalid_record_key` because they expose no selectable key. Per-record requirements produce neither findings nor not-assessable classifications; available tabular header structure still produces applicable dataset-level contract findings. A one-sided zero-record comparison reports every record as missing or extra when a valid key is available and otherwise receives the specified automatic-key error.
   - Verifies: `REQ-INP-052`, `REQ-INP-053`, `REQ-INP-054`, `REQ-INP-055`, `REQ-INP-056`, `REQ-INP-057`, `REQ-INP-058`, `REQ-INP-059`, `REQ-INP-066`, `REQ-INP-067`, `REQ-INP-068`, `REQ-INP-069`, `REQ-INP-071`, `REQ-CMP-009`, `REQ-CMP-010`, `REQ-FND-022`
 - **AT-CON-008:** Comparison-configuration YAML scalar resolution and cross-format typed dataset parsing are deterministic across supported environments.
@@ -1674,11 +1711,11 @@ This catalogue summarises minimum executable scenarios for the first release. It
 - **AT-VAL-005:** Boolean parsing accepts native booleans and lowercase textual `true` or `false`; other representations require a mapping.
   - Verifies: `REQ-VAL-024`, `REQ-VAL-025`, `REQ-VAL-026`, `REQ-VAL-027`
 - **AT-VAL-006:** Dates reject invalid or non-ISO full dates; datetimes require offsets and compare as instants.
-  - Verifies: `REQ-VAL-028`, `REQ-VAL-029`, `REQ-VAL-030`, `REQ-VAL-031`, `REQ-VAL-032`, `REQ-VAL-033`, `REQ-VAL-034`, `REQ-VAL-035`, `REQ-VAL-036`, `REQ-CMP-024`
+  - Verifies: `REQ-VAL-028`, `REQ-VAL-029`, `REQ-VAL-030`, `REQ-VAL-031`, `REQ-VAL-032`, `REQ-VAL-033`, `REQ-VAL-034`, `REQ-VAL-035`, `REQ-VAL-036`, `REQ-VAL-092`, `REQ-CMP-024`
 - **AT-VAL-007:** Lists preserve order and duplicates, sets reject typed-canonical duplicates and ignore order, and multisets ignore order while preserving occurrence counts. List elements support positional typed-exact comparison and numeric tolerance for numeric element types; sets and multisets accept only typed-exact element comparison, and every other element-comparator combination is rejected. This consolidated parameterized scenario also covers: the default and explicit `json_array` representations accept JSON arrays in JSON and JSON-array cell syntax in CSV/TSV; ordinary delimited text is rejected unless `delimited_text` is explicitly configured for that side; literal single- and multi-character delimiters, empty input, empty elements, lack of collection-level escaping, element normalisation, closed element mapping, and element typed parsing follow the defined order; and null collection elements produce the specified finding and `not_assessable` evidence. The suite covers every supported typed collection kind and its required element declaration.
   - Verifies: `REQ-CFG-124`, `REQ-CFG-125`, `REQ-CFG-126`, `REQ-CFG-137`, `REQ-CFG-138`, `REQ-CFG-139`, `REQ-CFG-140`, `REQ-CFG-141`, `REQ-CFG-142`, `REQ-VAL-037`, `REQ-VAL-038`, `REQ-VAL-039`, `REQ-VAL-040`, `REQ-VAL-041`, `REQ-VAL-042`, `REQ-CMP-025`, `REQ-CMP-040`, `REQ-CMP-041`, `REQ-VAL-043`, `REQ-VAL-044`, `REQ-VAL-045`, `REQ-VAL-046`, `REQ-VAL-006`, `REQ-VAL-081`, `REQ-VAL-082`, `REQ-VAL-087`, `REQ-VAL-088`, `REQ-VAL-089`, `REQ-VAL-090`, `REQ-VAL-091`
 - **AT-VAL-008:** Typed transformations follow Section 6.8 and retain evidence of the attributable source value. This consolidated parameterized scenario also covers: Parameterized normalisation fixtures exercise every registered source-text and typed-value operation, verify that source-text operations affect strings but pass non-strings through unchanged, and cover Unicode normalization, whitespace trimming, case folding, decimal quantisation, and datetime truncation. Rounding or precision reduction occurs only when explicitly configured. Deterministic set and multiset output ordering is verified as canonical serialization rather than configured normalisation. The suite also verifies retention of source lexical evidence.
-  - Verifies: `REQ-CFG-123`, `REQ-VAL-061`, `REQ-VAL-062`, `REQ-VAL-063`, `REQ-VAL-069`, `REQ-VAL-070`, `REQ-VAL-072`, `REQ-VAL-073`, `REQ-VAL-074`, `REQ-VAL-075`, `REQ-VAL-071`, `REQ-CMP-023`, `REQ-VAL-010`
+  - Verifies: `REQ-CFG-123`, `REQ-CFG-146`, `REQ-CFG-147`, `REQ-CFG-148`, `REQ-CFG-149`, `REQ-VAL-061`, `REQ-VAL-062`, `REQ-VAL-063`, `REQ-VAL-069`, `REQ-VAL-070`, `REQ-VAL-072`, `REQ-VAL-073`, `REQ-VAL-074`, `REQ-VAL-075`, `REQ-VAL-071`, `REQ-CMP-023`, `REQ-VAL-010`
 - **AT-VAL-009:** Numeric tolerance accepts exactly one absolute or relative tolerance and rejects configurations containing neither or both. Each form uses exact decimal arithmetic and an inclusive boundary, with below, at, and above boundary cases; relative tolerance is reference-directed and permits no non-zero difference when the reference is zero.
   - Verifies: `REQ-CFG-081`, `REQ-CFG-082`, `REQ-CFG-083`, `REQ-CFG-084`, `REQ-CMP-018`, `REQ-CMP-019`, `REQ-CMP-020`, `REQ-CMP-021`, `REQ-CMP-022`
 - **AT-VAL-010:** All assessable differences are collected in one run.
