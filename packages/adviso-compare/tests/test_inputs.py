@@ -159,6 +159,29 @@ def test_json_preserves_native_categories_lexical_numbers_and_pointers(
     assert tuple(name for name, _ in record.value("object").value) == ("a", "z")
 
 
+def test_json_record_field_names_are_nonempty_but_nested_empty_names_are_data(
+    tmp_path: Path,
+) -> None:
+    """Only names that participate in dataset-wide field discovery are nonempty."""
+    invalid = _write_bytes(
+        tmp_path / "invalid.json",
+        b'[{"record_id":"S1","":"value"}]',
+    )
+    nested = _write_bytes(
+        tmp_path / "nested.json",
+        b'[{"record_id":"S1","value":{"":"retained"}}]',
+    )
+
+    with pytest.raises(InputError) as raised:
+        load_dataset(invalid, InputSide.REFERENCE)
+
+    assert raised.value.code == "invalid_structure"
+    assert "empty field name" in raised.value.message
+    dataset = load_dataset(nested, InputSide.QUERY)
+    nested_members = dataset.records[0].value("value").value
+    assert nested_members == (("", NativeValue(NativeCategory.STRING, "retained")),)
+
+
 def test_parser_native_equality_is_recursive_and_category_preserving(
     tmp_path: Path,
 ) -> None:

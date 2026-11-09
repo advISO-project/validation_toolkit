@@ -161,6 +161,15 @@ class _NonFiniteNumber(ValueError):
     """Signal a non-standard non-finite JSON numerical token."""
 
 
+@dataclass(frozen=True, slots=True)
+class JsonValueError(ValueError):
+    """A syntax or structural failure while decoding one JSON value."""
+
+    kind: str
+    line: int | None = None
+    column: int | None = None
+
+
 def load_dataset(path: Path, side: InputSide) -> ParsedDataset:
     """Discover and parse one supported dataset from its exact bytes."""
     input_format = _discover_format(path, side)
@@ -374,6 +383,78 @@ def _parse_json(
 ) -> tuple[tuple[str, ...], tuple[ParsedRecord, ...]]:
     """Parse a record-oriented JSON array without lossy numerical conversion."""
 
+    try:
+        root = decode_json_value(text)
+    except JsonValueError as error:
+        if error.kind == "non_finite":
+            message = f"{side.value} JSON input contains a non-finite number"
+        elif error.kind == "duplicate_member":
+            message = f"{side.value} JSON input contains a duplicate object member"
+        else:
+            message = (
+                f"{side.value} JSON input has invalid syntax at line "
+                f"{error.line}, column {error.column}"
+            )
+        raise InputError(
+            code=(
+                "invalid_structure"
+                if error.kind == "duplicate_member"
+                else "invalid_syntax"
+            ),
+            side=side,
+            message=message,
+        ) from error
+
+    if root.category is not NativeCategory.ARRAY:
+        raise InputError(
+            code="invalid_structure",
+            side=side,
+            message=(
+                f"{side.value} JSON root is {root.category.value}; it must be "
+                "one array of record objects"
+            ),
+        )
+
+    elements = root.value
+    if not isinstance(elements, tuple):
+        raise AssertionError("JSON array elements were not normalized")
+    records: list[ParsedRecord] = []
+    all_field_names: set[str] = set()
+    for index, item in enumerate(elements):
+        if item.category is not NativeCategory.OBJECT:
+            raise InputError(
+                code="invalid_structure",
+                side=side,
+                message=(
+                    f"{side.value} JSON array item {index} is "
+                    f"{item.category.value}; every item must be a record object"
+                ),
+            )
+        members = item.value
+        if not isinstance(members, tuple):
+            raise AssertionError("JSON object members were not normalized")
+        if any(name == "" for name, _ in members):
+            raise InputError(
+                code="invalid_structure",
+                side=side,
+                message=(
+                    f"{side.value} JSON record at array item {index} "
+                    "contains an empty field name"
+                ),
+            )
+        all_field_names.update(name for name, _ in members)
+        records.append(
+            ParsedRecord(
+                members=members,
+                location=JsonLocation(pointer=f"/{index}"),
+            )
+        )
+    return tuple(sorted(all_field_names)), tuple(records)
+
+
+def decode_json_value(text: str) -> NativeValue:
+    """Decode one JSON value while preserving exact parser-native categories."""
+
     def parse_integer(lexical: str) -> NativeValue:
         return NativeValue(NativeCategory.INTEGER, int(lexical), lexical)
 
@@ -404,63 +485,14 @@ def _parse_json(
             object_pairs_hook=parse_object,
         )
     except _NonFiniteNumber as error:
-        raise InputError(
-            code="invalid_syntax",
-            side=side,
-            message=f"{side.value} JSON input contains a non-finite number",
-        ) from error
+        raise JsonValueError(kind="non_finite") from error
     except json.JSONDecodeError as error:
-        raise InputError(
-            code="invalid_syntax",
-            side=side,
-            message=(
-                f"{side.value} JSON input has invalid syntax at line "
-                f"{error.lineno}, column {error.colno}"
-            ),
+        raise JsonValueError(
+            kind="invalid_syntax", line=error.lineno, column=error.colno
         ) from error
     except _DuplicateMember as error:
-        raise InputError(
-            code="invalid_structure",
-            side=side,
-            message=f"{side.value} JSON input contains a duplicate object member",
-        ) from error
-
-    if not isinstance(root, list):
-        raise InputError(
-            code="invalid_structure",
-            side=side,
-            message=(
-                f"{side.value} JSON root is {_json_category(root)}; it must be "
-                "one array of record objects"
-            ),
-        )
-
-    records: list[ParsedRecord] = []
-    all_field_names: set[str] = set()
-    for index, item in enumerate(root):
-        if (
-            not isinstance(item, NativeValue)
-            or item.category is not NativeCategory.OBJECT
-        ):
-            raise InputError(
-                code="invalid_structure",
-                side=side,
-                message=(
-                    f"{side.value} JSON array item {index} is "
-                    f"{_json_category(item)}; every item must be a record object"
-                ),
-            )
-        members = item.value
-        if not isinstance(members, tuple):
-            raise AssertionError("JSON object members were not normalized")
-        all_field_names.update(name for name, _ in members)
-        records.append(
-            ParsedRecord(
-                members=members,
-                location=JsonLocation(pointer=f"/{index}"),
-            )
-        )
-    return tuple(sorted(all_field_names)), tuple(records)
+        raise JsonValueError(kind="duplicate_member") from error
+    return _to_native(root)
 
 
 def _to_native(value: object) -> NativeValue:
@@ -484,18 +516,3 @@ def _to_native(value: object) -> NativeValue:
 def _escape_json_pointer(member_name: str) -> str:
     """Escape one JSON object member for use in an RFC 6901 pointer."""
     return member_name.replace("~", "~0").replace("/", "~1")
-
-
-def _json_category(value: object) -> str:
-    """Describe a parsed JSON value without reproducing its content."""
-    if isinstance(value, NativeValue):
-        return value.category.value
-    if isinstance(value, list):
-        return "array"
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, str):
-        return "string"
-    return type(value).__name__
