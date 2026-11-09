@@ -13,8 +13,9 @@ translation pipeline are implemented. Automatic strict-exact configuration
 generation and unambiguous custom or automatic record identity are also
 implemented. The contract phase now assesses configured fields independently on
 both sides, retains causal assessment issues, and consolidates field exclusions
-without blocking unaffected content. Record alignment, value comparison, and
-evidence generation are not yet available.
+without blocking unaffected content. The records phase deterministically aligns
+canonical identities and retains every matched, missing, and extra record. Value
+comparison and evidence generation are not yet available.
 
 The current normative artefacts are:
 
