@@ -1,4 +1,4 @@
-"""Safe loading and validation of custom comparison configurations."""
+"""Safely validate and resolve custom or generated comparison configurations."""
 
 from __future__ import annotations
 
@@ -322,6 +322,19 @@ def load_comparison_configuration(path: Path) -> EffectiveConfiguration:
     return _build_effective_configuration(document)
 
 
+def resolve_automatic_configuration(document: JsonObject) -> EffectiveConfiguration:
+    """Validate and resolve the internally generated automatic configuration."""
+    _validate_schema(document)
+    metadata = document.get("metadata")
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("id") != AUTOMATIC_CONFIGURATION_ID
+    ):
+        raise AssertionError("automatic configuration has an unexpected identifier")
+    _validate_semantics(document, allow_automatic_identifier=True)
+    return _build_effective_configuration(document)
+
+
 def _load_yaml_document(text: str) -> object:
     """Load exactly one safe YAML 1.2 document with forbidden features disabled."""
     try:
@@ -427,7 +440,11 @@ def _semantic_error(path: str, message: str) -> None:
     )
 
 
-def _validate_semantics(document: JsonObject) -> None:
+def _validate_semantics(
+    document: JsonObject,
+    *,
+    allow_automatic_identifier: bool = False,
+) -> None:
     """Apply cross-property rules not reliably expressible in JSON Schema."""
     fields = document["fields"]
     definitions = fields["definitions"]
@@ -462,7 +479,10 @@ def _validate_semantics(document: JsonObject) -> None:
                 )
             source_names[side][source_name] = field_name
 
-    if document["metadata"]["id"] == AUTOMATIC_CONFIGURATION_ID:
+    if (
+        document["metadata"]["id"] == AUTOMATIC_CONFIGURATION_ID
+        and not allow_automatic_identifier
+    ):
         _semantic_error(
             "$.metadata.id",
             "identifier is reserved for automatically generated configurations",

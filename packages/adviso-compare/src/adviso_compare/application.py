@@ -12,6 +12,11 @@ from adviso_compare.configuration import (
 )
 from adviso_compare.inputs import InputSide, ParsedDataset, load_dataset
 from adviso_compare.invocation import ComparisonInvocation
+from adviso_compare.records import (
+    RecordModel,
+    build_record_model,
+    generate_automatic_configuration,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,9 +24,11 @@ class PreparedComparison:
     """Validated configuration selection and losslessly parsed input datasets."""
 
     invocation: ComparisonInvocation
-    configuration: EffectiveConfiguration | None
+    configuration: EffectiveConfiguration
     reference: ParsedDataset
     query: ParsedDataset
+    reference_records: RecordModel
+    query_records: RecordModel
 
 
 def prepare_comparison(
@@ -38,11 +45,25 @@ def prepare_comparison(
         configuration = configuration_loader(invocation.configuration)
     reference = dataset_loader(invocation.reference, InputSide.REFERENCE)
     query = dataset_loader(invocation.query, InputSide.QUERY)
+    if configuration is None:
+        configuration = generate_automatic_configuration(reference, query)
+    reference_records = build_record_model(
+        reference,
+        configuration,
+        InputSide.REFERENCE,
+    )
+    query_records = build_record_model(
+        query,
+        configuration,
+        InputSide.QUERY,
+    )
     return PreparedComparison(
         invocation=invocation,
         configuration=configuration,
         reference=reference,
         query=query,
+        reference_records=reference_records,
+        query_records=query_records,
     )
 
 

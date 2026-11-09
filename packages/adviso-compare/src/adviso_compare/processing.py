@@ -7,6 +7,24 @@ from types import MappingProxyType
 from typing import Mapping
 
 
+_UNICODE_WHITE_SPACE_CHARACTERS = "".join(
+    chr(code_point)
+    for code_point in (
+        *range(0x0009, 0x000E),
+        0x0020,
+        0x0085,
+        0x00A0,
+        0x1680,
+        *range(0x2000, 0x200B),
+        0x2028,
+        0x2029,
+        0x202F,
+        0x205F,
+        0x3000,
+    )
+)
+
+
 _SCALAR_COMPARATORS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "string": frozenset({"typed_exact", "normalised_string"}),
@@ -66,11 +84,11 @@ def apply_source_text_operation(
     if operation == "trim":
         side = parameters["side"]
         if side == "leading":
-            return value.lstrip()
+            return value.lstrip(_UNICODE_WHITE_SPACE_CHARACTERS)
         if side == "trailing":
-            return value.rstrip()
+            return value.rstrip(_UNICODE_WHITE_SPACE_CHARACTERS)
         if side == "both":
-            return value.strip()
+            return value.strip(_UNICODE_WHITE_SPACE_CHARACTERS)
         raise AssertionError("validated trim side is not registered")
     if operation == "case_fold":
         return value.casefold()
