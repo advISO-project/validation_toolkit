@@ -60,6 +60,20 @@ def _composite_configuration() -> JsonObject:
         ],
         "query": [{"operation": "case_fold"}],
     }
+    key["value_mapping"] = {
+        "reference": [
+            {
+                "from": {"category": "string", "value": " S1 "},
+                "to": {"category": "string", "value": "sample-1"},
+            }
+        ],
+        "query": [
+            {
+                "from": {"category": "string", "value": "s1"},
+                "to": {"category": "string", "value": "sample-1"},
+            }
+        ],
+    }
     fields["definitions"]["batch"] = {
         "source_fields": {
             "reference": "reference_batch",
@@ -96,7 +110,7 @@ def test_custom_aliases_and_composite_key_processing_create_matching_identities(
     assert reference_record.key == query_record.key
     assert reference_record.source_identity == (" S1 ", "01")
     assert query_record.source_identity == ("s1", "1")
-    assert reference_record.canonical_identity == ("s1", "1")
+    assert reference_record.canonical_identity == ("sample-1", "1")
     assert prepared.configuration.record_key == ("record_id", "batch")
 
 
@@ -239,7 +253,7 @@ def test_key_error_diagnostic_escapes_control_characters_in_json_pointer(
     assert r"\n" in raised.value.diagnostic
 
 
-def test_automatic_record_id_generates_strict_exact_shared_fields_and_exclusions(
+def test_automatic_record_id_declares_shared_fields_and_omits_one_sided_fields(
     tmp_path: Path,
 ) -> None:
     """Shared record_id is preferred and only exact same-name fields are declared."""
@@ -278,6 +292,45 @@ def test_automatic_record_id_generates_strict_exact_shared_fields_and_exclusions
         "null_policy": {"allowed": True, "nulls_equal": True},
         "comparator": {"name": "preserved_exact"},
     }
+
+
+def test_automatic_configuration_is_invariant_to_input_and_field_order(
+    tmp_path: Path,
+) -> None:
+    """Equivalent record, member, and column orderings produce identical rules."""
+    first_reference = _write(
+        tmp_path / "first-reference.json",
+        (
+            '[{"record_id":"S2","b":2,"a":"y"},'
+            '{"record_id":"S1","a":"x","b":1}]'
+        ),
+    )
+    first_query = _write(
+        tmp_path / "first-query.csv",
+        "record_id,b,a\nS1,1,x\nS2,2,y\n",
+    )
+    second_reference = _write(
+        tmp_path / "second-reference.json",
+        (
+            '[{"a":"x","b":1,"record_id":"S1"},'
+            '{"a":"y","record_id":"S2","b":2}]'
+        ),
+    )
+    second_query = _write(
+        tmp_path / "second-query.csv",
+        "a,record_id,b\ny,S2,2\nx,S1,1\n",
+    )
+
+    first = prepare_comparison(
+        _invocation(tmp_path, first_reference, first_query)
+    )
+    second = prepare_comparison(
+        _invocation(tmp_path, second_reference, second_query)
+    )
+
+    assert first.configuration.document == second.configuration.document
+    assert set(first.reference_records.by_key) == set(second.reference_records.by_key)
+    assert set(first.query_records.by_key) == set(second.query_records.by_key)
 
 
 def test_automatic_discovery_selects_the_only_exact_shared_string_candidate(

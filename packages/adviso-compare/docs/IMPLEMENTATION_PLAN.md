@@ -195,8 +195,9 @@ Work in this step:
   dataset-wide field discovery;
 - apply the specified `record_id` preference and conservative single-field key
   discovery algorithm, including its no-fallback rule;
-- generate same-name non-key field definitions and one-sided exclusions without
-  type inference, mapping, normalisation, or coercion; and
+- generate same-name non-key field definitions without type inference,
+  mapping, normalisation, or coercion, while leaving one-sided fields undefined
+  so that the contract phase can produce their exclusion summaries; and
 - validate the generated configuration before comparison.
 
 **Approval demonstration:** custom aliases and composite keys work; duplicate or
