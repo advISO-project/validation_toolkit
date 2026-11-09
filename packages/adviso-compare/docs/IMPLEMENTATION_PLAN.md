@@ -264,9 +264,11 @@ Work in this step:
 - preserve the independence of finding classification, phase, and review
   priority.
 
-**Approval demonstration:** a matrix covering every comparator and its boundary
-conditions produces the expected canonical outcomes, and one mixed comparison
-accounts for every configured value opportunity.
+**Approval demonstration:** a matrix covering representative semantics for
+every comparator, together with focused numeric-tolerance boundary cases,
+produces the expected canonical outcomes. One mixed custom comparison accounts
+for every configured value opportunity, and an automatic-mode comparison
+demonstrates that generated configuration flows through the values phase.
 
 ### Step 9 — Assemble and validate canonical results
 

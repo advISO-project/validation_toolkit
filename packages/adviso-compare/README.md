@@ -15,7 +15,9 @@ implemented. The contract phase now assesses configured fields independently on
 both sides, retains causal assessment issues, and consolidates field exclusions
 without blocking unaffected content. The records phase deterministically aligns
 canonical identities and retains every matched, missing, and extra record. Value
-comparison and evidence generation are not yet available.
+comparison now applies every version 1 comparator and accounts for matched,
+mismatched, and not-assessable opportunities. Canonical evidence generation is
+not yet available.
 
 The current normative artefacts are:
 
