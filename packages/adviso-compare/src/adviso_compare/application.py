@@ -6,17 +6,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from adviso_compare.alignment import align_records
 from adviso_compare.configuration import (
     EffectiveConfiguration,
     load_comparison_configuration,
 )
+from adviso_compare.contract import assess_contract
 from adviso_compare.inputs import InputSide, ParsedDataset, load_dataset
-from adviso_compare.invocation import ComparisonInvocation
+from adviso_compare.invocation import ComparisonInvocation, ComparisonOutcome
 from adviso_compare.records import (
     RecordModel,
     build_record_model,
     generate_automatic_configuration,
 )
+from adviso_compare.reporting import publish_evidence_package
+from adviso_compare.results import assemble_result
+from adviso_compare.values import compare_values
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,8 +72,30 @@ def prepare_comparison(
     )
 
 
-def execute_comparison(invocation: ComparisonInvocation) -> int:
-    """Execute a comparison once later implementation increments supply the core."""
-    raise NotImplementedError(
-        "comparison execution is not available at this implementation stage"
+def execute_comparison(invocation: ComparisonInvocation) -> ComparisonOutcome:
+    """Run every comparison phase and publish its validated evidence package."""
+    prepared = prepare_comparison(invocation)
+    contract = assess_contract(
+        prepared.configuration,
+        reference=prepared.reference,
+        query=prepared.query,
+        reference_records=prepared.reference_records,
+        query_records=prepared.query_records,
     )
+    records = align_records(prepared.reference_records, prepared.query_records)
+    values = compare_values(prepared.configuration, contract, records)
+    result = assemble_result(prepared, contract, records, values)
+    document = result.document()
+    finding_counts = document["summary"]["findings"]["by_classification"]
+    outcome = ComparisonOutcome(
+        run_status=document["run"]["status"],
+        output=invocation.output,
+        comparison_differences=finding_counts["comparison_difference"],
+        assessment_issues=finding_counts["assessment_issue"],
+    )
+    publish_evidence_package(
+        invocation.output,
+        result,
+        overwrite=invocation.overwrite,
+    )
+    return outcome

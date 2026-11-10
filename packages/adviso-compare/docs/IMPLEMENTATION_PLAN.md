@@ -356,8 +356,9 @@ for a release decision.
 
 Work in this step:
 
-- write the offline user guide covering installation, supported inputs, custom
-  and automatic operation, the complete configuration model, canonical result
+- write the user guide, available offline after installation, covering
+  installation, supported inputs, custom and automatic operation, the complete
+  configuration model, canonical result
   fields, HTML interpretation, exit behaviour, security cautions, and worked
   examples;
 - validate every complete configuration and result example against its packaged
@@ -374,11 +375,12 @@ This step does not silently introduce a formatter, linter, type checker,
 dependency manager, CI system, or release policy. Any new project-wide tooling
 or policy identified as desirable is proposed separately for approval.
 
-**Approval demonstration:** a fresh user can install the built artefact offline,
-follow the packaged guide, run both documented modes, validate the resulting
-canonical JSON, interpret the HTML, and reproduce the controlled fixtures. The
-final review identifies any requirements that remain dependent on manual or
-release-process evidence.
+**Approval demonstration:** a fresh user can install the built artefact and its
+declared dependencies using the documented process, follow the packaged guide,
+run both documented modes without any runtime network service, validate the
+resulting canonical JSON, interpret the HTML, and reproduce the controlled
+fixtures. The final review identifies any requirements that remain dependent on
+manual or release-process evidence.
 
 ## 4. Recommended review boundaries
 

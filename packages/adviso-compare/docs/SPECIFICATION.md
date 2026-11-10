@@ -1444,7 +1444,10 @@ Configured-field exclusions MUST be ordered first by `canonical_field` using Uni
 - **REQ-OUT-045.** The complete evidence-package directory MUST be published atomically where the platform supports it.
 - **REQ-OUT-046.** Without `--overwrite`, any existing filesystem object at the selected destination MUST cause an output error. With `--overwrite`, the tool MAY replace only an existing regular directory that is recognisably a complete version 1 evidence package containing exactly `comparison-results.json` and `comparison-report.html`. It MUST reject an existing regular file, symbolic link, special filesystem object, empty directory, partial package, or directory containing any additional entry, even when `--overwrite` is supplied.
 - **REQ-OUT-116.** When replacing an existing evidence package, the tool MUST leave the existing package intact until the replacement package has been fully generated and has passed structural and semantic self-validation. A failed replacement MUST preserve the existing package.
-- **REQ-OUT-047.** The actual selected output directory MUST be reported clearly.
+- **REQ-OUT-047.** The selected output directory MUST be reported clearly in the
+  normal completion summary. If the user supplied a relative path, that path MUST
+  be reported as supplied. If the user supplied an absolute path, only its final
+  directory name MUST be reported; the absolute path MUST NOT be reproduced.
 - **REQ-OUT-048.** File suffixes MUST be handled structurally, not with character stripping.
 - **REQ-OUT-049.** A failed or interrupted write MUST NOT publish a partial directory at the selected destination as if it were a complete evidence package. Temporary output MUST be identifiable as temporary and cleaned up where possible.
 
@@ -1524,9 +1527,9 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 
 ## 12. Deployment, accessibility, and reliability
 
-- **REQ-DEP-001.** all core comparison functionality MUST operate fully offline;
-- **REQ-DEP-002.** the tool MUST NOT require a hosted service, account, licence server, or telemetry connection;
-- **REQ-DEP-003.** an offline-installable artefact with integrity information SHOULD be provided;
+- **REQ-DEP-001.** Once the software and its dependencies are installed, all core comparison functionality MUST operate fully offline;
+- **REQ-DEP-002.** During operation, the tool MUST NOT require a hosted service, account, licence server, telemetry connection, or any other network service;
+- **REQ-DEP-003.** Version 1 does not require an offline installation bundle. Installation MAY use a network connection to obtain the `adviso-compare` distribution and its declared dependencies from package indexes. This allowance applies only to installation and MUST NOT weaken the offline-operation requirements in `REQ-SEC-002`, `REQ-SEC-003`, `REQ-DEP-001`, or `REQ-DEP-002`;
 - **REQ-DEP-004.** reports MUST use open formats;
 - **REQ-DEP-005.** reports MUST NOT require proprietary software;
 - **REQ-DEP-006.** errors and documentation SHOULD be usable without specialist Python knowledge;
@@ -1765,7 +1768,7 @@ This catalogue summarises minimum executable scenarios for the first release. It
   - Verifies: `REQ-SEC-002`, `REQ-SEC-003`, `REQ-DEP-001`, `REQ-DEP-002`
 - **AT-EVD-013:** Findings attributable to declared fields inherit their resolved review priority; other findings do not. HTML presentation may distinguish priorities but does not rely on colour alone, and priority never changes findings, counts, status, or exit code.
   - Verifies: `REQ-CFG-041`, `REQ-CFG-042`, `REQ-CFG-043`, `REQ-CFG-044`, `REQ-CFG-045`, `REQ-OUT-034`
-- **AT-PKG-001:** The built distribution is named `adviso-compare`, contains an importable `adviso_compare` package and every required subpackage, installs the `adviso-compare` executable, and completes an end-to-end comparison through that executable. This consolidated parameterized scenario also covers: The release artefact can be installed and used without network access, contains offline documentation and integrity information, and supports an end-to-end comparison in an isolated environment.
+- **AT-PKG-001:** The built distribution is named `adviso-compare`, contains an importable `adviso_compare` package and every required subpackage, installs the `adviso-compare` executable in an isolated environment where its declared dependencies are available, and completes an end-to-end comparison through that executable. Installation may access package indexes. The installed executable requires no network service during comparison. The distribution contains the required offline documentation and integrity information.
   - Verifies: `REQ-PRD-001`, `REQ-PRD-003`, `REQ-CFG-087`, `REQ-TST-013`, `REQ-TST-030`, `REQ-DEP-003`, `REQ-DEP-007`
 - **AT-EVD-015:** Canonical results contain valid run, phase, software, runtime, and fixed-dialect metadata; run IDs are canonical lowercase UUIDv4 values; completion timestamps are UTC RFC 3339 values using `Z` and whole-second precision; Python implementation/version, normalized platform, and Unicode database version use their prescribed forms without identifying host details; start time and duration are absent; and overall status reconciles with phase statuses.
   - Verifies: `REQ-OUT-009`, `REQ-OUT-010`, `REQ-OUT-011`, `REQ-OUT-014`, `REQ-OUT-015`, `REQ-OUT-016`, `REQ-OUT-020`, `REQ-OUT-121`, `REQ-OUT-122`, `REQ-OUT-123`, `REQ-OUT-124`

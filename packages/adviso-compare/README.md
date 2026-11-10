@@ -20,7 +20,8 @@ mismatched, and not-assessable opportunities. The comparison core now assembles
 and self-validates deterministic canonical JSON results. It can also render the
 self-contained HTML view and atomically publish the validated, two-file evidence
 package with strict overwrite protection. End-to-end command-line integration
-and execution-error handling remain to be implemented.
+and execution-error handling are also implemented. Full user documentation and
+release-candidate verification remain to be completed.
 
 The current normative artefacts are:
 

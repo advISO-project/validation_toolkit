@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from importlib.metadata import version
 from pathlib import Path
 from typing import NoReturn, Sequence
 
+from adviso_compare.configuration import ConfigurationError
+from adviso_compare.inputs import InputError
 from adviso_compare.invocation import ComparisonExecutor, ComparisonInvocation
+from adviso_compare.records import RecordKeyError
+from adviso_compare.reporting import OutputError
 
 
 class _ArgumentParser(argparse.ArgumentParser):
@@ -15,6 +20,8 @@ class _ArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> NoReturn:
         """Report invalid command-line syntax without touching comparison inputs."""
+        if not message.startswith("the following arguments are required:"):
+            message = "invalid command-line arguments; use --help for usage"
         self.exit(2, f"ERROR [invocation.invalid_arguments]: {message}\n")
 
 
@@ -88,16 +95,46 @@ def parse_invocation(arguments: Sequence[str] | None = None) -> ComparisonInvoca
     )
 
 
+def _display_output_path(path: Path) -> str:
+    """Render the selected destination without disclosing an absolute path."""
+    if not path.is_absolute():
+        return str(path)
+    return path.name or "<selected directory>"
+
+
 def main(
     arguments: Sequence[str] | None = None,
     *,
     executor: ComparisonExecutor | None = None,
 ) -> int:
-    """Parse one invocation and dispatch it to the comparison application."""
-    invocation = parse_invocation(arguments)
-    if executor is None:
-        from adviso_compare.application import execute_comparison
+    """Execute one invocation behind the stable command-line error boundary."""
+    try:
+        invocation = parse_invocation(arguments)
+        if executor is None:
+            from adviso_compare.application import execute_comparison
 
-        executor = execute_comparison
-    return executor(invocation)
+            executor = execute_comparison
+        outcome = executor(invocation)
+    except (ConfigurationError, InputError, RecordKeyError, OutputError) as error:
+        print(error.diagnostic, file=sys.stderr)
+        return 2
+    except MemoryError:
+        print(
+            "ERROR [resource.exhausted]: available memory was exhausted; "
+            "reduce input size and retry",
+            file=sys.stderr,
+        )
+        return 2
+    except Exception:
+        print(
+            "ERROR [internal.unexpected]: an unexpected internal error occurred; "
+            "rerun and report the failure if it persists",
+            file=sys.stderr,
+        )
+        return 3
 
+    print(f"Run status: {outcome.run_status}")
+    print(f"Comparison differences: {outcome.comparison_differences}")
+    print(f"Assessment issues: {outcome.assessment_issues}")
+    print(f"Evidence package: {_display_output_path(outcome.output)}")
+    return outcome.exit_code
