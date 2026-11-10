@@ -13,16 +13,10 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import Any, Mapping
 from uuid import uuid4
 
-from adviso_compare.results import JsonObject, serialize_result, validate_result
-
-if TYPE_CHECKING:
-    from adviso_compare.alignment import RecordsResult
-    from adviso_compare.application import PreparedComparison
-    from adviso_compare.contract import ContractResult
-    from adviso_compare.values import ValuesResult
+from adviso_compare.results import CanonicalResult, validate_result
 
 
 RESULTS_FILENAME = "comparison-results.json"
@@ -37,6 +31,9 @@ _UNSUPPORTED_RENAME_ERRORS = {
     for name in ("EINVAL", "ENOSYS", "ENOTSUP", "EOPNOTSUPP")
     if hasattr(errno, name)
 }
+
+
+# Public reporting API
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,27 +126,18 @@ def render_html_report(document: Mapping[str, Any]) -> bytes:
     return "\n".join(sections).encode("utf-8")
 
 
+# Evidence-package publication
+
+
 def publish_evidence_package(
     destination: Path,
-    document: JsonObject,
+    result: CanonicalResult,
     *,
-    prepared: PreparedComparison,
-    contract: ContractResult,
-    records: RecordsResult,
-    values: ValuesResult,
     overwrite: bool = False,
 ) -> Path:
-    """Validate, stage, and publish one complete two-file evidence package."""
-    validate_result(
-        document,
-        prepared=prepared,
-        contract=contract,
-        records=records,
-        values=values,
-    )
-    json_content = serialize_result(document)
-    published_document = json.loads(json_content.decode("utf-8"))
-    html_content = render_html_report(published_document)
+    """Stage and publish one validated two-file evidence package."""
+    json_content = result.json_bytes
+    html_content = render_html_report(result.document())
     destination = Path(destination)
     existing = _inspect_destination(destination, overwrite=overwrite)
     parent = destination.parent
@@ -387,6 +375,9 @@ def _fsync_directory(path: Path) -> None:
         pass
     finally:
         os.close(descriptor)
+
+
+# HTML rendering helpers
 
 
 def _metric(label: str, value: str, kind: str) -> str:

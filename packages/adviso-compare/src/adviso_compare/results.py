@@ -6,7 +6,7 @@ import json
 import platform as runtime_platform
 import unicodedata
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from importlib.resources import files
@@ -65,6 +65,35 @@ CLASSIFICATIONS = ("comparison_difference", "assessment_issue")
 REVIEW_PRIORITIES = ("low", "normal", "high", "unassigned")
 
 
+# Public result types and assembly API
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class CanonicalResult:
+    """An immutable, fully validated canonical-result serialization."""
+
+    _json_bytes: bytes = field(repr=False)
+
+    @classmethod
+    def _from_validated_bytes(cls, json_bytes: bytes) -> CanonicalResult:
+        """Create an artifact after contextual validation has succeeded."""
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "_json_bytes", json_bytes)
+        return instance
+
+    @property
+    def json_bytes(self) -> bytes:
+        """Return the exact UTF-8 JSON serialization selected for publication."""
+        return self._json_bytes
+
+    def document(self) -> JsonObject:
+        """Return a new mutable view of the canonical JSON document."""
+        document = json.loads(self._json_bytes.decode("utf-8"))
+        if not isinstance(document, dict):  # Defensive; the schema requires this.
+            raise ResultValidationError("canonical result root is not an object")
+        return document
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeIdentity:
     """Non-identifying software-runtime provenance."""
@@ -116,7 +145,7 @@ def assemble_result(
     completed_at: datetime | None = None,
     software_version: str = __version__,
     runtime: RuntimeIdentity | None = None,
-) -> JsonObject:
+) -> CanonicalResult:
     """Build and self-validate one complete canonical result document."""
     identifier = run_id or uuid4()
     completion = completed_at or datetime.now(timezone.utc)
@@ -166,14 +195,16 @@ def assemble_result(
         "exclusions": [_exclusion_document(item) for item in contract.exclusions],
         "findings": findings,
     }
+    json_bytes = serialize_result(document)
+    serialized_document = json.loads(json_bytes.decode("utf-8"))
     validate_result(
-        document,
+        serialized_document,
         prepared=prepared,
         contract=contract,
         records=records,
         values=values,
     )
-    return document
+    return CanonicalResult._from_validated_bytes(json_bytes)
 
 
 def serialize_result(document: Mapping[str, object]) -> bytes:
@@ -228,6 +259,9 @@ def _results_validator() -> Draft202012Validator:
         registry=registry,
         format_checker=FormatChecker(),
     )
+
+
+# Result-document assembly helpers
 
 
 def _input_document(dataset: ParsedDataset) -> JsonObject:
@@ -433,6 +467,9 @@ def _exclusion_document(
         "source_field": exclusion.source_field,
         "record_count": exclusion.record_count,
     }
+
+
+# Finding and evidence construction
 
 
 def _assemble_findings(
@@ -850,6 +887,9 @@ def _location_sort_key(location: object) -> tuple[object, ...]:
             location.get("field", ""),
         )
     return (1, location["json_pointer"])
+
+
+# Semantic result validation
 
 
 def _validate_semantics(

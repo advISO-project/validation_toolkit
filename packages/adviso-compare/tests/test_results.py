@@ -17,6 +17,7 @@ from adviso_compare.application import PreparedComparison, prepare_comparison
 from adviso_compare.contract import assess_contract
 from adviso_compare.invocation import ComparisonInvocation
 from adviso_compare.results import (
+    CanonicalResult,
     ResultValidationError,
     RuntimeIdentity,
     assemble_result,
@@ -90,7 +91,45 @@ def _assemble(prepared: PreparedComparison) -> JsonObject:
         completed_at=COMPLETED_AT,
         software_version="1.2.3",
         runtime=RUNTIME,
+    ).document()
+
+
+def test_assembled_result_is_an_immutable_validated_serialization(
+    tmp_path: Path,
+) -> None:
+    """Assembly returns stable bytes and independent parsed views."""
+    prepared = _prepare(
+        tmp_path,
+        '[{"reference_id":"S1","expected_value":1}]',
+        '[{"query_id":"S1","observed_value":1}]',
+        minimal_configuration(),
     )
+    contract = assess_contract(
+        prepared.configuration,
+        reference=prepared.reference,
+        query=prepared.query,
+        reference_records=prepared.reference_records,
+        query_records=prepared.query_records,
+    )
+    records = align_records(prepared.reference_records, prepared.query_records)
+    values = compare_values(prepared.configuration, contract, records)
+
+    result = assemble_result(
+        prepared,
+        contract,
+        records,
+        values,
+        run_id=RUN_ID,
+        completed_at=COMPLETED_AT,
+        software_version="1.2.3",
+        runtime=RUNTIME,
+    )
+    first_view = result.document()
+    first_view["run"]["status"] = "incomplete"
+
+    assert isinstance(result, CanonicalResult)
+    assert result.document()["run"]["status"] == "complete"
+    assert result.json_bytes == serialize_result(result.document())
 
 
 def test_complete_result_reconciles_findings_summaries_and_provenance(
@@ -427,7 +466,7 @@ def test_finding_total_order_coalesces_duplicates_before_assigning_ids(
         completed_at=COMPLETED_AT,
         software_version="1.2.3",
         runtime=RUNTIME,
-    )
+    ).document()
 
     assert [
         (
@@ -595,7 +634,7 @@ def test_default_run_and_runtime_metadata_use_live_normalized_values(
     records = align_records(prepared.reference_records, prepared.query_records)
     values = compare_values(prepared.configuration, contract, records)
 
-    result = assemble_result(prepared, contract, records, values)
+    result = assemble_result(prepared, contract, records, values).document()
 
     assert UUID(result["run"]["id"]).version == 4
     assert result["run"]["completed_at"].endswith("Z")

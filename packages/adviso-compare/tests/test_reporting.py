@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import stat
-from copy import deepcopy
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,9 +14,9 @@ import pytest
 import yaml
 
 import adviso_compare.reporting as reporting
-from adviso_compare.alignment import RecordsResult, align_records
-from adviso_compare.application import PreparedComparison, prepare_comparison
-from adviso_compare.contract import ContractResult, assess_contract
+from adviso_compare.alignment import align_records
+from adviso_compare.application import prepare_comparison
+from adviso_compare.contract import assess_contract
 from adviso_compare.invocation import ComparisonInvocation
 from adviso_compare.reporting import (
     OutputError,
@@ -26,23 +24,12 @@ from adviso_compare.reporting import (
     render_html_report,
 )
 from adviso_compare.results import (
-    ResultValidationError,
+    CanonicalResult,
     RuntimeIdentity,
     assemble_result,
 )
-from adviso_compare.values import ValuesResult, compare_values
-from tests.support.documents import JsonObject, minimal_configuration, minimal_result
-
-
-@dataclass(frozen=True, slots=True)
-class _Evidence:
-    """One generated result and the context required to revalidate it."""
-
-    document: JsonObject
-    prepared: PreparedComparison
-    contract: ContractResult
-    records: RecordsResult
-    values: ValuesResult
+from adviso_compare.values import compare_values
+from tests.support.documents import minimal_configuration, minimal_result
 
 
 def _generated_evidence(
@@ -50,7 +37,7 @@ def _generated_evidence(
     *,
     incomplete: bool = False,
     automatic: bool = False,
-) -> _Evidence:
+) -> CanonicalResult:
     """Generate canonical evidence through all three comparison phases."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     if automatic:
@@ -93,7 +80,7 @@ def _generated_evidence(
     )
     records = align_records(prepared.reference_records, prepared.query_records)
     values = compare_values(prepared.configuration, contract, records)
-    document = assemble_result(
+    result = assemble_result(
         prepared,
         contract,
         records,
@@ -107,23 +94,19 @@ def _generated_evidence(
             unicode_version="15.1.0",
         ),
     )
-    return _Evidence(document, prepared, contract, records, values)
+    return result
 
 
 def _publish(
     destination: Path,
-    evidence: _Evidence,
+    result: CanonicalResult,
     *,
     overwrite: bool = False,
 ) -> Path:
-    """Publish generated evidence with its mandatory validation context."""
+    """Publish generated, validated evidence."""
     return publish_evidence_package(
         destination,
-        evidence.document,
-        prepared=evidence.prepared,
-        contract=evidence.contract,
-        records=evidence.records,
-        values=evidence.values,
+        result,
         overwrite=overwrite,
     )
 
@@ -165,7 +148,7 @@ def test_html_report_is_a_self_contained_view_of_canonical_json() -> None:
 
 def test_automatic_mode_report_explains_its_limits(tmp_path: Path) -> None:
     """Automatic-mode evidence prominently directs attention to exclusions."""
-    result = _generated_evidence(tmp_path, automatic=True).document
+    result = _generated_evidence(tmp_path, automatic=True).document()
 
     report = render_html_report(result).decode("utf-8")
 
@@ -184,7 +167,7 @@ def test_publication_creates_exact_private_two_file_package(
         tmp_path / "inputs",
         incomplete=status == "incomplete",
     )
-    result = evidence.document
+    result = evidence.document()
     destination = tmp_path / f"comparison.{status}.evidence"
 
     selected = _publish(destination, evidence)
@@ -198,6 +181,9 @@ def test_publication_creates_exact_private_two_file_package(
         (destination / "comparison-results.json").read_text(encoding="utf-8")
     )
     assert published == result
+    assert (destination / "comparison-results.json").read_bytes() == (
+        evidence.json_bytes
+    )
     assert (destination / "comparison-report.html").read_bytes() == (
         render_html_report(published)
     )
@@ -268,9 +254,9 @@ def test_overwrite_replaces_only_a_complete_version_one_package(
         incomplete=True,
     )
     destination = tmp_path / "evidence"
-    original = original_evidence.document
+    original = original_evidence.document()
     _publish(destination, original_evidence)
-    replacement = replacement_evidence.document
+    replacement = replacement_evidence.document()
 
     with pytest.raises(OutputError) as raised:
         _publish(destination, replacement_evidence)
@@ -348,7 +334,7 @@ def test_transient_old_package_cleanup_failure_does_not_misreport_publication(
     replacement_evidence = _generated_evidence(tmp_path / "replacement-inputs")
     destination = tmp_path / "evidence"
     _publish(destination, original_evidence)
-    replacement = replacement_evidence.document
+    replacement = replacement_evidence.document()
     real_rmtree = reporting.shutil.rmtree
     failed_once = False
 
@@ -418,51 +404,4 @@ def test_special_filesystem_destination_is_never_replaced(tmp_path: Path) -> Non
 
     assert raised.value.code == "invalid_destination"
     assert stat.S_ISFIFO(destination.lstat().st_mode)
-    assert not list(tmp_path.glob(".evidence.*"))
-
-
-@pytest.mark.parametrize("inconsistency", ["schema", "source_context"])
-def test_invalid_generated_result_is_not_rendered_or_published(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    inconsistency: str,
-) -> None:
-    """Generated-result self-validation precedes HTML or filesystem output."""
-    evidence = _generated_evidence(tmp_path / "inputs")
-    invalid: JsonObject = deepcopy(evidence.document)
-    if inconsistency == "schema":
-        invalid["run"]["id"] = "not-a-uuid"
-    else:
-        invalid["exclusions"] = [
-            {
-                "code": "undeclared_field_excluded",
-                "side": "query",
-                "source_field": "fabricated_field",
-                "record_count": 1,
-            }
-        ]
-    rendered = False
-
-    def observe_render(_: JsonObject) -> bytes:
-        nonlocal rendered
-        rendered = True
-        return b""
-
-    monkeypatch.setattr(
-        "adviso_compare.reporting.render_html_report",
-        observe_render,
-    )
-
-    with pytest.raises(ResultValidationError):
-        publish_evidence_package(
-            tmp_path / "evidence",
-            invalid,
-            prepared=evidence.prepared,
-            contract=evidence.contract,
-            records=evidence.records,
-            values=evidence.values,
-        )
-
-    assert rendered is False
-    assert not (tmp_path / "evidence").exists()
     assert not list(tmp_path.glob(".evidence.*"))
