@@ -1,0 +1,3 @@
+specimen_id,reported_value,reported_interpretation,reported_markers,pipeline_version
+SAMPLE-001,1.239,pos,wild_type/mutant,2.1
+SAMPLE-002,2.7,neg,wild_type,2.1

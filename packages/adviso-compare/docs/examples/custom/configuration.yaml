@@ -1,0 +1,162 @@
+schema_version: "1.0"
+
+metadata:
+  id: "org.example.user-guide-comparison"
+  revision: "1.0.0"
+  title: "User-guide comparison example"
+  description: "Synthetic rules showing representative version 1 features"
+
+fields:
+  record_key:
+    - "sample"
+  in_scope:
+    - "sample"
+    - "measurement"
+    - "interpretation"
+    - "markers"
+  definitions:
+    sample:
+      source_fields:
+        reference: "sample_id"
+        query: "specimen_id"
+      required:
+        reference: true
+        query: true
+      logical_type: "string"
+      null_policy:
+        allowed: false
+        nulls_equal: false
+      comparator:
+        name: "typed_exact"
+    measurement:
+      source_fields:
+        reference: "expected_value"
+        query: "reported_value"
+      required:
+        reference: true
+        query: true
+      logical_type: "decimal"
+      null_policy:
+        allowed: false
+        nulls_equal: false
+      typed_normalisation:
+        - operation: "decimal_quantise"
+          parameters:
+            places: 3
+            rounding: "half_even"
+      comparator:
+        name: "numeric_tolerance"
+        parameters:
+          absolute_tolerance: "0.01"
+      review_priority: "high"
+    interpretation:
+      source_fields:
+        reference: "expected_interpretation"
+        query: "reported_interpretation"
+      required:
+        reference: true
+        query: true
+      logical_type: "string"
+      null_policy:
+        allowed: true
+        nulls_equal: true
+        missing_tokens:
+          reference:
+            - category: "string"
+              value: "NA"
+          query:
+            - category: "string"
+              value: "."
+      source_normalisation:
+        reference:
+          - operation: "trim"
+            parameters:
+              side: "both"
+          - operation: "case_fold"
+        query:
+          - operation: "trim"
+            parameters:
+              side: "both"
+          - operation: "case_fold"
+      value_mapping:
+        reference:
+          - from:
+              category: "string"
+              value: "detected"
+            to:
+              category: "string"
+              value: "detected"
+          - from:
+              category: "string"
+              value: "not detected"
+            to:
+              category: "string"
+              value: "not_detected"
+        query:
+          - from:
+              category: "string"
+              value: "pos"
+            to:
+              category: "string"
+              value: "detected"
+          - from:
+              category: "string"
+              value: "neg"
+            to:
+              category: "string"
+              value: "not_detected"
+      comparator:
+        name: "typed_exact"
+      review_priority: "normal"
+    markers:
+      source_fields:
+        reference: "expected_markers"
+        query: "reported_markers"
+      required:
+        reference: true
+        query: true
+      logical_type:
+        collection_type: "set"
+        element_type: "string"
+        element_comparator:
+          name: "typed_exact"
+      null_policy:
+        allowed: false
+        nulls_equal: false
+      collection_representation:
+        query:
+          format: "delimited_text"
+          delimiter: "/"
+          element_normalisation:
+            - operation: "trim"
+              parameters:
+                side: "both"
+            - operation: "case_fold"
+          element_mapping:
+            - from:
+                category: "string"
+                value: "wild_type"
+              to:
+                category: "string"
+                value: "WT"
+            - from:
+                category: "string"
+                value: "mutant"
+              to:
+                category: "string"
+                value: "MUT"
+      comparator:
+        name: "set_exact"
+      review_priority: "high"
+    curator_note:
+      source_fields:
+        reference: "curator_note"
+        query: "curator_note"
+      required:
+        reference: false
+        query: false
+      null_policy:
+        allowed: true
+        nulls_equal: true
+      comparator:
+        name: "preserved_exact"

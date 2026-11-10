@@ -441,6 +441,7 @@ def test_help_documents_the_complete_direct_interface_and_user_guide(
     ):
         assert option in captured.out
     assert "user guide" in captured.out.lower()
+    assert "share/doc/adviso-compare/USER_GUIDE.md" in captured.out
     assert "subcommand" not in captured.out.lower()
 
 

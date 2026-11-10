@@ -1,0 +1,4 @@
+sample_id,lineage,comment,pipeline_version
+SAMPLE-001,L1,expected,2.1
+SAMPLE-002,L2,expected,2.1
+SAMPLE-003,L1,expected,2.1

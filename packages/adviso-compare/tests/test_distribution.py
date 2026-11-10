@@ -22,6 +22,15 @@ REQUIRED_PACKAGE_MEMBERS = {
     "adviso_compare/schemas/comparison-results-v1.0.schema.json",
 }
 
+REQUIRED_DOCUMENTATION_MEMBERS = {
+    "share/doc/adviso-compare/USER_GUIDE.md",
+    "share/doc/adviso-compare/examples/automatic/query.csv",
+    "share/doc/adviso-compare/examples/automatic/reference.csv",
+    "share/doc/adviso-compare/examples/custom/configuration.yaml",
+    "share/doc/adviso-compare/examples/custom/query.csv",
+    "share/doc/adviso-compare/examples/custom/reference.json",
+}
+
 
 def _relative_sdist_members(archive: Path) -> set[str]:
     """Return source-distribution members without its generated root directory."""
@@ -85,12 +94,28 @@ def test_distributions_and_installed_executable_cover_the_product_path(
             if member.endswith(".dist-info/METADATA")
         )
         metadata = BytesParser().parsebytes(distribution.read(metadata_member))
+        record_member = next(
+            member for member in wheel_members if member.endswith(".dist-info/RECORD")
+        )
+        assert distribution.read(record_member)
     sdist_members = _relative_sdist_members(source_distribution)
 
     assert metadata["Name"] == "adviso-compare"
     assert REQUIRED_PACKAGE_MEMBERS <= wheel_members
+    assert all(
+        any(member.endswith(path) for member in wheel_members)
+        for path in REQUIRED_DOCUMENTATION_MEMBERS
+    )
     assert {
         f"src/{member}" for member in REQUIRED_PACKAGE_MEMBERS
+    } <= sdist_members
+    assert {
+        "docs/USER_GUIDE.md",
+        "docs/examples/automatic/query.csv",
+        "docs/examples/automatic/reference.csv",
+        "docs/examples/custom/configuration.yaml",
+        "docs/examples/custom/query.csv",
+        "docs/examples/custom/reference.json",
     } <= sdist_members
 
     environment = tmp_path / "installed"
@@ -123,6 +148,13 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         check=True,
         capture_output=True,
         text=True,
+    )
+    installed_guide = (
+        environment / "share" / "doc" / "adviso-compare" / "USER_GUIDE.md"
+    )
+    assert installed_guide.is_file()
+    assert "# AdvISO Compare user guide" in installed_guide.read_text(
+        encoding="utf-8"
     )
 
     executable = _installed_executable(environment)
@@ -240,3 +272,33 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         "ERROR [input.unreadable]: reference input could not be read\n"
     )
     assert not failed_output.exists()
+
+    source_environment = tmp_path / "installed-from-source"
+    venv.EnvBuilder(with_pip=True).create(source_environment)
+    source_python = _installed_python(source_environment)
+    subprocess.run(
+        [
+            str(source_python),
+            "-m",
+            "pip",
+            "install",
+            "--no-build-isolation",
+            "--no-deps",
+            str(source_distribution),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=runtime_environment,
+    )
+    source_location_check = (
+        "from pathlib import Path; import adviso_compare; "
+        "assert Path(adviso_compare.__file__).is_relative_to("
+        f"Path({str(source_environment)!r}))"
+    )
+    subprocess.run(
+        [str(source_python), "-c", source_location_check],
+        check=True,
+        capture_output=True,
+        text=True,
+    )

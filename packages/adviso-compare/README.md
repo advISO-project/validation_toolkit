@@ -6,22 +6,24 @@ The project is intended to support bioinformatics validation and verification ac
 
 ## Project status
 
-Version 1 implementation is in progress. The schema-validation baseline,
-command-line invocation layer, deterministic CSV, TSV, and JSON input parser,
-custom comparison-configuration loader, and source-to-canonical field
-translation pipeline are implemented. Automatic strict-exact configuration
-generation and unambiguous custom or automatic record identity are also
-implemented. The contract phase now assesses configured fields independently on
-both sides, retains causal assessment issues, and consolidates field exclusions
-without blocking unaffected content. The records phase deterministically aligns
-canonical identities and retains every matched, missing, and extra record. Value
-comparison now applies every version 1 comparator and accounts for matched,
-mismatched, and not-assessable opportunities. The comparison core now assembles
-and self-validates deterministic canonical JSON results. It can also render the
-self-contained HTML view and atomically publish the validated, two-file evidence
-package with strict overwrite protection. End-to-end command-line integration
-and execution-error handling are also implemented. Full user documentation and
-release-candidate verification remain to be completed.
+The version 1 implementation is feature-complete and undergoing
+release-candidate verification. It supports automatic strict-exact comparisons
+and custom YAML comparison configurations across CSV, TSV, and JSON inputs. A
+non-error run produces canonical JSON results and a self-contained HTML report.
+
+For installation, commands, configuration rules, output fields, examples, and
+troubleshooting, read the [user guide](docs/USER_GUIDE.md).
+
+The basic command is:
+
+```text
+adviso-compare \
+  --reference REFERENCE \
+  --query QUERY \
+  --output OUTPUT \
+  [--configuration CONFIGURATION] \
+  [--overwrite]
+```
 
 The current normative artefacts are:
 
@@ -32,4 +34,5 @@ The current normative artefacts are:
 The proposed staged delivery sequence is documented in the
 [version 1 implementation plan](docs/IMPLEMENTATION_PLAN.md).
 
-The planned distribution and executable are named `adviso-compare`; the Python import package is `adviso_compare`.
+The distribution and executable are named `adviso-compare`; the Python import
+package is `adviso_compare`.

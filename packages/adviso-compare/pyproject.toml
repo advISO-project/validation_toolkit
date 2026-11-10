@@ -57,6 +57,18 @@ namespaces = false
 [tool.setuptools.package-data]
 "adviso_compare.schemas" = ["*.json"]
 
+[tool.setuptools.data-files]
+"share/doc/adviso-compare" = ["docs/USER_GUIDE.md"]
+"share/doc/adviso-compare/examples/automatic" = [
+    "docs/examples/automatic/query.csv",
+    "docs/examples/automatic/reference.csv",
+]
+"share/doc/adviso-compare/examples/custom" = [
+    "docs/examples/custom/configuration.yaml",
+    "docs/examples/custom/query.csv",
+    "docs/examples/custom/reference.json",
+]
+
 [tool.setuptools_scm]
 root = "../.."
 relative_to = "pyproject.toml"

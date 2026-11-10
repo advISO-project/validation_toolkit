@@ -1,0 +1,16 @@
+[
+  {
+    "sample_id": "SAMPLE-001",
+    "expected_value": 1.234,
+    "expected_interpretation": " DETECTED ",
+    "expected_markers": ["WT", "MUT"],
+    "curator_note": "synthetic example"
+  },
+  {
+    "sample_id": "SAMPLE-002",
+    "expected_value": 2.5,
+    "expected_interpretation": "not detected",
+    "expected_markers": ["WT"],
+    "curator_note": "synthetic example"
+  }
+]

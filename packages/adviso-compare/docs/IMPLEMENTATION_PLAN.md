@@ -332,8 +332,8 @@ Work in this step:
 
 - connect the CLI invocation, parsers, configuration resolution, comparison
   kernel, result construction, and evidence writer;
-- implement normal standard-output summaries and optional progress without
-  contaminating machine-readable evidence;
+- implement the normal standard-output summary without adding a version 1
+  progress interface or contaminating machine-readable evidence;
 - map every expected invocation, configuration, input, resource, and output
   failure to its specified diagnostic and exit code;
 - isolate unexpected internal failures, omit ordinary-use tracebacks, and
