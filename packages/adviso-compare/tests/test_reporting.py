@@ -8,6 +8,7 @@ import os
 import stat
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from threading import Barrier
 from typing import Any
@@ -27,12 +28,16 @@ from adviso_compare.reporting import (
     render_html_report,
 )
 from adviso_compare.results import (
-    CanonicalResult,
+    ComparisonEvidence,
+    ResultValidationError,
     RuntimeIdentity,
     assemble_result,
 )
 from adviso_compare.values import compare_values
-from tests.support.documents import minimal_configuration, minimal_result
+from tests.support.documents import (
+    minimal_configuration, minimal_configuration_bytes, minimal_result,
+)
+from tests.support.schemas import configuration_validator, results_validator
 
 
 def _generated_evidence(
@@ -41,7 +46,7 @@ def _generated_evidence(
     incomplete: bool = False,
     automatic: bool = False,
     run_id: UUID = UUID("123e4567-e89b-42d3-a456-426614174000"),
-) -> CanonicalResult:
+) -> ComparisonEvidence:
     """Generate canonical evidence through all three comparison phases."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     if automatic:
@@ -101,7 +106,7 @@ def _generated_evidence(
     return result
 
 
-def _publish(parent: Path, result: CanonicalResult) -> Path:
+def _publish(parent: Path, result: ComparisonEvidence) -> Path:
     """Publish generated, validated evidence under the selected parent."""
     return publish_evidence_package(parent, result)
 
@@ -120,8 +125,8 @@ def _snapshot(directory: Path) -> dict[str, tuple[int, bytes | str | None]]:
     return snapshot
 
 
-def test_html_report_is_a_self_contained_view_of_canonical_json() -> None:
-    """The report presents all interpretive sections using JSON facts alone."""
+def test_html_report_is_a_self_contained_view_of_both_json_documents() -> None:
+    """The report presents facts from the linked result and configuration."""
     result = minimal_result(status="incomplete")
     result["exclusions"] = [
         {
@@ -132,7 +137,9 @@ def test_html_report_is_a_self_contained_view_of_canonical_json() -> None:
         }
     ]
 
-    report = render_html_report(result).decode("utf-8")
+    report = render_html_report(
+        result, minimal_configuration()
+    ).decode("utf-8")
 
     assert report.startswith("<!doctype html>\n")
     assert "may contain sensitive patient or laboratory information" in report
@@ -157,9 +164,12 @@ def test_html_report_is_a_self_contained_view_of_canonical_json() -> None:
 
 def test_automatic_mode_report_explains_its_limits(tmp_path: Path) -> None:
     """Automatic-mode evidence prominently directs attention to exclusions."""
-    result = _generated_evidence(tmp_path, automatic=True).document()
+    evidence = _generated_evidence(tmp_path, automatic=True)
+    result = evidence.document()
 
-    report = render_html_report(result).decode("utf-8")
+    report = render_html_report(
+        result, evidence.configuration_document()
+    ).decode("utf-8")
 
     assert "Automatic strict-exact mode" in report
     assert "identically named fields observed on both sides" in report
@@ -168,7 +178,7 @@ def test_automatic_mode_report_explains_its_limits(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("status", ["complete", "incomplete"])
 @pytest.mark.parametrize("parent_exists", [False, True])
-def test_publication_creates_exact_private_two_file_package(
+def test_publication_creates_exact_private_three_file_package(
     tmp_path: Path,
     status: str,
     parent_exists: bool,
@@ -189,6 +199,7 @@ def test_publication_creates_exact_private_two_file_package(
     assert selected == expected
     assert list(parent.iterdir()) == [selected]
     assert sorted(path.name for path in selected.iterdir()) == [
+        "comparison-configuration.json",
         "comparison-report.html",
         "comparison-results.json",
     ]
@@ -200,7 +211,18 @@ def test_publication_creates_exact_private_two_file_package(
     ) == result
     assert (
         selected / "comparison-report.html"
-    ).read_bytes() == render_html_report(result)
+    ).read_bytes() == render_html_report(
+        result, evidence.configuration_document()
+    )
+    configuration_bytes = (
+        selected / "comparison-configuration.json"
+    ).read_bytes()
+    assert configuration_bytes == evidence.configuration_bytes
+    configuration_validator().validate(json.loads(configuration_bytes))
+    assert result["comparison_configuration_digest"] == {
+        "algorithm": "sha256",
+        "value": sha256(configuration_bytes).hexdigest(),
+    }
     if parent_mode is not None:
         assert parent.stat().st_mode == parent_mode
     if os.name == "posix":
@@ -209,6 +231,7 @@ def test_publication_creates_exact_private_two_file_package(
         assert stat.S_IMODE(selected.stat().st_mode) == 0o700
         for member in selected.iterdir():
             assert stat.S_IMODE(member.stat().st_mode) == 0o600
+    reporting.validate_evidence_package(selected)
     assert not list(tmp_path.glob(f".{parent.name}.*"))
 
 
@@ -252,6 +275,7 @@ def test_output_parent_eligibility_depends_on_its_kind_not_its_contents(
         assert set(after) - set(before) == {
             selected.name,
             f"{selected.name}/comparison-results.json",
+            f"{selected.name}/comparison-configuration.json",
             f"{selected.name}/comparison-report.html",
         }
         return
@@ -327,6 +351,9 @@ def test_failed_second_publication_preserves_content_and_cleans_staging(
             stage / "comparison-results.json"
         ).read_bytes() == second.json_bytes
         assert (stage / "comparison-report.html").is_file()
+        assert (stage / "comparison-configuration.json").read_bytes() == (
+            second.configuration_bytes
+        )
         assert destination.parent == parent
         raise OSError("injected publication fault")
 
@@ -351,30 +378,40 @@ def test_failed_second_publication_preserves_content_and_cleans_staging(
     assert not list(tmp_path.glob(".evidence.*"))
 
 
+@pytest.mark.parametrize(
+    "failure_member", [
+        "comparison-results.json", "comparison-configuration.json",
+        "comparison-report.html",
+    ],
+)
 def test_failed_initial_write_publishes_nothing_and_cleans_staging(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    failure_member: str,
 ) -> None:
     """A staging fault leaves at most an empty parent without evidence."""
     evidence = _generated_evidence(tmp_path / "inputs")
     parent = tmp_path / "evidence"
     real_write = reporting._write_atomic_member
-    writes = 0
+    failure_attempted = False
 
-    def fail_second_member(path: Path, content: bytes) -> None:
-        nonlocal writes
-        writes += 1
+    def fail_selected_member(path: Path, content: bytes) -> None:
+        nonlocal failure_attempted
         if os.name == "posix":
             assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
-        if writes == 2:
+        if path.name == failure_member:
+            failure_attempted = True
             raise OSError("injected write fault")
         real_write(path, content)
 
-    monkeypatch.setattr(reporting, "_write_atomic_member", fail_second_member)
+    monkeypatch.setattr(
+        reporting, "_write_atomic_member", fail_selected_member
+    )
 
     with pytest.raises(OutputError) as raised:
         _publish(parent, evidence)
 
+    assert failure_attempted
     assert raised.value.code == "write_failed"
     assert not parent.exists() or list(parent.iterdir()) == []
     assert not list(tmp_path.glob(".evidence.*"))
@@ -433,6 +470,7 @@ def test_occupied_run_path_is_preserved_without_renaming_the_result(
             assert destination == child
             assert (stage / "comparison-results.json").is_file()
             assert (stage / "comparison-report.html").is_file()
+            assert (stage / "comparison-configuration.json").is_file()
             occupy()
             real_publish(stage, destination)
 
@@ -504,7 +542,7 @@ def test_concurrent_runs_publish_independently_under_the_same_parent(
         parent.mkdir()
     ready = Barrier(2, timeout=10)
 
-    def publish(result: CanonicalResult) -> Path:
+    def publish(result: ComparisonEvidence) -> Path:
         ready.wait()
         return _publish(parent, result)
 
@@ -516,12 +554,84 @@ def test_concurrent_runs_publish_independently_under_the_same_parent(
     for child, result in zip(selected, evidence):
         assert child.parent == parent
         assert sorted(path.name for path in child.iterdir()) == [
-            "comparison-report.html", "comparison-results.json"
+            "comparison-configuration.json", "comparison-report.html",
+            "comparison-results.json",
         ]
         assert (
             child / "comparison-results.json"
         ).read_bytes() == result.json_bytes
         assert (
             child / "comparison-report.html"
-        ).read_bytes() == render_html_report(result.document())
+        ).read_bytes() == render_html_report(
+            result.document(), result.configuration_document()
+        )
+        assert (child / "comparison-configuration.json").read_bytes() == (
+            result.configuration_bytes
+        )
+        digest = result.document()["comparison_configuration_digest"]
+        assert digest["value"] == (
+            sha256(result.configuration_bytes).hexdigest()
+        )
     assert not list(tmp_path.glob(".evidence.*"))
+
+
+@pytest.mark.parametrize(
+    "defect", ["missing", "unreadable", "symlink", "directory", "wrong-name",
+               "digest-mismatch"],
+)
+def test_package_inspection_rejects_invalid_configuration_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    defect: str,
+) -> None:
+    """Require the fixed regular sibling and its exact byte linkage."""
+    package = tmp_path / "package"
+    package.mkdir()
+    configuration_path = package / "comparison-configuration.json"
+    configuration_bytes = minimal_configuration_bytes()
+    configuration_path.write_bytes(configuration_bytes)
+    result_path = package / "comparison-results.json"
+    result_path.write_text(json.dumps(minimal_result()), encoding="utf-8")
+    (package / "comparison-report.html").write_text(
+        "<!doctype html><html><body>Synthetic report</body></html>",
+        encoding="utf-8",
+    )
+    results_validator().validate(json.loads(result_path.read_bytes()))
+    configuration_validator().validate(json.loads(configuration_bytes))
+    if defect in {"missing", "symlink", "directory"}:
+        configuration_path.unlink()
+    if defect == "symlink":
+        target = tmp_path / "configuration-target.json"
+        target.write_bytes(configuration_bytes)
+        configuration_path.symlink_to(target)
+    elif defect == "directory":
+        configuration_path.mkdir()
+    elif defect == "wrong-name":
+        configuration_path.rename(package / "different-configuration.json")
+    elif defect == "digest-mismatch":
+        configuration_path.write_bytes(configuration_bytes + b" ")
+    original_paths = set(package.iterdir())
+    original_results = result_path.read_bytes()
+    read_attempted = False
+    if defect == "unreadable":
+        real_open = os.open
+
+        def deny_read(path: Path, flags: int, *args: object) -> int:
+            nonlocal read_attempted
+            if path == configuration_path:
+                read_attempted = True
+                raise PermissionError("injected read failure")
+            return real_open(path, flags, *args)
+
+        monkeypatch.setattr(os, "open", deny_read)
+
+    with pytest.raises(ResultValidationError):
+        reporting.validate_evidence_package(package)
+
+    if defect == "unreadable":
+        assert read_attempted
+    assert set(package.iterdir()) == original_paths
+    assert result_path.read_bytes() == original_results
+    if defect == "symlink":
+        assert configuration_path.is_symlink()
+        assert target.read_bytes() == configuration_bytes

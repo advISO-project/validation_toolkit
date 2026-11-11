@@ -9,7 +9,8 @@ The project is intended to support bioinformatics validation and verification ac
 The version 1 implementation is feature-complete and undergoing
 release-candidate verification. It supports automatic strict-exact comparisons
 and custom YAML comparison configurations across CSV, TSV, and JSON inputs. A
-non-error run produces canonical JSON results and a self-contained HTML report.
+non-error run produces canonical JSON results, the complete effective
+configuration as JSON, and a self-contained HTML report.
 
 For installation, commands, configuration rules, output fields, examples, and
 troubleshooting, read the [user guide](docs/USER_GUIDE.md).
@@ -25,9 +26,16 @@ adviso-compare \
 ```
 
 `--output` selects a parent directory. Each complete or incomplete run creates
-its own child named `YYYYMMDDTHHMMSSZ-<run-id>`, containing the JSON result and
-HTML report. Repeated runs preserve existing evidence. The completion summary
-identifies the published run directory.
+its own child named `YYYYMMDDTHHMMSSZ-<run-id>`, containing exactly
+`comparison-results.json`, `comparison-configuration.json`, and
+`comparison-report.html`. Results record the SHA-256 digest of the exact saved
+configuration bytes. Repeated runs preserve existing evidence. The completion
+summary identifies the published run directory.
+
+Both JSON formats use their own root `schema_version` and are independently
+versioned. Version 1 supports results schema `1.0` with configuration schema
+`1.0`. Keep the three files together; see the user guide's
+[package-validation procedure](docs/USER_GUIDE.md#85-structural-and-semantic-validation).
 
 The current normative artefacts are:
 

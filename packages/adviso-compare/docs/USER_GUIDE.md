@@ -2,6 +2,8 @@
 
 This guide applies to AdvISO Compare version 1 and to version `1.0` of both the
 comparison-configuration schema and the comparison-results schema.
+These are independently versioned formats. The supported combination for this
+version is results schema `1.0` with comparison-configuration schema `1.0`.
 
 AdvISO Compare compares a reference dataset with a query dataset. The two
 datasets may use different field names and ways of writing values. A comparison
@@ -152,8 +154,8 @@ compared using strict parser-native equality: value types must match as well as
 content. For example, JSON integer `1` does not equal JSON string `"1"`.
 Fields found on only one side are reported as exclusions, not differences.
 
-The tool creates an effective configuration internally and includes it in the
-result.
+The tool creates an effective configuration internally and saves it as
+`comparison-configuration.json` alongside the results and report.
 
 ### 4.1 Runnable automatic example
 
@@ -522,8 +524,9 @@ reports one `measurement` difference.
 Custom configurations should be treated as controlled documents in a
 accreditable environment. Give each one a stable ID and revision, review changes,
 retain the exact configuration used for a comparison, and test it with representative data.
-The result embeds the effective configuration, but local quality arrangements remain
-the authority for approval and retention.
+The evidence package retains the complete effective configuration as
+`comparison-configuration.json`. Local quality arrangements remain the
+authority for approval and retention.
 
 ## 6. How the comparison works
 
@@ -662,14 +665,16 @@ For example, two successive runs can produce:
 OUTPUT/
 ├── 20261111T143205Z-123e4567-e89b-42d3-a456-426614174000/
 │   ├── comparison-results.json
+│   ├── comparison-configuration.json
 │   └── comparison-report.html
 └── 20261111T145810Z-123e4567-e89b-42d3-a456-426614174001/
     ├── comparison-results.json
+    ├── comparison-configuration.json
     └── comparison-report.html
 ```
 
-Each run directory contains exactly these two evidence files. Packages are
-validated and generated in private staging on the destination filesystem
+Each run directory contains exactly these three regular evidence files.
+Packages are validated and generated in private staging on the destination filesystem
 before publication. The destination must support exclusive directory rename;
 if safe publication is unavailable, the run returns `output.write_failed`
 and preserves existing content.
@@ -687,19 +692,50 @@ responsibility; the tool does not remove earlier runs or maintain a `latest`
 pointer.
 
 `comparison-results.json` is the canonical result for software use and detailed
-review. `comparison-report.html` is a self-contained, offline view made only
-from the validated JSON. The HTML gives no additional comparison facts. It can
-be opened in an ordinary browser with scripting disabled.
+review. `comparison-configuration.json` retains the complete effective
+configuration: the selected custom document or the generated automatic
+document, including metadata and explicit declarations. Omitted optional
+properties remain absent; internal defaults are not added. List order is
+preserved. The saved file is JSON, rather than a copy of the source YAML bytes;
+`--configuration` continues to accept only custom YAML.
+
+Both JSON files use UTF-8 without a byte-order mark, two-space indentation, LF
+line endings, and exactly one final newline. Non-ASCII text is emitted directly
+unless JSON escaping is needed. Fixed properties follow their schema order;
+dynamic names use Unicode code-point order. Identical effective configurations
+produce identical saved bytes, without run identifiers or timestamps.
+
+Keep the three files together. The results link to the saved configuration by
+its exact-byte SHA-256 digest, as explained in Section 8.2.
+`comparison-report.html` is a self-contained, offline view made solely from the
+validated results and saved configuration, with verified linkage. It adds fixed
+explanatory text and external review space, but no comparison facts. Rendering
+does not reread the original YAML. Open the report in an ordinary browser with
+scripting disabled.
 
 The report separates run completeness, comparison differences, and assessment
 issues. It does not apply acceptance thresholds or give a pass/fail verdict.
 
 ## 8. Canonical JSON reference
 
-Before consuming a result, check `results_schema_version`. Version `1.0` uses
-`comparison-results-v1.0.schema.json`. Software should validate the document and
-use its structured properties, classifications, and finding codes. Do not
-extract facts by parsing the English `message` text.
+Before consuming a result, check its root `schema_version`. Results version
+`1.0` uses `comparison-results-v1.0.schema.json`. The saved configuration uses
+its own root `schema_version` to select
+`comparison-configuration-v1.0.schema.json` for configuration version `1.0`.
+The fixed filenames distinguish the document families; the bare version string
+does not identify a schema globally. Their canonical `$id` values identify
+distinct schemas. Select supported schemas from trusted installed resources,
+without downloading schemas or constructing arbitrary paths from document values.
+
+The software version and the two schema versions have separate lifecycles.
+Supporting a compatible configuration format need not change the results
+schema; features that change results structure or meaning can require a results
+schema revision. Software must support the selected combination, rather than
+assuming that the two version strings must match.
+
+Validate the package as described in Section 8.5, then use structured properties,
+classifications, and finding codes. Do not extract facts by parsing the English
+`message` text.
 
 Every top-level property below is required, even when `exclusions` or
 `findings` is empty. Unknown properties are not allowed.
@@ -708,7 +744,7 @@ Every top-level property below is required, even when `exclusions` or
 
 | Property | Meaning |
 | --- | --- |
-| `results_schema_version` | Must be `"1.0"`. |
+| `schema_version` | Must be `"1.0"`, identifying the results format. |
 | `run.id` | Random lowercase UUID version 4 for this run. |
 | `run.status` | `complete` or `incomplete`. Error runs do not produce this JSON. |
 | `run.completed_at` | Completion time in UTC, as `YYYY-MM-DDTHH:MM:SSZ`. |
@@ -742,9 +778,23 @@ directories, raw command lines, and dependency inventories are not included.
 non-empty arrays of unique field names. Their common order is the component
 order of a composite key.
 
-`comparison_configuration.document` is the complete effective configuration.
-It validates against comparison-configuration schema version `1.0`. In
-automatic mode it is the generated configuration, not a path or a digest.
+The required top-level `comparison_configuration_digest` has exactly two
+properties:
+
+| Property | Meaning |
+| --- | --- |
+| `algorithm` | Always `sha256`. |
+| `value` | Lowercase 64-character SHA-256 digest of the exact saved `comparison-configuration.json` bytes, including the final newline. |
+
+Verify this digest against the file bytes before parsing or reserializing the
+configuration. It is not a digest of the custom source YAML. Even a whitespace
+edit to the saved JSON changes its digest. The digest establishes content
+linkage; it does not prove authenticity or laboratory approval.
+
+The configuration's schema version, ID, and revision are held in the saved
+document's `schema_version`, `metadata.id`, and `metadata.revision`. They are
+not duplicated in the results. The sibling filename is fixed; no configuration
+path, URI, or alternative filename is selected by the results document.
 
 ### 8.3 Summary and exclusions
 
@@ -828,56 +878,80 @@ The schema defines exact finding forms. In summary:
 
 ### 8.5 Structural and semantic validation
 
-JSON Schema validation checks document shape, required properties, permitted
-values, patterns, cross-references, and recognised formats. Format checking
-must be enabled so that invalid UUIDs, dates, and datetimes are rejected. For
-example, change into the published run directory, then use Python and the
-installed schema resources:
+Validation has three layers:
+
+| Layer | What it establishes |
+| --- | --- |
+| Independent structural validation | Each JSON document conforms to its own supported schema, including required properties, permitted values, finding forms, and recognised formats. The results schema neither loads the configuration schema nor constrains its version. |
+| Exact-byte linkage | The required configuration sibling exists and its saved bytes match `comparison_configuration_digest`. |
+| Semantic validation | The configuration rules, result counts, statuses, findings, and configuration-derived facts agree, using source comparison context where available. |
+
+A results-schema check alone is not full package validation. A valid digest
+also does not establish that the configuration or comparison is semantically
+valid. To inspect a saved package with the installed software, change into the
+published run directory and run this Python code:
 
 ```python
-import json
-from importlib.resources import files
+from pathlib import Path
 
-from jsonschema import Draft202012Validator, FormatChecker
-from referencing import Registry, Resource
+from adviso_compare.reporting import validate_evidence_package
 
-schema_root = files("adviso_compare.schemas")
-config_schema = json.loads(
-    schema_root.joinpath("comparison-configuration-v1.0.schema.json")
-    .read_text(encoding="utf-8")
-)
-results_schema = json.loads(
-    schema_root.joinpath("comparison-results-v1.0.schema.json")
-    .read_text(encoding="utf-8")
-)
-registry = Registry().with_resource(
-    config_schema["$id"], Resource.from_contents(config_schema)
-)
-validator = Draft202012Validator(
-    results_schema,
-    registry=registry,
-    format_checker=FormatChecker(),
-)
-result = json.loads(open("comparison-results.json", encoding="utf-8").read())
-validator.validate(result)
+validate_evidence_package(Path("."))
+print("Package checks passed for the saved evidence.")
 ```
 
-Schema validation cannot prove that the counts and linked facts agree. Before
-publication, AdvISO Compare also checks semantic consistency, including:
+The function returns normally on success and raises `ResultValidationError`
+if the JSON evidence cannot be read or validated, or the package members are
+invalid. It requires exactly the three fixed regular files. Its JSON
+validation procedure is:
 
-- overall status agrees with all phase statuses;
-- record equations and all finding totals reconcile;
-- key field-name and identity arrays have matching lengths and order;
+1. Parse results as strict UTF-8 JSON, rejecting duplicate object members,
+   non-standard number constants, and non-finite numbers. Select the supported
+   results schema by document family and root `schema_version`, and validate
+   with format assertion enabled.
+2. Require the fixed sibling `comparison-configuration.json` to be a readable
+   regular file, rejecting missing files, symbolic links, and other filesystem
+   objects. Read its exact bytes without following an alternative filename.
+3. Compare SHA-256 of those bytes, including the final newline, with the
+   result's `comparison_configuration_digest` before using the contents.
+4. Parse the configuration with the same strict JSON rules and independently
+   select and validate its schema using its own `schema_version`.
+5. Check that the software supports the two schema versions together, then
+   validate configuration semantics. Saved automatic configurations are valid
+   evidence; the reserved-ID restriction still applies to custom YAML inputs.
+6. Apply result and cross-document semantic checks using the saved
+   configuration and any available comparison context.
+
+Both structural validators use JSON Schema Draft 2020-12 format assertion.
+If you implement these checks independently, enable equivalent format checking
+(for example, `Draft202012Validator(schema, format_checker=FormatChecker())`
+with Python's `jsonschema` package). Invalid recognised UUID, date, and
+date-time formats must fail validation. Schemas are loaded from trusted local
+package resources; no network access or schema registry linking the two
+formats is needed.
+
+Semantic checks available from the saved documents include:
+
+- overall status agrees with phase statuses;
+- record equations, value-opportunity counts, and finding totals reconcile;
+- key field-name and identity arrays have the required lengths and order;
 - findings and exclusions have the required order and no duplicates;
-- IDs are sequential after sorting;
-- each finding's code agrees with its classification, side, phase, evidence,
-  field, locations, and embedded configuration; and
-- configuration-derived fields, priorities, and exclusions agree with the
-  embedded configuration and observed source fields.
+- finding IDs are sequential after sorting; and
+- key declarations, finding field identities, review priorities, and
+  configured-field exclusions agree with the saved configuration.
 
-A consumer can use JSON Schema to reject a structurally invalid document, but
-independent reproduction or trusted production by AdvISO Compare is needed for
-full semantic assurance.
+Before publication, AdvISO Compare additionally has the parsed input datasets
+and comparison-phase results. It checks that the saved configuration agrees
+with the selected effective configuration, input provenance matches the parsed
+inputs, findings and summaries match the phase results, and undeclared-field
+exclusions match observed source fields. Inspection of a saved package alone
+cannot repeat those source-dependent checks or prove that the comparison was
+performed correctly. Independent reproduction requires the original input
+bytes and suitable comparison context. The snippet checks the saved JSON
+pair and package membership; it does not regenerate or authenticate the HTML
+report.
+
+The normative details are in [Specification Section 9.1.4](SPECIFICATION.md#914-structural-and-semantic-package-validation).
 
 ## 9. Errors and corrective action
 
@@ -949,7 +1023,7 @@ stable outcomes are:
 | custom | `complete` | 1 | 0 |
 
 Run the commands in Sections 4.1 and 5.11, then open the run directory
-identified by each completion summary and validate its `comparison-results.json`
+identified by each completion summary and validate the complete package
 as shown in Section 8.5. The same output parents can be reused: each invocation
 adds a new run directory. Run IDs and completion times change on every run.
 Software and runtime provenance can change between environments. Input digests

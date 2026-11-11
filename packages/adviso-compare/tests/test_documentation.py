@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -59,10 +62,36 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     )
 
     results_validator().validate(result)
+    saved = json.loads(
+        (selected / "comparison-configuration.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if configuration is not None:
+        assert saved == document
+    else:
+        assert saved["metadata"]["id"] == "org.adviso.automatic-strict-exact"
     assert outcome.run_status == "complete"
     assert outcome.comparison_differences == 1
     assert outcome.assessment_issues == 0
     assert outcome.exit_code == 0
+    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(
+        encoding="utf-8"
+    )
+    validation_section = guide.split(
+        "### 8.5 Structural and semantic validation", 1
+    )[1].split("\n## 9.", 1)[0]
+    snippets = re.findall(r"```python\n(.*?)\n```", validation_section, re.S)
+    assert len(snippets) == 1
+    checked = subprocess.run(
+        [sys.executable, "-c", snippets[0]],
+        cwd=selected,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert checked.stdout == "Package checks passed for the saved evidence.\n"
+    assert checked.stderr == ""
 
 
 def test_user_guide_identifies_its_versions_and_maintained_examples() -> None:

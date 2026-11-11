@@ -13,5 +13,5 @@ be deterministic and reviewable. A future generated on-disk fixture must record
 its generator and regeneration command alongside the fixture.
 
 Schema loading and validator construction live in `tests/support/schemas.py`.
-Canonical-results validators register the packaged comparison-configuration
-schema explicitly and enable JSON Schema format assertion.
+Structural validators load each document's packaged schema independently and
+enable JSON Schema format assertion.

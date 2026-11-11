@@ -3,22 +3,27 @@
 from __future__ import annotations
 
 import json
+import math
 import platform as runtime_platform
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
-from importlib.resources import files
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any, Mapping
 from uuid import UUID, uuid4
 
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
-from referencing import Registry, Resource
 
 from adviso_compare._version import __version__
 from adviso_compare.alignment import RecordAlignment, RecordFinding, RecordsResult
-from adviso_compare.configuration import EffectiveConfiguration, FieldDefinition
+from adviso_compare.configuration import (
+    ConfigurationError,
+    EffectiveConfiguration,
+    FieldDefinition,
+    validate_saved_configuration,
+)
 from adviso_compare.contract import (
     ConfiguredFieldExclusion,
     ContractFinding,
@@ -35,6 +40,7 @@ from adviso_compare.inputs import (
     SourceLocation,
     TabularLocation,
 )
+from adviso_compare.schemas import load_schema
 from adviso_compare.translation import (
     CanonicalValue,
     TranslatedValue,
@@ -48,9 +54,6 @@ if TYPE_CHECKING:
 
 
 JsonObject = dict[str, Any]
-RESULTS_SCHEMA_FILE = "comparison-results-v1.0.schema.json"
-CONFIGURATION_SCHEMA_FILE = "comparison-configuration-v1.0.schema.json"
-SCHEMA_PACKAGE = "adviso_compare.schemas"
 FINDING_CODES = (
     "missing_record",
     "extra_record",
@@ -63,22 +66,29 @@ FINDING_CODES = (
 )
 CLASSIFICATIONS = ("comparison_difference", "assessment_issue")
 REVIEW_PRIORITIES = ("low", "normal", "high", "unassigned")
+SUPPORTED_SCHEMA_COMBINATIONS = frozenset({("1.0", "1.0")})
 
 
 # Public result types and assembly API
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class CanonicalResult:
-    """An immutable, fully validated canonical-result serialization."""
+class ComparisonEvidence:
+    """Immutable result and configuration bytes validated in context."""
 
     _json_bytes: bytes = field(repr=False)
+    _configuration_bytes: bytes = field(repr=False)
 
     @classmethod
-    def _from_validated_bytes(cls, json_bytes: bytes) -> CanonicalResult:
+    def _from_validated_bytes(
+        cls, json_bytes: bytes, configuration_bytes: bytes
+    ) -> ComparisonEvidence:
         """Create an artifact after contextual validation has succeeded."""
         instance = object.__new__(cls)
         object.__setattr__(instance, "_json_bytes", json_bytes)
+        object.__setattr__(
+            instance, "_configuration_bytes", configuration_bytes
+        )
         return instance
 
     @property
@@ -88,10 +98,16 @@ class CanonicalResult:
 
     def document(self) -> JsonObject:
         """Return a new mutable view of the canonical JSON document."""
-        document = json.loads(self._json_bytes.decode("utf-8"))
-        if not isinstance(document, dict):  # Defensive; the schema requires this.
-            raise ResultValidationError("canonical result root is not an object")
-        return document
+        return parse_evidence_json(self._json_bytes)
+
+    @property
+    def configuration_bytes(self) -> bytes:
+        """Return the exact configuration bytes hashed with the results."""
+        return self._configuration_bytes
+
+    def configuration_document(self) -> JsonObject:
+        """Return a fresh mutable view of the saved effective configuration."""
+        return parse_evidence_json(self._configuration_bytes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,9 +119,9 @@ class RuntimeIdentity:
     unicode_version: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ResultValidationError(ValueError):
-    """An internally generated result violates a structural or semantic rule."""
+    """Generated or saved evidence violates a package-validation rule."""
 
     message: str
 
@@ -145,8 +161,8 @@ def assemble_result(
     completed_at: datetime | None = None,
     software_version: str = __version__,
     runtime: RuntimeIdentity | None = None,
-) -> CanonicalResult:
-    """Build and self-validate one complete canonical result document."""
+) -> ComparisonEvidence:
+    """Serialize and contextually validate the linked evidence documents."""
     identifier = run_id or uuid4()
     completion = completed_at or datetime.now(timezone.utc)
     if identifier.version != 4:
@@ -157,6 +173,11 @@ def assemble_result(
         microsecond=0
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     runtime_identity = runtime or current_runtime_identity()
+    configuration_document = prepared.configuration.document
+    ordered_configuration = _ordered_configuration(configuration_document)
+    if ordered_configuration != configuration_document:
+        raise ResultValidationError("configuration serialization lost content")
+    configuration_bytes = serialize_result(ordered_configuration)
 
     findings = _assemble_findings(prepared.configuration, contract, records, values)
     phase_statuses = {
@@ -170,7 +191,7 @@ def assemble_result(
         else "incomplete"
     )
     document: JsonObject = {
-        "results_schema_version": "1.0",
+        "schema_version": "1.0",
         "run": {
             "id": str(identifier),
             "status": run_status,
@@ -188,27 +209,31 @@ def assemble_result(
             "query": _input_document(prepared.query),
         },
         "record_key_fields": _record_key_fields(prepared.configuration),
-        "comparison_configuration": {
-            "document": _ordered_configuration(prepared.configuration.document)
+        "comparison_configuration_digest": {
+            "algorithm": "sha256",
+            "value": sha256(configuration_bytes).hexdigest(),
         },
         "summary": _summary_document(records, values, findings),
         "exclusions": [_exclusion_document(item) for item in contract.exclusions],
         "findings": findings,
     }
     json_bytes = serialize_result(document)
-    serialized_document = json.loads(json_bytes.decode("utf-8"))
+    serialized_document = parse_evidence_json(json_bytes)
     validate_result(
         serialized_document,
+        configuration_bytes=configuration_bytes,
         prepared=prepared,
         contract=contract,
         records=records,
         values=values,
     )
-    return CanonicalResult._from_validated_bytes(json_bytes)
+    return ComparisonEvidence._from_validated_bytes(
+        json_bytes, configuration_bytes
+    )
 
 
 def serialize_result(document: Mapping[str, object]) -> bytes:
-    """Serialize a validated result as canonical UTF-8 JSON."""
+    """Serialize an ordered evidence document as canonical UTF-8 JSON."""
     return (
         json.dumps(
             document,
@@ -223,42 +248,91 @@ def serialize_result(document: Mapping[str, object]) -> bytes:
 def validate_result(
     document: JsonObject,
     *,
+    configuration_bytes: bytes | None = None,
     prepared: PreparedComparison | None = None,
     contract: ContractResult | None = None,
     records: RecordsResult | None = None,
     values: ValuesResult | None = None,
 ) -> None:
-    """Apply schema and semantic validation to a generated result."""
+    """Validate results, configuration byte linkage, and shared semantics.
+
+    Source-dependent checks additionally use comparison context when provided.
+    Structural validation alone is available through the packaged schemas.
+    """
+    version = document.get("schema_version")
+    if not isinstance(version, str):
+        raise ResultValidationError("results schema version is required")
     try:
-        _results_validator().validate(document)
-    except ValidationError as error:
+        _results_validator(version).validate(document)
+    except (ValueError, ValidationError) as error:
         raise ResultValidationError(
             "canonical result failed schema validation"
         ) from error
-    _validate_semantics(document, prepared, contract, records, values)
+    if configuration_bytes is None:
+        raise ResultValidationError("saved configuration bytes are required")
+    _require(
+        sha256(configuration_bytes).hexdigest()
+        == document["comparison_configuration_digest"]["value"],
+        "saved configuration digest does not match",
+    )
+    configuration = parse_evidence_json(configuration_bytes)
+    try:
+        validate_saved_configuration(configuration)
+    except ConfigurationError as error:
+        raise ResultValidationError(
+            "saved configuration failed validation"
+        ) from error
+    _require(
+        (version, configuration["schema_version"])
+        in SUPPORTED_SCHEMA_COMBINATIONS,
+        "unsupported results and configuration schema combination",
+    )
+    _validate_semantics(
+        document, configuration, prepared, contract, records, values
+    )
 
 
 @lru_cache(maxsize=1)
-def _results_validator() -> Draft202012Validator:
-    """Load the packaged schemas with format assertion and local resolution."""
-    package = files(SCHEMA_PACKAGE)
-    results = json.loads(
-        package.joinpath(RESULTS_SCHEMA_FILE).read_text(encoding="utf-8")
-    )
-    configuration = json.loads(
-        package.joinpath(CONFIGURATION_SCHEMA_FILE).read_text(encoding="utf-8")
-    )
-    registry = Registry().with_resources(
-        (
-            (results["$id"], Resource.from_contents(results)),
-            (configuration["$id"], Resource.from_contents(configuration)),
-        )
-    )
+def _results_validator(version: str) -> Draft202012Validator:
+    """Load the results schema independently with format assertion."""
     return Draft202012Validator(
-        results,
-        registry=registry,
-        format_checker=FormatChecker(),
+        load_schema("results", version), format_checker=FormatChecker()
     )
+
+
+def parse_evidence_json(content: bytes) -> JsonObject:
+    """Parse strict UTF-8 JSON evidence, rejecting duplicate object members."""
+    def object_members(pairs: list[tuple[str, Any]]) -> JsonObject:
+        document: JsonObject = {}
+        for name, value in pairs:
+            if name in document:
+                raise ValueError("duplicate JSON member")
+            document[name] = value
+        return document
+
+    def reject_constant(value: str) -> Any:
+        raise ValueError("non-standard JSON number")
+
+    def finite_float(value: str) -> float:
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("non-finite JSON number")
+        return number
+
+    try:
+        document = json.loads(
+            content.decode("utf-8"),
+            object_pairs_hook=object_members,
+            parse_constant=reject_constant,
+            parse_float=finite_float,
+        )
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ResultValidationError(
+            "evidence is not strict UTF-8 JSON"
+        ) from error
+    if not isinstance(document, dict):
+        raise ResultValidationError("evidence JSON root is not an object")
+    return document
 
 
 # Result-document assembly helpers
@@ -314,7 +388,7 @@ def _ordered_configuration(document: JsonObject) -> JsonObject:
 
 
 def _ordered_field_definition(document: JsonObject) -> JsonObject:
-    """Order one embedded field declaration without applying defaults."""
+    """Order one saved field declaration without applying defaults."""
     ordered: JsonObject = {}
     for name in (
         "source_fields",
@@ -894,6 +968,7 @@ def _location_sort_key(location: object) -> tuple[object, ...]:
 
 def _validate_semantics(
     document: JsonObject,
+    configuration: JsonObject,
     prepared: PreparedComparison | None,
     contract: ContractResult | None,
     domain_records: RecordsResult | None,
@@ -920,9 +995,7 @@ def _validate_semantics(
         records["query"] == records["matched"] + records["extra"],
         "query record counts do not reconcile",
     )
-    configuration_fields = document["comparison_configuration"]["document"][
-        "fields"
-    ]
+    configuration_fields = configuration["fields"]
     compared_field_count = len(
         set(configuration_fields["in_scope"])
         - set(configuration_fields["record_key"])
@@ -1057,19 +1130,19 @@ def _validate_semantics(
         len(exclusion_keys) == len(set(exclusion_keys)),
         "duplicate exclusions are present",
     )
-    _validate_configuration_derivations(document, prepared)
+    _validate_configuration_derivations(document, configuration, prepared)
 
 
 def _validate_configuration_derivations(
     document: JsonObject,
+    configuration: JsonObject,
     prepared: PreparedComparison | None,
 ) -> None:
     """Cross-check configuration-derived evidence and available source context."""
-    configuration = document["comparison_configuration"]["document"]
     if prepared is not None:
         _require(
             configuration == prepared.configuration.document,
-            "embedded configuration disagrees with the effective configuration",
+            "saved configuration disagrees with the effective configuration",
         )
         _require(
             document["inputs"]
@@ -1093,7 +1166,7 @@ def _validate_configuration_derivations(
     }
     _require(
         document["record_key_fields"] == expected_key_fields,
-        "record-key metadata disagrees with the embedded configuration",
+        "record-key metadata disagrees with the saved configuration",
     )
     for finding in document["findings"]:
         field = finding.get("field")
@@ -1103,7 +1176,7 @@ def _validate_configuration_derivations(
         expected_priority = definitions[field].get("review_priority", "normal")
         _require(
             finding["review_priority"] == expected_priority,
-            "finding review priority disagrees with the embedded configuration",
+            "finding review priority disagrees with the saved configuration",
         )
 
     expected_configured = [
@@ -1117,7 +1190,7 @@ def _validate_configuration_derivations(
     ]
     _require(
         actual_configured == expected_configured,
-        "configured-field exclusions disagree with the embedded configuration",
+        "configured-field exclusions disagree with the saved configuration",
     )
     if prepared is None:
         return

@@ -16,10 +16,16 @@ from pathlib import Path
 from typing import Any, Mapping
 from uuid import uuid4
 
-from adviso_compare.results import CanonicalResult
+from adviso_compare.results import (
+    ComparisonEvidence,
+    ResultValidationError,
+    parse_evidence_json,
+    validate_result,
+)
 
 
 RESULTS_FILENAME = "comparison-results.json"
+CONFIGURATION_FILENAME = "comparison-configuration.json"
 REPORT_FILENAME = "comparison-report.html"
 AUTOMATIC_CONFIGURATION_ID = "org.adviso.automatic-strict-exact"
 _AT_FDCWD = -100
@@ -52,12 +58,13 @@ class OutputError(Exception):
         return self.message
 
 
-def render_html_report(document: Mapping[str, Any]) -> bytes:
-    """Render a self-contained HTML view using only canonical-result facts."""
+def render_html_report(
+    document: Mapping[str, Any], configuration: Mapping[str, Any]
+) -> bytes:
+    """Render a self-contained view of validated, linked JSON documents."""
     run = document["run"]
     phases = document["phases"]
     inputs = document["inputs"]
-    configuration = document["comparison_configuration"]["document"]
     metadata = configuration["metadata"]
     summary = document["summary"]
     finding_summary = summary["findings"]
@@ -86,10 +93,10 @@ def render_html_report(document: Mapping[str, Any]) -> bytes:
         '<p class="warning"><strong>Sensitive information:</strong> This evidence '
         "package may contain sensitive patient or laboratory information. Handle "
         "it under your laboratory’s information-governance arrangements.</p>",
-        "<p>This run translated two structured datasets according to the embedded "
-        "comparison configuration, then performed contract, records, and values "
-        "comparison phases. The report presents measured evidence; review and "
-        "approval occur outside the tool.</p>",
+        "<p>This run translated two structured datasets according to the "
+        "saved comparison configuration, then performed contract, records, "
+        "and values comparison phases. The report presents measured evidence; "
+        "review and approval occur outside the tool.</p>",
         "</header>",
         '<main id="main-content">',
         '<section aria-labelledby="headline"><h2 id="headline">Run summary</h2>',
@@ -109,7 +116,7 @@ def render_html_report(document: Mapping[str, Any]) -> bytes:
             _counts_section(summary),
             _findings_section(findings),
             _limitations_section(exclusions, summary),
-            _provenance_section(document),
+            _provenance_section(document, configuration),
             _review_section(),
             "</main>",
             "</body>",
@@ -123,11 +130,75 @@ def render_html_report(document: Mapping[str, Any]) -> bytes:
 # Evidence-package publication
 
 
-def publish_evidence_package(parent: Path, result: CanonicalResult) -> Path:
+def validate_evidence_package(directory: Path) -> None:
+    """Validate saved JSON evidence, including fixed members and byte linkage.
+
+    This checks the invariants available from the package; it cannot reproduce
+    the comparison without its source inputs and comparison context.
+    """
+    directory = Path(directory)
+    try:
+        members = {member.name for member in directory.iterdir()}
+    except OSError as error:
+        raise ResultValidationError(
+            "evidence package is unreadable"
+        ) from error
+    if members != {RESULTS_FILENAME, CONFIGURATION_FILENAME, REPORT_FILENAME}:
+        raise ResultValidationError("evidence package members are invalid")
+    document = parse_evidence_json(
+        _read_regular_member(directory / RESULTS_FILENAME)
+    )
+    configuration_bytes = _read_regular_member(
+        directory / CONFIGURATION_FILENAME
+    )
+    _require_regular_member(directory / REPORT_FILENAME)
+    validate_result(document, configuration_bytes=configuration_bytes)
+
+
+def _require_regular_member(path: Path) -> os.stat_result:
+    """Inspect a fixed sibling without accepting a symbolic link."""
+    try:
+        status = path.lstat()
+    except OSError as error:
+        raise ResultValidationError(
+            "evidence member is unavailable"
+        ) from error
+    if not stat.S_ISREG(status.st_mode):
+        raise ResultValidationError("evidence member must be a regular file")
+    return status
+
+
+def _read_regular_member(path: Path) -> bytes:
+    """Read a regular sibling, refusing links and replacement during open."""
+    expected = _require_regular_member(path)
+    flags = os.O_RDONLY
+    for option in ("O_NOFOLLOW", "O_NONBLOCK", "O_BINARY"):
+        flags |= getattr(os, option, 0)
+    try:
+        descriptor = os.open(path, flags)
+        with os.fdopen(descriptor, "rb") as stream:
+            actual = os.fstat(stream.fileno())
+            current = _require_regular_member(path)
+            if not (
+                stat.S_ISREG(actual.st_mode)
+                and os.path.samestat(expected, actual)
+                and os.path.samestat(current, actual)
+            ):
+                raise ResultValidationError(
+                    "evidence member changed during open"
+                )
+            return stream.read()
+    except OSError as error:
+        raise ResultValidationError("evidence member is unreadable") from error
+
+
+def publish_evidence_package(parent: Path, result: ComparisonEvidence) -> Path:
     """Publish validated evidence in a child named from its run metadata."""
     document = result.document()
     json_content = result.json_bytes
-    html_content = render_html_report(document)
+    html_content = render_html_report(
+        document, result.configuration_document()
+    )
     run = document["run"]
     timestamp = run["completed_at"].replace("-", "").replace(":", "")
     parent = Path(parent)
@@ -143,6 +214,9 @@ def publish_evidence_package(parent: Path, result: CanonicalResult) -> Path:
         stage = staging_root / "package"
         stage.mkdir(mode=0o700)
         _write_atomic_member(stage / RESULTS_FILENAME, json_content)
+        _write_atomic_member(
+            stage / CONFIGURATION_FILENAME, result.configuration_bytes
+        )
         _write_atomic_member(stage / REPORT_FILENAME, html_content)
         _fsync_directory(stage)
         _publish_new_package(stage, destination)
@@ -469,13 +543,14 @@ def _exclusion_description(item: Mapping[str, Any]) -> str:
     )
 
 
-def _provenance_section(document: Mapping[str, Any]) -> str:
-    """Render sufficient provenance and embedded reproduction material."""
+def _provenance_section(
+    document: Mapping[str, Any], configuration: Mapping[str, Any]
+) -> str:
+    """Render provenance and saved configuration for reproduction."""
     run = document["run"]
     software = document["software"]
     runtime = document["runtime"]
     inputs = document["inputs"]
-    configuration = document["comparison_configuration"]["document"]
     input_rows = "".join(
         "<tr>"
         f"<th scope=\"row\">{_escape(side.title())}</th>"
@@ -499,7 +574,14 @@ def _provenance_section(document: Mapping[str, Any]) -> str:
         f"<dt>Python</dt><dd>{_escape(runtime['python'])}</dd>"
         f"<dt>Platform</dt><dd>{_escape(runtime['platform'])}</dd>"
         f"<dt>Unicode data</dt><dd>{_escape(runtime['unicode_version'])}</dd>"
-        f"<dt>Results schema</dt><dd>{_escape(document['results_schema_version'])}</dd>"
+        "<dt>Results schema</dt><dd>"
+        f"{_escape(document['schema_version'])}</dd>"
+        "<dt>Configuration schema</dt><dd>"
+        f"{_escape(configuration['schema_version'])}"
+        "</dd>"
+        "<dt>Configuration SHA-256</dt><dd><code>"
+        f"{_escape(document['comparison_configuration_digest']['value'])}"
+        "</code></dd>"
         "</dl><h3>Input byte provenance</h3><table><thead><tr><th>Side</th>"
         "<th>Basename</th><th>Format</th><th>SHA-256</th></tr></thead>"
         f"<tbody>{input_rows}"

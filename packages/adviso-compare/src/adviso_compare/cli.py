@@ -31,7 +31,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="adviso-compare",
         description=(
             "Compare a reference dataset with a query dataset and write a "
-            "two-file evidence package."
+            "three-file evidence package."
         ),
         epilog=(
             "Full user guide: share/doc/adviso-compare/USER_GUIDE.md in the "

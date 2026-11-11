@@ -76,7 +76,7 @@ def _add_collection_field(document: JsonObject) -> JsonObject:
 def test_valid_configuration_resolves_immutable_defaults_without_altering_document(
     tmp_path: Path,
 ) -> None:
-    """Omitted processing state resolves without adding embedded placeholders."""
+    """Resolve omitted processing state without changing the document."""
     original = minimal_configuration()
 
     configuration = _load_document(tmp_path, original)

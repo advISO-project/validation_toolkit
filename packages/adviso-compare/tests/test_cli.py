@@ -223,7 +223,7 @@ def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
 
 
 @pytest.mark.parametrize(
-    "failure", ["input", "configuration", "validation", "html"]
+    "failure", ["input", "configuration", "validation", "linkage", "html"]
 )
 @pytest.mark.parametrize("parent_exists", [False, True])
 def test_default_executor_errors_preserve_existing_content_without_new_output(
@@ -252,16 +252,21 @@ def test_default_executor_errors_preserve_existing_content_without_new_output(
         configuration = tmp_path / "configuration.yaml"
         configuration.write_text("[", encoding="utf-8")
         arguments.extend(["--configuration", str(configuration)])
-    if failure in {"validation", "html"}:
+    failure_attempted = False
+    if failure in {"validation", "linkage", "html"}:
 
         def fail(*args: object, **kwargs: object) -> None:
+            nonlocal failure_attempted
+            if failure == "linkage":
+                assert isinstance(kwargs.get("configuration_bytes"), bytes)
+            failure_attempted = True
             raise ResultValidationError("sensitive implementation detail")
 
-        target = (
-            "adviso_compare.application.assemble_result"
-            if failure == "validation"
-            else "adviso_compare.reporting.render_html_report"
-        )
+        target = {
+            "validation": "adviso_compare.application.assemble_result",
+            "linkage": "adviso_compare.results.validate_result",
+            "html": "adviso_compare.reporting.render_html_report",
+        }[failure]
         monkeypatch.setattr(target, fail)
 
     exit_code = main(arguments)
@@ -271,9 +276,14 @@ def test_default_executor_errors_preserve_existing_content_without_new_output(
         "input": "input.unreadable",
         "configuration": "configuration.invalid_syntax",
         "validation": "internal.unexpected",
+        "linkage": "internal.unexpected",
         "html": "internal.unexpected",
     }[failure]
-    assert exit_code == (3 if failure in {"validation", "html"} else 2)
+    if failure in {"validation", "linkage", "html"}:
+        assert failure_attempted
+    assert exit_code == (
+        3 if failure in {"validation", "linkage", "html"} else 2
+    )
     assert captured.out == ""
     assert captured.err.startswith(f"ERROR [{expected_code}]: ")
     assert captured.err.count("\n") == 1
@@ -482,6 +492,7 @@ def test_help_documents_the_complete_direct_interface_and_user_guide(
     assert "user guide" in captured.out.lower()
     assert "share/doc/adviso-compare/USER_GUIDE.md" in captured.out
     assert "subcommand" not in captured.out.lower()
+    assert "three-file evidence package" in " ".join(captured.out.split())
     assert "--overwrite" not in captured.out
     assert "parent" in captured.out.lower()
 

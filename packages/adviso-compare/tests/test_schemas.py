@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import Any
 
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
+from referencing import Registry
 
+from adviso_compare.schemas import load_schema
 from tests.support.documents import minimal_configuration, minimal_result
 from tests.support.schemas import (
     CONFIGURATION_SCHEMA_FILE,
@@ -47,13 +50,29 @@ def test_authoritative_schemas_are_packaged_valid_draft_2020_12_documents(
 
 
 @pytest.mark.parametrize("status", ["complete", "incomplete"])
-def test_representative_documents_validate_with_reference_and_format_assertion(
+def test_representative_documents_validate_independently_with_format_assertion(
     status: str,
 ) -> None:
-    """Representative documents exercise both schemas and their external reference."""
+    """Each format validates without registering the other schema."""
     configuration = minimal_configuration()
     result = minimal_result(status=status)
 
+    assert configuration["schema_version"] == "1.0"
+    assert result["schema_version"] == "1.0"
+    assert set(result) == {
+        "schema_version", "run", "phases", "software", "runtime", "inputs",
+        "record_key_fields", "comparison_configuration_digest", "summary",
+        "exclusions", "findings",
+    }
+    for filename, document in (
+        (CONFIGURATION_SCHEMA_FILE, configuration),
+        (RESULTS_SCHEMA_FILE, result),
+    ):
+        schema = load_packaged_schema(filename)
+        assert all(reference.startswith("#") for reference in _references(schema))
+        Draft202012Validator(
+            schema, registry=Registry(), format_checker=FormatChecker()
+        ).validate(document)
     configuration_validator().validate(configuration)
     results_validator().validate(result)
 
@@ -87,3 +106,115 @@ def test_synthetic_document_builders_are_deterministic_and_independent() -> None
         "org.example.synthetic-exact-comparison"
     )
     assert second_result["run"]["status"] == "incomplete"
+
+
+def _references(value: Any) -> list[str]:
+    """Collect schema references to check that validation is self-contained."""
+    if isinstance(value, list):
+        return [reference for item in value for reference in _references(item)]
+    if isinstance(value, dict):
+        return [
+            item
+            for key, item in value.items()
+            if key in {"$ref", "$dynamicRef"}
+        ] + [
+            reference
+            for item in value.values()
+            for reference in _references(item)
+        ]
+    return []
+
+
+@pytest.mark.parametrize(
+    ("family", "filename"),
+    [
+        ("configuration", CONFIGURATION_SCHEMA_FILE),
+        ("results", RESULTS_SCHEMA_FILE),
+    ],
+)
+def test_schema_lookup_selects_the_document_family_and_version(
+    family: str, filename: str,
+) -> None:
+    """Equal version strings select different schemas in different families."""
+    assert load_schema(family, "1.0") == load_packaged_schema(filename)
+
+
+@pytest.mark.parametrize(
+    ("family", "version"),
+    [("configuration", "2.0"), ("results", "2.0"), ("unknown", "1.0")],
+)
+def test_schema_lookup_rejects_unknown_families_and_versions(
+    family: str, version: str,
+) -> None:
+    """Unrecognized selectors never become filenames or network references."""
+    with pytest.raises(ValueError):
+        load_schema(family, version)
+
+
+@pytest.mark.parametrize("family", ["configuration", "results"])
+@pytest.mark.parametrize("version", [None, "2.0", 1.0, ""])
+def test_each_document_requires_its_own_supported_root_version(
+    family: str, version: object,
+) -> None:
+    """The format discriminator is required and has its specified string value."""
+    if family == "configuration":
+        document = minimal_configuration()
+        validator = configuration_validator()
+    else:
+        document = minimal_result()
+        validator = results_validator()
+    if version is None:
+        del document["schema_version"]
+    else:
+        document["schema_version"] = version
+
+    assert not validator.is_valid(document)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda document: document.pop("comparison_configuration_digest"),
+        lambda document: document.update(unexpected={}),
+        lambda document: document["comparison_configuration_digest"].pop(
+            "algorithm"
+        ),
+        lambda document: document["comparison_configuration_digest"].pop("value"),
+        lambda document: document["comparison_configuration_digest"].update(
+            algorithm="sha512"
+        ),
+        lambda document: document["comparison_configuration_digest"].update(
+            unexpected="unused"
+        ),
+    ],
+    ids=[
+        "missing-digest", "unknown-root-property", "missing-algorithm",
+        "missing-value", "unsupported-algorithm", "unknown-digest-property",
+    ],
+)
+def test_configuration_digest_has_exact_required_properties(mutation: Any) -> None:
+    """A results document records a closed, complete SHA-256 digest object."""
+    document = minimal_result()
+    mutation(document)
+
+    assert not results_validator().is_valid(document)
+
+
+@pytest.mark.parametrize("digest_field", ["configuration", "input"])
+@pytest.mark.parametrize(
+    "value", ["", "0" * 63, "0" * 65, "A" * 64, "0" * 64 + "\n", 0],
+    ids=["empty", "short", "long", "uppercase", "trailing-newline", "not-text"],
+)
+def test_sha256_digests_require_exact_lowercase_hexadecimal_text(
+    digest_field: str, value: object,
+) -> None:
+    """Each digest contains exactly 64 lowercase hexadecimal characters."""
+    document = minimal_result()
+    digest = (
+        document["comparison_configuration_digest"]
+        if digest_field == "configuration"
+        else document["inputs"]["reference"]["digest"]
+    )
+    digest["value"] = value
+
+    assert not results_validator().is_valid(document)

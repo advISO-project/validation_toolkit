@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from hashlib import sha256
 from typing import Any, Literal
 
 
@@ -43,6 +45,18 @@ def minimal_configuration() -> JsonObject:
             },
         },
     }
+
+
+def minimal_configuration_bytes() -> bytes:
+    """Return deterministic saved bytes for the controlled configuration."""
+    document = minimal_configuration()
+    definitions = document["fields"]["definitions"]
+    document["fields"]["definitions"] = {
+        name: definitions[name] for name in sorted(definitions)
+    }
+    return (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode(
+        "utf-8"
+    )
 
 
 def minimal_result(
@@ -112,7 +126,7 @@ def minimal_result(
         ]
 
     return {
-        "results_schema_version": "1.0",
+        "schema_version": "1.0",
         "run": {
             "id": "123e4567-e89b-42d3-a456-426614174000",
             "status": status,
@@ -148,7 +162,10 @@ def minimal_result(
             "query": ["query_id"],
             "canonical": ["record_id"],
         },
-        "comparison_configuration": {"document": minimal_configuration()},
+        "comparison_configuration_digest": {
+            "algorithm": "sha256",
+            "value": sha256(minimal_configuration_bytes()).hexdigest(),
+        },
         "summary": {
             "records": records,
             "values": values,

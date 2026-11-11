@@ -6,20 +6,20 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "results_schema_version",
+    "schema_version",
     "run",
     "phases",
     "software",
     "runtime",
     "inputs",
     "record_key_fields",
-    "comparison_configuration",
+    "comparison_configuration_digest",
     "summary",
     "exclusions",
     "findings"
   ],
   "properties": {
-    "results_schema_version": {
+    "schema_version": {
       "const": "1.0"
     },
     "run": {
@@ -40,8 +40,8 @@
     "record_key_fields": {
       "$ref": "#/$defs/recordKeyFields"
     },
-    "comparison_configuration": {
-      "$ref": "#/$defs/comparisonConfiguration"
+    "comparison_configuration_digest": {
+      "$ref": "#/$defs/sha256Digest"
     },
     "summary": {
       "$ref": "#/$defs/summary"
@@ -173,6 +173,8 @@
         },
         "value": {
           "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
           "pattern": "^[0-9a-f]{64}$"
         }
       }
@@ -250,18 +252,6 @@
         },
         "canonical": {
           "$ref": "#/$defs/nonEmptyStringArray"
-        }
-      }
-    },
-    "comparisonConfiguration": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "document"
-      ],
-      "properties": {
-        "document": {
-          "$ref": "comparison-configuration-v1.0.schema.json"
         }
       }
     },

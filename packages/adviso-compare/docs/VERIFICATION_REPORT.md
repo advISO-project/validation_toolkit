@@ -260,3 +260,97 @@ unchanged during this documentation step. The full behavioural suite was not
 rerun; the preceding implementation verification remains 317 passing tests.
 No additional platform-matrix, lint, or type checks were run for this step;
 the limitations recorded above still apply.
+
+## Separate configuration evidence verification — 11 November 2026
+
+This development verification covers Git revision `b360d74` plus the working-tree
+specification, schema, implementation, test, and documentation changes for the
+three-file evidence package. It is not an immutable-release attestation. Earlier
+sections remain records of their respective candidates.
+
+The environment was CPython 3.12.16 on macOS arm64. The final suite command was:
+
+```console
+.venv/bin/python -m pytest packages/adviso-compare/tests -q --tb=short --junitxml=.venv/separate-configuration-final.xml
+```
+
+Result: **376 passed in 16.50s**, with no failures, errors, or skips.
+
+The verified contract includes:
+
+- exactly three fixed regular members: `comparison-results.json`,
+  `comparison-configuration.json`, and `comparison-report.html`;
+- complete effective configuration preservation in custom and automatic modes,
+  including metadata, explicit declarations, list provenance, absent defaults,
+  canonical UTF-8 serialization, and immutable independent document views;
+- results root `schema_version` and top-level
+  `comparison_configuration_digest`, with SHA-256 calculated from the exact
+  configuration bytes published, including their final newline;
+- independent family/version schema selection, preserved canonical schema IDs
+  and `1.0` identifiers, no results-to-configuration schema reference, format
+  assertion, and explicitly supported schema combinations;
+- strict JSON parsing, required configuration context, missing/unreadable or
+  non-regular configuration files, unsupported versions, malformed or duplicate
+  members, digest tampering, and cross-document semantic contradictions;
+- retained finding, count, status, key, priority, exclusion, input-provenance,
+  and available comparison-context checks;
+- HTML generation from the validated JSON pair, with no original-YAML reread;
+- private staging of all three files, failure at each member write, exclusive
+  publication, preservation of existing content, collision handling, and
+  successive/concurrent runs; and
+- automatic/custom and complete/incomplete integration, wheel and sdist builds
+  and installation, installed resources, and installed-wheel command execution.
+
+Existing tests were adapted at their established boundaries. The documentation
+example test now extracts and executes the guide's package-validation snippet
+against both generated example packages. No separate fixture family, helper
+module, dependency, command, or test-framework change was introduced. The
+configuration schema is unchanged. The revised results schema retains its
+canonical ID and version while representing the initial-release contract.
+
+The README and guide describe the package directly, including independent
+schema identities, exact-byte linkage, saved configuration metadata, and the
+supported version combination. The guide distinguishes structural validation,
+digest verification, and semantic checks, including which checks require source
+comparison context. Its runnable procedure calls the installed
+`validate_evidence_package` function; the text also describes trusted schema
+selection and equivalent format assertion for independent consumers. It
+explicitly limits saved-package inspection to available evidence and does not
+claim HTML authentication or reproduction of the comparison from its inputs.
+
+The focused documentation, distribution, and schema check was:
+
+```console
+.venv/bin/python -m pytest packages/adviso-compare/tests/test_documentation.py packages/adviso-compare/tests/test_distribution.py packages/adviso-compare/tests/test_schemas.py -q --tb=short --junitxml=.venv/separate-configuration-step5.xml
+```
+
+Result: **41 passed in 14.40s**. The installed wheel's guide is checked byte for
+byte against the maintained guide. The distribution harness uses development
+site-packages for dependencies; this is not independent dependency resolution.
+
+Both console commands from guide Sections 4.1 and 5.11 were separately extracted
+and executed twice in a temporary copy of the supplied synthetic examples.
+All four runs completed with one comparison difference and no assessment
+issues. Each produced a distinct three-file package. The first package's three
+files remained byte-identical after the second run. The Section 8.5 Python
+snippet was extracted and executed unchanged from all four run directories;
+all passed.
+
+Compilation, dependency consistency, and `git diff --check` passed. Local links,
+heading fragments, and code fences in the repository README, package README,
+guide, and specification were checked. Normative requirement definitions are
+unique and their references resolve. A source search found no obsolete result
+version property or embedded-configuration access in runtime code, tests,
+schemas, the specification, or maintained user documentation. Earlier
+development plans and verification records were not rewritten as current
+product instructions. The editable environment's offline guide was synchronized
+and confirmed byte-identical; its installed examples also match source.
+
+Production code, normative sources, dependencies, and packaging metadata were
+unchanged during this documentation step. The implemented behaviour, schemas,
+tests, and maintained documentation now agree on this functionality change.
+Linux, Windows, other supported Python versions, CI enforcement, independent
+review, and immutable release evidence remain release verification work. No
+formatter, linter, type checker, or Markdown linter is configured, and none is
+claimed to have run. Local completion of this change does not establish release
+readiness across the supported matrix.

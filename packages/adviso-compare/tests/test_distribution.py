@@ -209,6 +209,14 @@ def test_distributions_and_installed_executable_cover_the_product_path(
     assert "Run status: complete\n" in completed.stdout
     assert str(tmp_path) not in completed.stdout
     automatic_package = assert_run_package(automatic_output)
+    saved_automatic = json.loads(
+        (automatic_package / "comparison-configuration.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert saved_automatic["metadata"]["id"] == (
+        "org.adviso.automatic-strict-exact"
+    )
     displayed = Path(automatic_output.name) / automatic_package.name
     assert f"Evidence package: {displayed}\n" in completed.stdout
     original_bytes = {
@@ -272,6 +280,11 @@ def test_distributions_and_installed_executable_cover_the_product_path(
     assert "Run status: incomplete\n" in incomplete.stdout
     assert str(tmp_path) not in incomplete.stdout
     custom_package = assert_run_package(custom_output)
+    assert json.loads(
+        (custom_package / "comparison-configuration.json").read_text(
+            encoding="utf-8"
+        )
+    ) == minimal_configuration()
     assert (
         f"Evidence package: {Path(custom_output.name) / custom_package.name}\n"
         in incomplete.stdout

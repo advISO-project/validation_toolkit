@@ -7,7 +7,6 @@ import json
 import re
 from dataclasses import dataclass, field as dataclass_field
 from decimal import Decimal
-from importlib.resources import files
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Generic, Mapping, TypeVar
@@ -23,10 +22,9 @@ from adviso_compare.processing import (
     field_comparator_is_compatible,
     typed_normalisation_is_compatible,
 )
+from adviso_compare.schemas import load_schema
 
 
-CONFIGURATION_SCHEMA_FILE = "comparison-configuration-v1.0.schema.json"
-CONFIGURATION_SCHEMA_PACKAGE = "adviso_compare.schemas"
 SUPPORTED_SCHEMA_VERSION = "1.0"
 AUTOMATIC_CONFIGURATION_ID = "org.adviso.automatic-strict-exact"
 
@@ -335,6 +333,19 @@ def resolve_automatic_configuration(document: JsonObject) -> EffectiveConfigurat
     return _build_effective_configuration(document)
 
 
+def validate_saved_configuration(document: JsonObject) -> None:
+    """Validate saved effective configuration from either comparison mode."""
+    version = document.get("schema_version")
+    if not isinstance(version, str) or version != SUPPORTED_SCHEMA_VERSION:
+        raise ConfigurationError(
+            code="unsupported_version",
+            path="$.schema_version",
+            message="comparison-configuration schema version is not supported",
+        )
+    _validate_schema(document, version=version)
+    _validate_semantics(document, allow_automatic_identifier=True)
+
+
 def _load_yaml_document(text: str) -> object:
     """Load exactly one safe YAML 1.2 document with forbidden features disabled."""
     try:
@@ -358,16 +369,19 @@ def _load_yaml_document(text: str) -> object:
         ) from error
 
 
-def _configuration_validator() -> Draft202012Validator:
+def _configuration_validator(
+    version: str = SUPPORTED_SCHEMA_VERSION,
+) -> Draft202012Validator:
     """Load the authoritative packaged schema through the resource API."""
-    resource = files(CONFIGURATION_SCHEMA_PACKAGE).joinpath(CONFIGURATION_SCHEMA_FILE)
-    schema = json.loads(resource.read_text(encoding="utf-8"))
+    schema = load_schema("configuration", version)
     return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
-def _validate_schema(document: object) -> None:
+def _validate_schema(
+    document: object, *, version: str = SUPPORTED_SCHEMA_VERSION
+) -> None:
     """Raise the most deterministic actionable structural validation error."""
-    errors = list(_configuration_validator().iter_errors(document))
+    errors = list(_configuration_validator(version).iter_errors(document))
     if not errors:
         return
     error = min(errors, key=_schema_error_sort_key)
