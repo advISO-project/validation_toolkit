@@ -16,21 +16,15 @@ from pathlib import Path
 from typing import Any, Mapping
 from uuid import uuid4
 
-from adviso_compare.results import CanonicalResult, validate_result
+from adviso_compare.results import CanonicalResult
 
 
 RESULTS_FILENAME = "comparison-results.json"
 REPORT_FILENAME = "comparison-report.html"
-PACKAGE_MEMBERS = frozenset({RESULTS_FILENAME, REPORT_FILENAME})
 AUTOMATIC_CONFIGURATION_ID = "org.adviso.automatic-strict-exact"
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
-_RENAME_EXCHANGE = 2
-_UNSUPPORTED_RENAME_ERRORS = {
-    getattr(errno, name)
-    for name in ("EINVAL", "ENOSYS", "ENOTSUP", "EOPNOTSUPP")
-    if hasattr(errno, name)
-}
+_RENAME_EXCL = 4
 
 
 # Public reporting API
@@ -129,28 +123,21 @@ def render_html_report(document: Mapping[str, Any]) -> bytes:
 # Evidence-package publication
 
 
-def publish_evidence_package(
-    destination: Path,
-    result: CanonicalResult,
-    *,
-    overwrite: bool = False,
-) -> Path:
-    """Stage and publish one validated two-file evidence package."""
+def publish_evidence_package(parent: Path, result: CanonicalResult) -> Path:
+    """Publish validated evidence in a child named from its run metadata."""
+    document = result.document()
     json_content = result.json_bytes
-    html_content = render_html_report(result.document())
-    destination = Path(destination)
-    existing = _inspect_destination(destination, overwrite=overwrite)
-    parent = destination.parent
-    if not parent.is_dir():
-        raise OutputError(
-            code="write_failed",
-            message="the output parent directory does not exist or is not a directory",
-        )
-
+    html_content = render_html_report(document)
+    run = document["run"]
+    timestamp = run["completed_at"].replace("-", "").replace(":", "")
+    parent = Path(parent)
+    destination = parent / f"{timestamp}-{run['id']}"
     staging_root: Path | None = None
     try:
+        _prepare_output_parent(parent)
+        _require_absent(destination)
         staging_root = Path(
-            tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=parent)
+            tempfile.mkdtemp(prefix=".adviso-compare.staging-", dir=parent)
         )
         os.chmod(staging_root, 0o700)
         stage = staging_root / "package"
@@ -158,19 +145,16 @@ def publish_evidence_package(
         _write_atomic_member(stage / RESULTS_FILENAME, json_content)
         _write_atomic_member(stage / REPORT_FILENAME, html_content)
         _fsync_directory(stage)
-
-        if existing:
-            _inspect_destination(destination, overwrite=True)
-            _replace_existing_package(stage, destination)
-        else:
-            _publish_new_package(stage, destination)
+        _publish_new_package(stage, destination)
         _fsync_directory(parent)
     except OutputError:
         raise
     except OSError as error:
         raise OutputError(
             code="write_failed",
-            message="the evidence package could not be written or published",
+            message=(
+                "the output parent or evidence package could not be written"
+            ),
         ) from error
     finally:
         if staging_root is not None:
@@ -178,147 +162,103 @@ def publish_evidence_package(
     return destination
 
 
-def _publish_new_package(stage: Path, destination: Path) -> None:
-    """Publish to an absent path without replacement where supported."""
+def _prepare_output_parent(parent: Path) -> None:
+    """Accept or privately create a regular parent without reading contents."""
     try:
-        supported = _renameat2(stage, destination, _RENAME_NOREPLACE)
+        mode = parent.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        if not parent.parent.is_dir():
+            raise OutputError(
+                code="invalid_destination",
+                message="the output parent's enclosing directory must exist",
+            ) from None
+        try:
+            parent.mkdir(mode=0o700)
+        except FileExistsError:
+            # A concurrent publisher may have created the shared parent.
+            pass
+        mode = parent.lstat().st_mode
+    if not stat.S_ISDIR(mode):
+        raise OutputError(
+            code="invalid_destination",
+            message=(
+                "the output parent must be a regular directory, not a link"
+            ),
+        )
+
+
+def _publish_new_package(stage: Path, destination: Path) -> None:
+    """Publish atomically without replacing an object at the final path."""
+    try:
+        _rename_exclusively(stage, destination)
     except OSError as error:
+        if error.errno in {errno.ENOTSUP, errno.ENOSYS, errno.EINVAL}:
+            raise OutputError(
+                code="write_failed",
+                message=(
+                    "the destination does not support safe directory "
+                    "publication; select a different filesystem"
+                ),
+            ) from error
         if error.errno not in {errno.EEXIST, errno.ENOTEMPTY}:
             raise
         raise OutputError(
             code="invalid_destination",
-            message="the selected output destination already exists",
+            message="the run-directory path is already occupied",
         ) from error
-    if supported:
+
+
+def _rename_exclusively(source: Path, destination: Path) -> None:
+    """Publish with the host's exclusive rename primitive."""
+    if sys.platform == "win32":
+        # Windows os.rename refuses every existing destination.
+        os.rename(source, destination)
         return
-    _require_absent(destination)
-    os.rename(stage, destination)
-
-
-def _replace_existing_package(
-    stage: Path,
-    destination: Path,
-) -> None:
-    """Replace only through an atomic exchange that preserves the original."""
-    if not _exchange_directories(stage, destination):
-        raise OutputError(
-            code="write_failed",
-            message=(
-                "atomic overwrite is not supported at this destination; "
-                "select a new output destination"
-            ),
+    if sys.platform not in {"linux", "darwin"}:
+        raise OSError(
+            errno.ENOTSUP, "exclusive directory rename is unavailable"
         )
-    _remove_temporary_directory(stage)
 
-
-def _exchange_directories(left: Path, right: Path) -> bool:
-    """Atomically exchange two directories when the host filesystem supports it."""
-    return _renameat2(left, right, _RENAME_EXCHANGE)
-
-
-def _renameat2(source: Path, destination: Path, flags: int) -> bool:
-    """Invoke Linux renameat2, returning false when the operation is unavailable."""
-    if sys.platform != "linux":
-        return False
+    library = ctypes.CDLL(None, use_errno=True)
     try:
-        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
-    except AttributeError:
-        return False
-    renameat2.argtypes = (
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_uint,
-    )
-    renameat2.restype = ctypes.c_int
-    result = renameat2(
-        _AT_FDCWD,
-        os.fsencode(source),
-        _AT_FDCWD,
-        os.fsencode(destination),
-        flags,
-    )
-    if result == 0:
-        return True
-    error_number = ctypes.get_errno()
-    if error_number in _UNSUPPORTED_RENAME_ERRORS:
-        return False
-    raise OSError(error_number, os.strerror(error_number))
-
-
-def _inspect_destination(destination: Path, *, overwrite: bool) -> bool:
-    """Return whether a replaceable complete package occupies the destination."""
-    try:
-        destination_stat = destination.lstat()
-    except FileNotFoundError:
-        return False
-    except OSError as error:
-        raise OutputError(
-            code="invalid_destination",
-            message="the selected output destination could not be inspected",
-        ) from error
-    if not overwrite:
-        raise OutputError(
-            code="invalid_destination",
-            message="the selected output destination already exists",
-        )
-    if not stat.S_ISDIR(destination_stat.st_mode):
-        raise OutputError(
-            code="invalid_destination",
-            message=(
-                "overwrite requires an existing complete evidence-package "
-                "directory"
-            ),
-        )
-    try:
-        entries = {entry.name: entry for entry in os.scandir(destination)}
-        if set(entries) != PACKAGE_MEMBERS:
-            raise OutputError(
-                code="invalid_destination",
-                message=(
-                    "overwrite requires a directory containing exactly the two "
-                    "version 1 evidence-package files"
-                ),
+        if sys.platform == "linux":
+            rename = library.renameat2
+            rename.argtypes = (
+                ctypes.c_int, ctypes.c_char_p,
+                ctypes.c_int, ctypes.c_char_p, ctypes.c_uint,
             )
-        if any(not entry.is_file(follow_symlinks=False) for entry in entries.values()):
-            raise OutputError(
-                code="invalid_destination",
-                message="evidence-package members must be regular files",
+            rename.restype = ctypes.c_int
+            result = rename(
+                _AT_FDCWD, os.fsencode(source),
+                _AT_FDCWD, os.fsencode(destination), _RENAME_NOREPLACE,
             )
-        result_bytes = (destination / RESULTS_FILENAME).read_bytes()
-        report_text = (destination / REPORT_FILENAME).read_text(encoding="utf-8")
-        existing_result = json.loads(result_bytes.decode("utf-8"))
-        validate_result(existing_result)
-        if not report_text.casefold().startswith("<!doctype html>"):
-            raise ValueError("report is not recognizable HTML")
-    except OutputError:
-        raise
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
-        raise OutputError(
-            code="invalid_destination",
-            message=(
-                "the existing directory is not a complete version 1 evidence "
-                "package"
-            ),
+        else:
+            rename = library.renamex_np
+            rename.argtypes = (
+                ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint,
+            )
+            rename.restype = ctypes.c_int
+            result = rename(
+                os.fsencode(source), os.fsencode(destination), _RENAME_EXCL,
+            )
+    except AttributeError as error:
+        raise OSError(
+            errno.ENOTSUP, "exclusive directory rename is unavailable"
         ) from error
-    return True
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, os.strerror(error_number))
 
 
 def _require_absent(destination: Path) -> None:
-    """Refuse a destination that appeared while the package was staged."""
+    """Refuse an occupied run path without following symbolic links."""
     try:
         destination.lstat()
     except FileNotFoundError:
         return
-    except OSError as error:
-        raise OutputError(
-            code="invalid_destination",
-            message="the selected output destination could not be inspected",
-        ) from error
     raise OutputError(
         code="invalid_destination",
-        message="the selected output destination already exists",
+        message="the run-directory path is already occupied",
     )
 
 
@@ -349,7 +289,7 @@ def _write_atomic_member(path: Path, content: bytes) -> None:
 
 
 def _remove_temporary_directory(path: Path) -> None:
-    """Best-effort removal for private staging or backup directories."""
+    """Best-effort removal of this invocation's private staging directory."""
     for _ in range(2):
         try:
             shutil.rmtree(path)

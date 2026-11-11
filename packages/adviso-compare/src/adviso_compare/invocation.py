@@ -9,13 +9,12 @@ from typing import Literal, Protocol
 
 @dataclass(frozen=True, slots=True)
 class ComparisonInvocation:
-    """User-selected paths and overwrite authorization for one comparison."""
+    """User-selected input paths and output parent for one comparison."""
 
     reference: Path
     query: Path
     output: Path
     configuration: Path | None = None
-    overwrite: bool = False
 
 
 @dataclass(frozen=True, slots=True)

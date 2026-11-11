@@ -87,15 +87,10 @@ def execute_comparison(invocation: ComparisonInvocation) -> ComparisonOutcome:
     result = assemble_result(prepared, contract, records, values)
     document = result.document()
     finding_counts = document["summary"]["findings"]["by_classification"]
-    outcome = ComparisonOutcome(
+    published = publish_evidence_package(invocation.output, result)
+    return ComparisonOutcome(
         run_status=document["run"]["status"],
-        output=invocation.output,
+        output=published,
         comparison_differences=finding_counts["comparison_difference"],
         assessment_issues=finding_counts["assessment_issue"],
     )
-    publish_evidence_package(
-        invocation.output,
-        result,
-        overwrite=invocation.overwrite,
-    )
-    return outcome

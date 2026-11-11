@@ -11,6 +11,7 @@ import yaml
 
 from adviso_compare.application import execute_comparison
 from adviso_compare.invocation import ComparisonInvocation
+from tests.support.evidence import assert_run_package
 from tests.support.schemas import configuration_validator, results_validator
 
 
@@ -50,8 +51,9 @@ def test_user_guide_examples_run_with_the_documented_outcome(
             configuration=configuration,
         )
     )
+    selected = assert_run_package(working / "evidence", outcome.output)
     result = json.loads(
-        (working / "evidence" / "comparison-results.json").read_text(
+        (selected / "comparison-results.json").read_text(
             encoding="utf-8"
         )
     )

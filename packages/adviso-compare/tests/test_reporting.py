@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 from uuid import UUID
 
@@ -37,6 +40,7 @@ def _generated_evidence(
     *,
     incomplete: bool = False,
     automatic: bool = False,
+    run_id: UUID = UUID("123e4567-e89b-42d3-a456-426614174000"),
 ) -> CanonicalResult:
     """Generate canonical evidence through all three comparison phases."""
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -85,7 +89,7 @@ def _generated_evidence(
         contract,
         records,
         values,
-        run_id=UUID("123e4567-e89b-42d3-a456-426614174000"),
+        run_id=run_id,
         completed_at=datetime(2026, 11, 9, 12, 34, 56, tzinfo=timezone.utc),
         software_version="1.2.3",
         runtime=RuntimeIdentity(
@@ -97,18 +101,23 @@ def _generated_evidence(
     return result
 
 
-def _publish(
-    destination: Path,
-    result: CanonicalResult,
-    *,
-    overwrite: bool = False,
-) -> Path:
-    """Publish generated, validated evidence."""
-    return publish_evidence_package(
-        destination,
-        result,
-        overwrite=overwrite,
-    )
+def _publish(parent: Path, result: CanonicalResult) -> Path:
+    """Publish generated, validated evidence under the selected parent."""
+    return publish_evidence_package(parent, result)
+
+
+def _snapshot(directory: Path) -> dict[str, tuple[int, bytes | str | None]]:
+    """Capture names, permissions, and content without following symlinks."""
+    snapshot = {}
+    for path in (directory, *sorted(directory.rglob("*"))):
+        mode = path.lstat().st_mode
+        content = None
+        if stat.S_ISLNK(mode):
+            content = os.readlink(path)
+        elif stat.S_ISREG(mode):
+            content = path.read_bytes()
+        snapshot[str(path.relative_to(directory))] = (mode, content)
+    return snapshot
 
 
 def test_html_report_is_a_self_contained_view_of_canonical_json() -> None:
@@ -158,206 +167,187 @@ def test_automatic_mode_report_explains_its_limits(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("status", ["complete", "incomplete"])
+@pytest.mark.parametrize("parent_exists", [False, True])
 def test_publication_creates_exact_private_two_file_package(
     tmp_path: Path,
     status: str,
+    parent_exists: bool,
 ) -> None:
-    """Every non-error result publishes only canonical JSON and its HTML view."""
+    """Publish exact evidence in a private child named by result metadata."""
     evidence = _generated_evidence(
-        tmp_path / "inputs",
-        incomplete=status == "incomplete",
+        tmp_path / "inputs", incomplete=status == "incomplete"
     )
     result = evidence.document()
-    destination = tmp_path / f"comparison.{status}.evidence"
+    parent = tmp_path / f"comparison.{status}.evidence"
+    if parent_exists:
+        parent.mkdir()
+    parent_mode = parent.stat().st_mode if parent_exists else None
+    expected = parent / "20261109T123456Z-123e4567-e89b-42d3-a456-426614174000"
 
-    selected = _publish(destination, evidence)
+    selected = _publish(parent, evidence)
 
-    assert selected == destination
-    assert sorted(path.name for path in destination.iterdir()) == [
+    assert selected == expected
+    assert list(parent.iterdir()) == [selected]
+    assert sorted(path.name for path in selected.iterdir()) == [
         "comparison-report.html",
         "comparison-results.json",
     ]
-    published = json.loads(
-        (destination / "comparison-results.json").read_text(encoding="utf-8")
-    )
-    assert published == result
-    assert (destination / "comparison-results.json").read_bytes() == (
-        evidence.json_bytes
-    )
-    assert (destination / "comparison-report.html").read_bytes() == (
-        render_html_report(published)
-    )
-    assert stat.S_IMODE(destination.stat().st_mode) == 0o700
-    for member in destination.iterdir():
-        assert stat.S_IMODE(member.stat().st_mode) == 0o600
-    assert not list(tmp_path.glob(f".{destination.name}.*"))
+    assert (
+        selected / "comparison-results.json"
+    ).read_bytes() == evidence.json_bytes
+    assert json.loads(
+        (selected / "comparison-results.json").read_text(encoding="utf-8")
+    ) == result
+    assert (
+        selected / "comparison-report.html"
+    ).read_bytes() == render_html_report(result)
+    if parent_mode is not None:
+        assert parent.stat().st_mode == parent_mode
+    if os.name == "posix":
+        if not parent_exists:
+            assert stat.S_IMODE(parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(selected.stat().st_mode) == 0o700
+        for member in selected.iterdir():
+            assert stat.S_IMODE(member.stat().st_mode) == 0o600
+    assert not list(tmp_path.glob(f".{parent.name}.*"))
 
 
 @pytest.mark.parametrize(
-    "existing_kind",
+    "parent_kind",
     [
-        "file",
-        "symlink",
-        "empty_directory",
-        "partial_package",
-        "invalid_package",
-        "extra_entry",
+        "file", "symlink", "dangling_symlink",
+        "empty_directory", "populated_directory",
     ],
 )
-@pytest.mark.parametrize("overwrite", [False, True])
-def test_existing_destinations_are_refused_except_complete_authorized_package(
+def test_output_parent_eligibility_depends_on_its_kind_not_its_contents(
     tmp_path: Path,
-    existing_kind: str,
-    overwrite: bool,
+    parent_kind: str,
 ) -> None:
-    """Destination checks reject unsafe replacement targets without mutation."""
+    """Accept arbitrary directory contents and preserve rejected objects."""
     evidence = _generated_evidence(tmp_path / "inputs")
-    destination = tmp_path / "evidence"
-    if existing_kind == "file":
-        destination.write_text("keep", encoding="utf-8")
-    elif existing_kind == "symlink":
+    parent = tmp_path / "evidence"
+    if parent_kind == "file":
+        parent.write_bytes(b"keep")
+    elif parent_kind in {"symlink", "dangling_symlink"}:
         target = tmp_path / "target"
-        target.mkdir()
-        destination.symlink_to(target, target_is_directory=True)
+        if parent_kind == "symlink":
+            target.mkdir()
+            (target / "keep.txt").write_bytes(b"keep")
+        parent.symlink_to(target, target_is_directory=True)
     else:
-        destination.mkdir()
-        if existing_kind in {
-            "partial_package",
-            "invalid_package",
-            "extra_entry",
-        }:
-            (destination / "comparison-results.json").write_text(
-                "keep", encoding="utf-8"
-            )
-        if existing_kind in {"invalid_package", "extra_entry"}:
-            (destination / "comparison-report.html").write_text(
-                "keep", encoding="utf-8"
-            )
-        if existing_kind == "extra_entry":
-            (destination / "extra.txt").write_text("keep", encoding="utf-8")
+        parent.mkdir()
+        if parent_kind == "populated_directory":
+            (parent / "comparison-results.json").write_bytes(b"not JSON")
+            nested = parent / ".another-run.staging"
+            nested.mkdir()
+            (nested / "keep.txt").write_bytes(b"keep")
+        before = _snapshot(parent)
 
+        selected = _publish(parent, evidence)
+
+        assert selected.parent == parent
+        assert selected.is_dir()
+        after = _snapshot(parent)
+        assert {name: after[name] for name in before} == before
+        assert set(after) - set(before) == {
+            selected.name,
+            f"{selected.name}/comparison-results.json",
+            f"{selected.name}/comparison-report.html",
+        }
+        return
+
+    mode = parent.lstat().st_mode
     with pytest.raises(OutputError) as raised:
-        _publish(destination, evidence, overwrite=overwrite)
-
+        _publish(parent, evidence)
     assert raised.value.code == "invalid_destination"
-    assert destination.exists() or destination.is_symlink()
+    assert parent.lstat().st_mode == mode
+    if parent_kind == "file":
+        assert parent.read_bytes() == b"keep"
+    else:
+        assert parent.is_symlink()
+        assert parent.readlink() == target
+        if target.exists():
+            assert (target / "keep.txt").read_bytes() == b"keep"
     assert not list(tmp_path.glob(".evidence.*"))
 
 
-def test_overwrite_replaces_only_a_complete_version_one_package(
+def test_successive_runs_with_the_same_timestamp_preserve_each_package(
     tmp_path: Path,
 ) -> None:
-    """Explicit overwrite replaces a recognizable package and nothing else."""
-    original_evidence = _generated_evidence(tmp_path / "original-inputs")
-    replacement_evidence = _generated_evidence(
-        tmp_path / "replacement-inputs",
+    """A new UUID creates a sibling while preserving the first package."""
+    first = _generated_evidence(tmp_path / "first-inputs")
+    second = _generated_evidence(
+        tmp_path / "second-inputs",
         incomplete=True,
+        run_id=UUID("123e4567-e89b-42d3-a456-426614174001"),
     )
-    destination = tmp_path / "evidence"
-    original = original_evidence.document()
-    _publish(destination, original_evidence)
-    replacement = replacement_evidence.document()
+    parent = tmp_path / "evidence"
+    original = _publish(parent, first)
+    assert original.parent == parent
+    before = _snapshot(original)
 
-    with pytest.raises(OutputError) as raised:
-        _publish(destination, replacement_evidence)
-    assert raised.value.code == "invalid_destination"
-    assert json.loads(
-        (destination / "comparison-results.json").read_text(encoding="utf-8")
-    ) == original
+    selected = _publish(parent, second)
 
-    _publish(destination, replacement_evidence, overwrite=True)
-
-    assert json.loads(
-        (destination / "comparison-results.json").read_text(encoding="utf-8")
-    ) == replacement
-    assert not list(tmp_path.glob(".evidence.*"))
+    assert selected == (
+        parent / "20261109T123456Z-123e4567-e89b-42d3-a456-426614174001"
+    )
+    assert set(parent.iterdir()) == {original, selected}
+    assert _snapshot(original) == before
+    assert (
+        selected / "comparison-results.json"
+    ).read_bytes() == second.json_bytes
 
 
-def test_failed_replacement_restores_existing_package_and_cleans_staging(
+@pytest.mark.parametrize("failure", ["publication", "unsupported_rename"])
+def test_failed_second_publication_preserves_content_and_cleans_staging(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    failure: str,
 ) -> None:
-    """A publication fault leaves the old complete package byte-identical."""
-    original_evidence = _generated_evidence(tmp_path / "original-inputs")
-    replacement_evidence = _generated_evidence(
-        tmp_path / "replacement-inputs",
-        incomplete=True,
+    """A fault after staging preserves siblings and unrelated content."""
+    first = _generated_evidence(tmp_path / "first-inputs")
+    second = _generated_evidence(
+        tmp_path / "second-inputs",
+        run_id=UUID("123e4567-e89b-42d3-a456-426614174001"),
     )
-    destination = tmp_path / "evidence"
-    _publish(destination, original_evidence)
-    before = {
-        member.name: member.read_bytes() for member in destination.iterdir()
-    }
+    parent = tmp_path / "evidence"
+    original = _publish(parent, first)
+    assert original.parent == parent
+    (parent / "keep.txt").write_bytes(b"keep")
+    other_stage = parent / ".another-run.staging"
+    other_stage.mkdir()
+    (other_stage / "keep.txt").write_bytes(b"keep")
+    before = _snapshot(parent)
+    publication_attempted = False
 
-    def fail_exchange(_: Path, __: Path) -> bool:
+    def fail_publication(stage: Path, destination: Path) -> None:
+        nonlocal publication_attempted
+        publication_attempted = True
+        assert (
+            stage / "comparison-results.json"
+        ).read_bytes() == second.json_bytes
+        assert (stage / "comparison-report.html").is_file()
+        assert destination.parent == parent
         raise OSError("injected publication fault")
 
-    monkeypatch.setattr(reporting, "_exchange_directories", fail_exchange)
+    if failure == "publication":
+        monkeypatch.setattr(reporting, "_publish_new_package", fail_publication)
+    else:
+
+        def unsupported_rename(stage: Path, destination: Path) -> None:
+            nonlocal publication_attempted
+            publication_attempted = True
+            assert (stage / "comparison-results.json").is_file()
+            raise OSError(errno.ENOTSUP, "exclusive rename unavailable")
+
+        monkeypatch.setattr(reporting, "_rename_exclusively", unsupported_rename)
 
     with pytest.raises(OutputError) as raised:
-        _publish(destination, replacement_evidence, overwrite=True)
+        _publish(parent, second)
 
+    assert publication_attempted
     assert raised.value.code == "write_failed"
-    assert {
-        member.name: member.read_bytes() for member in destination.iterdir()
-    } == before
-    assert not list(tmp_path.glob(".evidence.*"))
-
-
-def test_overwrite_is_refused_when_atomic_exchange_is_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An unsupported host never exposes the original to non-atomic replacement."""
-    original_evidence = _generated_evidence(tmp_path / "original-inputs")
-    replacement_evidence = _generated_evidence(tmp_path / "replacement-inputs")
-    destination = tmp_path / "evidence"
-    _publish(destination, original_evidence)
-    before = {member.name: member.read_bytes() for member in destination.iterdir()}
-    monkeypatch.setattr(reporting, "_exchange_directories", lambda *_: False)
-
-    with pytest.raises(OutputError) as raised:
-        _publish(destination, replacement_evidence, overwrite=True)
-
-    assert raised.value.code == "write_failed"
-    after = {member.name: member.read_bytes() for member in destination.iterdir()}
-    assert after == before
-    assert not list(tmp_path.glob(".evidence.*"))
-
-
-def test_transient_old_package_cleanup_failure_does_not_misreport_publication(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A transient cleanup fault is retried after successful atomic publication."""
-    original_evidence = _generated_evidence(tmp_path / "original-inputs")
-    replacement_evidence = _generated_evidence(tmp_path / "replacement-inputs")
-    destination = tmp_path / "evidence"
-    _publish(destination, original_evidence)
-    replacement = replacement_evidence.document()
-    real_rmtree = reporting.shutil.rmtree
-    failed_once = False
-
-    def fail_old_package_once(path: Path | str, *args: Any, **kwargs: Any) -> None:
-        nonlocal failed_once
-        candidate = Path(path)
-        is_old_package = (
-            candidate.name == "package"
-            and candidate.parent.name.startswith(".evidence.staging-")
-        )
-        if not failed_once and is_old_package:
-            assert stat.S_IMODE(candidate.parent.stat().st_mode) == 0o700
-            failed_once = True
-            raise OSError("injected cleanup fault")
-        real_rmtree(path, *args, **kwargs)
-
-    monkeypatch.setattr(reporting.shutil, "rmtree", fail_old_package_once)
-
-    _publish(destination, replacement_evidence, overwrite=True)
-
-    assert json.loads(
-        (destination / "comparison-results.json").read_text(encoding="utf-8")
-    ) == replacement
+    assert _snapshot(parent) == before
     assert not list(tmp_path.glob(".evidence.*"))
 
 
@@ -365,43 +355,173 @@ def test_failed_initial_write_publishes_nothing_and_cleans_staging(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A staging fault cannot expose a partial package at the destination."""
+    """A staging fault leaves at most an empty parent without evidence."""
     evidence = _generated_evidence(tmp_path / "inputs")
-    destination = tmp_path / "evidence"
+    parent = tmp_path / "evidence"
     real_write = reporting._write_atomic_member
     writes = 0
 
     def fail_second_member(path: Path, content: bytes) -> None:
         nonlocal writes
         writes += 1
-        assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+        if os.name == "posix":
+            assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
         if writes == 2:
             raise OSError("injected write fault")
         real_write(path, content)
 
-    monkeypatch.setattr(
-        "adviso_compare.reporting._write_atomic_member",
-        fail_second_member,
-    )
+    monkeypatch.setattr(reporting, "_write_atomic_member", fail_second_member)
 
     with pytest.raises(OutputError) as raised:
-        _publish(destination, evidence)
+        _publish(parent, evidence)
 
     assert raised.value.code == "write_failed"
-    assert not destination.exists()
+    assert not parent.exists() or list(parent.iterdir()) == []
     assert not list(tmp_path.glob(".evidence.*"))
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs are not available")
-def test_special_filesystem_destination_is_never_replaced(tmp_path: Path) -> None:
-    """Explicit overwrite cannot replace a non-regular filesystem object."""
+def test_special_filesystem_output_parent_is_rejected(tmp_path: Path) -> None:
+    """A special object cannot be used as an output parent or replaced."""
     evidence = _generated_evidence(tmp_path / "inputs")
-    destination = tmp_path / "evidence"
-    os.mkfifo(destination)
+    parent = tmp_path / "evidence"
+    os.mkfifo(parent)
 
     with pytest.raises(OutputError) as raised:
-        _publish(destination, evidence, overwrite=True)
+        _publish(parent, evidence)
 
     assert raised.value.code == "invalid_destination"
-    assert stat.S_ISFIFO(destination.lstat().st_mode)
+    assert stat.S_ISFIFO(parent.lstat().st_mode)
+    assert not list(tmp_path.glob(".evidence.*"))
+
+
+@pytest.mark.parametrize(
+    "occupied_kind",
+    ["file", "empty_directory", "populated_directory", "symlink"],
+)
+@pytest.mark.parametrize("collision_timing", ["before_staging", "after_staging"])
+def test_occupied_run_path_is_preserved_without_renaming_the_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    occupied_kind: str,
+    collision_timing: str,
+) -> None:
+    """An occupied child survives, including a collision after staging."""
+    evidence = _generated_evidence(tmp_path / "inputs")
+    parent = tmp_path / "evidence"
+    parent.mkdir()
+    child = parent / "20261109T123456Z-123e4567-e89b-42d3-a456-426614174000"
+    snapshots = []
+
+    def occupy() -> None:
+        if occupied_kind == "file":
+            child.write_bytes(b"keep")
+        elif occupied_kind == "symlink":
+            child.symlink_to("missing-target", target_is_directory=True)
+        else:
+            child.mkdir()
+            if occupied_kind == "populated_directory":
+                (child / "keep.txt").write_bytes(b"keep")
+        snapshots.append(_snapshot(child))
+
+    if collision_timing == "before_staging":
+        occupy()
+    else:
+        real_publish = reporting._publish_new_package
+
+        def collide(stage: Path, destination: Path) -> None:
+            assert destination == child
+            assert (stage / "comparison-results.json").is_file()
+            assert (stage / "comparison-report.html").is_file()
+            occupy()
+            real_publish(stage, destination)
+
+        monkeypatch.setattr(reporting, "_publish_new_package", collide)
+
+    with pytest.raises(OutputError) as raised:
+        _publish(parent, evidence)
+
+    assert raised.value.code == "invalid_destination"
+    assert len(snapshots) == 1
+    assert _snapshot(child) == snapshots[0]
+    assert list(parent.iterdir()) == [child]
+    assert not list(tmp_path.glob(".evidence.*"))
+
+
+def test_missing_enclosing_directory_is_an_invalid_destination(
+    tmp_path: Path,
+) -> None:
+    """Publication does not create missing ancestors of the parent."""
+    evidence = _generated_evidence(tmp_path / "inputs")
+    parent = tmp_path / "missing" / "evidence"
+
+    with pytest.raises(OutputError) as raised:
+        _publish(parent, evidence)
+
+    assert raised.value.code == "invalid_destination"
+    assert not parent.parent.exists()
+
+
+def test_parent_creation_permission_failure_is_a_write_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failure to create an eligible parent yields a write error."""
+    evidence = _generated_evidence(tmp_path / "inputs")
+    parent = tmp_path / "evidence"
+    real_mkdir = Path.mkdir
+
+    def deny_parent(path: Path, *args: Any, **kwargs: Any) -> None:
+        if path == parent:
+            raise PermissionError("injected parent permission failure")
+        real_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", deny_parent)
+
+    with pytest.raises(OutputError) as raised:
+        _publish(parent, evidence)
+
+    assert raised.value.code == "write_failed"
+    assert not parent.exists()
+    assert not list(tmp_path.glob(".evidence.*"))
+
+
+@pytest.mark.parametrize("parent_exists", [False, True])
+def test_concurrent_runs_publish_independently_under_the_same_parent(
+    tmp_path: Path,
+    parent_exists: bool,
+) -> None:
+    """Concurrent publishers share a parent and retain distinct evidence."""
+    evidence = [
+        _generated_evidence(tmp_path / "first-inputs"),
+        _generated_evidence(
+            tmp_path / "second-inputs",
+            run_id=UUID("123e4567-e89b-42d3-a456-426614174001"),
+        ),
+    ]
+    parent = tmp_path / "evidence"
+    if parent_exists:
+        parent.mkdir()
+    ready = Barrier(2, timeout=10)
+
+    def publish(result: CanonicalResult) -> Path:
+        ready.wait()
+        return _publish(parent, result)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        selected = list(executor.map(publish, evidence))
+
+    assert len(set(selected)) == 2
+    assert set(parent.iterdir()) == set(selected)
+    for child, result in zip(selected, evidence):
+        assert child.parent == parent
+        assert sorted(path.name for path in child.iterdir()) == [
+            "comparison-report.html", "comparison-results.json"
+        ]
+        assert (
+            child / "comparison-results.json"
+        ).read_bytes() == result.json_bytes
+        assert (
+            child / "comparison-report.html"
+        ).read_bytes() == render_html_report(result.document())
     assert not list(tmp_path.glob(".evidence.*"))

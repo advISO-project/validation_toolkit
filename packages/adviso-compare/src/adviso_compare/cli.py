@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         type=Path,
         metavar="OUTPUT",
-        help="destination directory for the evidence package",
+        help="parent directory under which to create a new run directory",
     )
     parser.add_argument(
         "--configuration",
@@ -74,11 +74,6 @@ def _build_parser() -> argparse.ArgumentParser:
             "custom YAML comparison configuration; omit to use automatic "
             "strict-exact mode"
         ),
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="replace an existing complete version 1 evidence package",
     )
     return parser
 
@@ -91,15 +86,14 @@ def parse_invocation(arguments: Sequence[str] | None = None) -> ComparisonInvoca
         query=namespace.query,
         output=namespace.output,
         configuration=namespace.configuration,
-        overwrite=namespace.overwrite,
     )
 
 
 def _display_output_path(path: Path) -> str:
-    """Render the selected destination without disclosing an absolute path."""
+    """Render a run path with its parent context but no absolute path."""
     if not path.is_absolute():
         return str(path)
-    return path.name or "<selected directory>"
+    return str(Path(path.parent.name) / path.name)
 
 
 def main(

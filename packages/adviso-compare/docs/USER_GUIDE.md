@@ -43,25 +43,29 @@ adviso-compare \
   --reference REFERENCE \
   --query QUERY \
   --output OUTPUT \
-  [--configuration CONFIGURATION] \
-  [--overwrite]
+  [--configuration CONFIGURATION]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--reference REFERENCE` | Reference dataset. Required. |
 | `--query QUERY` | Query dataset produced by the pipeline. Required. |
-| `--output OUTPUT` | New directory in which to place the evidence package. Required. |
+| `--output OUTPUT` | Parent directory under which to create a new run directory. Required. |
 | `--configuration CONFIGURATION` | Custom YAML comparison configuration. If omitted, automatic strict-exact mode is used. |
-| `--overwrite` | Replace an existing complete evidence package. See below. |
 | `--version` | Print the installed version and exit. |
 | `--help` | Print concise help and exit. |
 
-The output directory normally must not exist. `--overwrite` can replace only a
-directory that is recognisably a complete evidence package containing
-exactly `comparison-results.json` and `comparison-report.html`. It will not
-replace a file, symbolic link, empty or partial directory, or a directory with
-other contents. A failed replacement leaves the old complete package in place.
+The output parent may already exist and contain any files or directories.
+Existing contents and permissions are preserved. If the parent does not exist,
+the tool creates it privately; its enclosing directory must already exist.
+The selected parent cannot be a symbolic link, regular file, or special
+filesystem object. Symbolic links in ancestor directories are permitted.
+
+Each complete or incomplete run publishes a new immediate child named
+`YYYYMMDDTHHMMSSZ-<run-id>`. The timestamp and full UUID come directly from that
+result's UTC `run.completed_at` and `run.id`. Two runs can share a timestamp
+without sharing a directory. An occupied run-directory path is an error;
+the tool never replaces it or chooses a different name for that run.
 
 The command prints a short completion summary to standard output. An execution
 error is printed to standard error. The exit codes are:
@@ -72,6 +76,11 @@ error is printed to standard error. The exit codes are:
 | `1` | The run is incomplete because at least one intended value comparison was not assessable. An evidence package is still written. |
 | `2` | Expected operational error, such as an invalid option, configuration, input, key, resource condition, or output destination. No evidence package is written. |
 | `3` | Unexpected internal error. No evidence package is written. |
+
+On error, no new evidence package is published and existing parent contents
+remain intact. A parent created during publication preparation may remain
+empty. Input and configuration errors do not create it. Private temporary
+staging is cleaned up after success and, where safe, after an error.
 
 Do not treat exit code `0` as a statement that the query passed validation. It
 means only that the configured comparison was completed.
@@ -161,6 +170,20 @@ The example has no `record_id`. `sample_id` is the only valid key candidate, so
 it is discovered automatically. The run is complete and reports one changed
 `lineage`. The query-only `pipeline_version` field appears in the exclusions.
 
+The completion summary has this form, with a different run-directory name on
+each invocation:
+
+```text
+Run status: complete
+Comparison differences: 1
+Assessment issues: 0
+Evidence package: automatic-evidence/20261111T143205Z-123e4567-e89b-42d3-a456-426614174000
+```
+
+Open `comparison-report.html` inside that run directory to review the findings.
+Run the same command again with `--output automatic-evidence` to add another
+run directory while preserving the first. Section 7 shows the resulting layout.
+
 Automatic mode is deliberately conservative. Use a custom configuration when
 source field names differ, values require translation, a composite key is
 needed, or automatic key selection is ambiguous.
@@ -168,7 +191,7 @@ needed, or automatic key selection is ambiguous.
 ## 5. Custom comparison configurations
 
 A custom configuration is one UTF-8 YAML document with suffix `.yaml` or
-`.yaml`.
+`.yml`.
 
 The file is checked before either dataset is read. YAML aliases, anchors,
 merge keys, explicit tags, duplicate keys, and unsafe
@@ -479,7 +502,7 @@ parsing then happen for each element before collection comparison.
 
 ### 5.11 Runnable custom example
 
-Run the supplied example with:
+From the same `examples` directory, run the supplied custom example with:
 
 ```console
 adviso-compare \
@@ -632,13 +655,36 @@ decisions belong to the laboratory's separately governed validation process.
 
 ## 7. The evidence package
 
-A complete or incomplete run creates exactly:
+Each complete or incomplete run publishes one new directory under `OUTPUT`.
+For example, two successive runs can produce:
 
 ```text
 OUTPUT/
-├── comparison-results.json
-└── comparison-report.html
+├── 20261111T143205Z-123e4567-e89b-42d3-a456-426614174000/
+│   ├── comparison-results.json
+│   └── comparison-report.html
+└── 20261111T145810Z-123e4567-e89b-42d3-a456-426614174001/
+    ├── comparison-results.json
+    └── comparison-report.html
 ```
+
+Each run directory contains exactly these two evidence files. Packages are
+validated and generated in private staging on the destination filesystem
+before publication. The destination must support exclusive directory rename;
+if safe publication is unavailable, the run returns `output.write_failed`
+and preserves existing content.
+
+The completion summary's `Evidence package:` line identifies the published
+child. With a relative `--output`, it shows the relative parent and child.
+With an absolute `--output`, it shows only the parent basename and child; for
+a filesystem-root parent it shows only the child name. Absolute paths are not
+printed. For automation, retain the selected parent path and use the reported
+child name to locate that run. Do not guess the newest directory: concurrent
+runs may finish in a different order from when they started.
+
+Retention and disposal of accumulated evidence remain the laboratory's
+responsibility; the tool does not remove earlier runs or maintain a `latest`
+pointer.
 
 `comparison-results.json` is the canonical result for software use and detailed
 review. `comparison-report.html` is a self-contained, offline view made only
@@ -785,7 +831,8 @@ The schema defines exact finding forms. In summary:
 JSON Schema validation checks document shape, required properties, permitted
 values, patterns, cross-references, and recognised formats. Format checking
 must be enabled so that invalid UUIDs, dates, and datetimes are rejected. For
-example, using Python and the installed schema resources:
+example, change into the published run directory, then use Python and the
+installed schema resources:
 
 ```python
 import json
@@ -855,8 +902,8 @@ ERROR [category.code]: message
 | `input.invalid_structure` | Check headers, row widths, JSON root shape, record objects, and field names. |
 | `input.invalid_record_key` | Ensure the chosen key is present, non-null, valid, and unique; in automatic mode remove ambiguity or use a custom configuration. |
 | `resource.limit_exceeded` or `resource.exhausted` | Reduce input size or provide more resources, then rerun. No partial result is valid. |
-| `output.invalid_destination` | Choose a new destination or use `--overwrite` only for a complete two-file package. |
-| `output.write_failed` | Check parent-directory permissions and available storage. |
+| `output.invalid_destination` | Select a regular parent with an existing enclosing directory. Check whether the run-directory path is occupied; existing content is never replaced. |
+| `output.write_failed` | Check parent-directory permissions, available storage, and filesystem support for exclusive directory rename. |
 | `internal.unexpected` | Rerun once; if it persists, report the software version and safe reproduction details. Do not disclose clinical data. |
 
 An assessment issue inside an otherwise readable and alignable dataset is a
@@ -870,6 +917,11 @@ information, including record identifiers, values needed to explain findings,
 and input basenames. Store it with permissions, retention, backup, and disposal
 controls suitable for the source data. The laboratory remains responsible for
 appropriate pseudonymisation.
+
+On POSIX systems, newly created output parents and run directories have
+owner-only permissions (`0700`), and evidence files use `0600`. Existing
+parent permissions are retained. On other systems, apply the corresponding
+filesystem access controls under laboratory policy.
 
 Routine terminal output and error diagnostics do not reproduce record
 identifiers or source values. The tool does not provide de-identification,
@@ -896,8 +948,10 @@ stable outcomes are:
 | automatic | `complete` | 1 | 0 |
 | custom | `complete` | 1 | 0 |
 
-Delete or choose new output directories, run the commands in Sections 4.1 and
-5.11, and validate each generated `comparison-results.json` as shown in Section
-8.5. Run IDs and completion times change on every run. Software and runtime
-provenance can change between environments. Input digests change if the fixture
-bytes are edited. The comparison outcome above remains the controlled check.
+Run the commands in Sections 4.1 and 5.11, then open the run directory
+identified by each completion summary and validate its `comparison-results.json`
+as shown in Section 8.5. The same output parents can be reused: each invocation
+adds a new run directory. Run IDs and completion times change on every run.
+Software and runtime provenance can change between environments. Input digests
+change if the fixture bytes are edited. The comparison outcome above remains
+the controlled check.

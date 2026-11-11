@@ -18,19 +18,19 @@ from adviso_compare.records import RecordKeyError
 from adviso_compare.reporting import OutputError
 from adviso_compare.results import ResultValidationError
 from tests.support.documents import minimal_configuration
+from tests.support.evidence import assert_run_package
 
 
 @pytest.mark.parametrize(
-    ("optional_arguments", "expected_configuration", "expected_overwrite"),
+    ("optional_arguments", "expected_configuration"),
     [
-        ([], None, False),
-        (["--configuration", "rules.yaml", "--overwrite"], Path("rules.yaml"), True),
+        ([], None),
+        (["--configuration", "rules.yaml"], Path("rules.yaml")),
     ],
 )
 def test_direct_arguments_create_an_immutable_invocation_without_reading_inputs(
     optional_arguments: list[str],
     expected_configuration: Path | None,
-    expected_overwrite: bool,
 ) -> None:
     """Parsing records paths and flags without requiring any path to exist."""
     arguments = [
@@ -50,10 +50,10 @@ def test_direct_arguments_create_an_immutable_invocation_without_reading_inputs(
         query=Path("does-not-exist-query.json"),
         output=Path("does-not-exist-output"),
         configuration=expected_configuration,
-        overwrite=expected_overwrite,
     )
+    assert not hasattr(invocation, "overwrite")
     with pytest.raises(FrozenInstanceError):
-        invocation.overwrite = not expected_overwrite  # type: ignore[misc]
+        invocation.output = Path("other")  # type: ignore[misc]
 
 
 def test_main_dispatches_the_invocation_through_an_injected_executor(
@@ -66,7 +66,7 @@ def test_main_dispatches_the_invocation_through_an_injected_executor(
         received.append(invocation)
         return ComparisonOutcome(
             run_status="complete",
-            output=invocation.output,
+            output=invocation.output / "selected-run",
             comparison_differences=2,
             assessment_issues=1,
         )
@@ -91,7 +91,8 @@ def test_main_dispatches_the_invocation_through_an_injected_executor(
             output=Path("evidence"),
         )
     ]
-    assert capsys.readouterr().out.endswith("Evidence package: evidence\n")
+    expected = Path("evidence") / "selected-run"
+    assert capsys.readouterr().out.endswith(f"Evidence package: {expected}\n")
 
 
 @pytest.mark.parametrize(
@@ -158,17 +159,14 @@ def test_cli_executes_custom_automatic_and_incomplete_comparisons_end_to_end(
     captured = capsys.readouterr()
     assert exit_code == expected_exit
     assert captured.err == ""
+    selected = assert_run_package(output)
     assert captured.out == (
         f"Run status: {expected_status}\n"
         f"Comparison differences: {expected_differences}\n"
         f"Assessment issues: {expected_issues}\n"
-        f"Evidence package: {output.name}\n"
+        f"Evidence package: {Path(output.name) / selected.name}\n"
     )
     assert str(tmp_path) not in captured.out
-    assert sorted(path.name for path in output.iterdir()) == [
-        "comparison-report.html",
-        "comparison-results.json",
-    ]
 
 
 @pytest.mark.parametrize(
@@ -187,8 +185,8 @@ def test_cli_executes_custom_automatic_and_incomplete_comparisons_end_to_end(
             "ERROR [input.invalid_record_key]: no automatic record key could be established\n",
         ),
         (
-            OutputError("invalid_destination", "output already exists"),
-            "ERROR [output.invalid_destination]: output already exists\n",
+            OutputError("invalid_destination", "run path already exists"),
+            "ERROR [output.invalid_destination]: run path already exists\n",
         ),
     ],
 )
@@ -224,31 +222,71 @@ def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
     assert not output.exists()
 
 
-def test_default_executor_reports_an_input_error_without_partial_output(
+@pytest.mark.parametrize(
+    "failure", ["input", "configuration", "validation", "html"]
+)
+@pytest.mark.parametrize("parent_exists", [False, True])
+def test_default_executor_errors_preserve_existing_content_without_new_output(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+    parent_exists: bool,
 ) -> None:
-    """An integrated operational failure uses the same safe error boundary."""
+    """Pre-publication failures leave absent parents and existing data alone."""
     output = tmp_path / "evidence"
+    if parent_exists:
+        output.mkdir()
+        (output / "keep.txt").write_bytes(b"keep")
+        mode = output.stat().st_mode
+    reference = tmp_path / "reference.json"
+    query = tmp_path / "query.json"
+    query.write_text('[{"record_id":"S1","result":1}]', encoding="utf-8")
+    arguments = [
+        "--reference", str(reference), "--query", str(query),
+        "--output", str(output),
+    ]
+    if failure != "input":
+        reference.write_bytes(query.read_bytes())
+    if failure == "configuration":
+        configuration = tmp_path / "configuration.yaml"
+        configuration.write_text("[", encoding="utf-8")
+        arguments.extend(["--configuration", str(configuration)])
+    if failure in {"validation", "html"}:
 
-    exit_code = main(
-        [
-            "--reference",
-            str(tmp_path / "missing-reference.json"),
-            "--query",
-            str(tmp_path / "unused-query.json"),
-            "--output",
-            str(output),
-        ]
-    )
+        def fail(*args: object, **kwargs: object) -> None:
+            raise ResultValidationError("sensitive implementation detail")
+
+        target = (
+            "adviso_compare.application.assemble_result"
+            if failure == "validation"
+            else "adviso_compare.reporting.render_html_report"
+        )
+        monkeypatch.setattr(target, fail)
+
+    exit_code = main(arguments)
 
     captured = capsys.readouterr()
-    assert exit_code == 2
+    expected_code = {
+        "input": "input.unreadable",
+        "configuration": "configuration.invalid_syntax",
+        "validation": "internal.unexpected",
+        "html": "internal.unexpected",
+    }[failure]
+    assert exit_code == (3 if failure in {"validation", "html"} else 2)
     assert captured.out == ""
-    assert captured.err == (
-        "ERROR [input.unreadable]: reference input could not be read\n"
-    )
-    assert not output.exists()
+    assert captured.err.startswith(f"ERROR [{expected_code}]: ")
+    assert captured.err.count("\n") == 1
+    assert "Traceback" not in captured.err
+    assert "sensitive implementation detail" not in captured.err
+    assert str(tmp_path) not in captured.err
+    if parent_exists:
+        assert list(output.iterdir()) == [output / "keep.txt"]
+        assert (output / "keep.txt").read_bytes() == b"keep"
+        assert output.stat().st_mode == mode
+    else:
+        assert not output.exists()
+    assert not list(tmp_path.glob(".evidence.*"))
 
 
 @pytest.mark.parametrize(
@@ -358,12 +396,14 @@ def test_each_required_argument_is_rejected_before_execution(
     assert captured.err.count("\n") == 1
 
 
-def test_subcommand_syntax_is_rejected_before_execution(
+@pytest.mark.parametrize("unsupported", ["compare", "--overwrite"])
+def test_unsupported_arguments_are_rejected_before_execution(
     capsys: pytest.CaptureFixture[str],
+    unsupported: str,
 ) -> None:
-    """The executable accepts comparison options directly and has no subcommands."""
+    """Unsupported syntax is rejected before comparison execution."""
     arguments = [
-        "compare",
+        unsupported,
         "--reference",
         "reference.csv",
         "--query",
@@ -435,7 +475,6 @@ def test_help_documents_the_complete_direct_interface_and_user_guide(
         "--query",
         "--output",
         "--configuration",
-        "--overwrite",
         "--help",
         "--version",
     ):
@@ -443,6 +482,8 @@ def test_help_documents_the_complete_direct_interface_and_user_guide(
     assert "user guide" in captured.out.lower()
     assert "share/doc/adviso-compare/USER_GUIDE.md" in captured.out
     assert "subcommand" not in captured.out.lower()
+    assert "--overwrite" not in captured.out
+    assert "parent" in captured.out.lower()
 
 
 def test_version_works_without_comparison_arguments(
@@ -460,3 +501,41 @@ def test_version_works_without_comparison_arguments(
     assert error.value.code == 0
     assert captured.err == ""
     assert captured.out == f"adviso-compare {version('adviso-compare')}\n"
+
+
+@pytest.mark.parametrize("parent_kind", ["relative", "absolute", "root"])
+def test_completion_summary_identifies_the_child_without_absolute_paths(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    parent_kind: str,
+) -> None:
+    """Summary paths retain parent context without revealing host details."""
+    if parent_kind == "relative":
+        parent = Path("nested") / "evidence"
+        expected = parent / "selected-run"
+    elif parent_kind == "absolute":
+        parent = tmp_path / "evidence"
+        expected = Path("evidence") / "selected-run"
+    else:
+        parent = Path(tmp_path.anchor)
+        expected = Path("selected-run")
+
+    def execute(invocation: ComparisonInvocation) -> ComparisonOutcome:
+        assert invocation.output == parent
+        return ComparisonOutcome(
+            run_status="complete",
+            output=parent / "selected-run",
+            comparison_differences=0,
+            assessment_issues=0,
+        )
+
+    exit_code = main(
+        ["--reference", "r.csv", "--query", "q.csv", "--output", str(parent)],
+        executor=execute,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.endswith(f"Evidence package: {expected}\n")
+    assert str(tmp_path) not in captured.out

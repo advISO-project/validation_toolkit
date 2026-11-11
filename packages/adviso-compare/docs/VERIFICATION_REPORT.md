@@ -151,3 +151,112 @@ comparison behaviour or either normative schema. A final version 1 release
 should not be declared solely from this report: the matrix, CI, independent
 review, and immutable release evidence listed above still need to be supplied
 or the corresponding release requirements deliberately revised.
+
+## Output-parent publication verification — 11 November 2026
+
+This additional development verification covers Git revision `47dbecd` plus
+the output-parent specification, test, implementation, and documentation
+changes in the working tree. It is not an immutable-release attestation. The
+earlier candidate review above remains a record of that candidate.
+
+The environment was CPython 3.12.16 on macOS arm64. The full suite command was:
+
+```console
+.venv/bin/python -m pytest packages/adviso-compare/tests -q --tb=short --junitxml=.venv/output-directory-implementation-results.xml
+```
+
+Result: **317 passed in 14.66s**, with no failures, errors, or skips.
+
+The revised tests verify:
+
+- complete and incomplete evidence published as a new immediate child of an
+  eligible output parent, with the fixed two members and exact validated bytes;
+- names derived from controlled completion timestamps and full run UUIDs;
+- eligible existing parents with arbitrary contents, private parent creation,
+  rejection of ineligible parents, and preserved existing permissions;
+- successive and concurrent runs, including an initially absent shared parent
+  and distinct runs with the same timestamp;
+- occupied run paths of different filesystem kinds, both before staging and
+  appearing after staging, preserved with a collision error;
+- staging-write and publication failures, including unavailable exclusive
+  rename support, with existing evidence preserved and owned staging cleaned;
+- early errors that neither create a parent nor touch its existing contents;
+- rejection of unsupported CLI arguments, updated help, and actual child-path
+  reporting with relative, absolute, and filesystem-root parents;
+- schema-valid controlled examples and both schema definitions; and
+- wheel and source-archive builds and installation, packaged schemas and
+  documentation, and installed-wheel CLI execution including repeated runs,
+  complete and incomplete results, and expected errors. The installed guide
+  is checked byte for byte against the maintained source guide.
+
+The distribution harness retains its existing dependency arrangement: the
+installed-command environments obtain dependencies through the development
+environment's site-packages. This check does not establish independent clean
+dependency resolution.
+
+The following additional checks passed:
+
+```console
+.venv/bin/python -m pip check
+.venv/bin/python -m compileall -q packages/adviso-compare/src packages/adviso-compare/tests
+.venv/bin/adviso-compare --help
+.venv/bin/adviso-compare --version
+git diff --check
+```
+
+Local links and fenced examples in the maintained README, guide, and
+specification were checked. Requirement definitions are unique and their
+references resolve. The schemas, their version identifiers and canonical
+`$id` values, dependencies, and packaging configuration are unchanged. The
+editable development installation was refreshed; its offline guide and
+examples were synchronized separately because editable installation does not
+copy these data files.
+
+Publication uses exclusive directory rename rather than an existence check
+followed by a potentially replacing rename. API behaviour was reviewed against
+the [Linux rename documentation](https://man7.org/linux/man-pages/man2/rename.2.html),
+[Apple's rename documentation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/man/man2/rename.2),
+and [Python's Windows rename contract](https://docs.python.org/3/library/os.html#os.rename).
+The macOS native operation was exercised by the suite. Linux and Windows
+native operations were not executed: this environment has no corresponding
+test hosts or Linux container runtime. Full supported-platform and Python
+matrix verification, CI enforcement, and independent review remain release
+work. No formatter, linter, type checker, or Markdown linter is configured;
+none is claimed to have passed.
+
+## User documentation verification — 11 November 2026
+
+The output-directory plan's documentation step was reviewed against the
+approved specification and implemented CLI. The package README and guide
+describe the initial-release interface directly, including output-parent
+eligibility and creation, run-directory names and members, safe publication,
+errors, retention, and privacy-preserving completion paths. The guide includes
+a representative completion summary and explains how to locate the HTML
+report and repeat a comparison under the same parent. No interface evolution
+or migration narrative was added.
+
+The console commands in guide Sections 4.1 and 5.11 were extracted and executed
+directly with the supplied synthetic fixtures in a temporary working directory.
+Each command was run twice with the same output parent. All four invocations
+completed with one comparison difference and no assessment issues. Each
+produced a distinct two-file package, and each first package's canonical JSON
+remained byte-identical after the second run. The Python validation snippet
+from Section 8.5 was executed unchanged from each published run directory and
+passed for all four results.
+
+```console
+.venv/bin/python -m pytest packages/adviso-compare/tests/test_documentation.py packages/adviso-compare/tests/test_distribution.py packages/adviso-compare/tests/test_schemas.py -q
+git diff --check
+```
+
+Result: **10 passed in 13.21s**; `git diff --check` passed. These checks include
+wheel and source-archive installation and equality of the installed wheel's
+guide with the maintained guide. Local documentation links, code fences, and
+current CLI references were checked. The editable environment's offline guide
+was synchronized separately and confirmed to match the maintained guide.
+
+Production code, tests, schemas, dependencies, and packaging metadata were
+unchanged during this documentation step. The full behavioural suite was not
+rerun; the preceding implementation verification remains 317 passing tests.
+No additional platform-matrix, lint, or type checks were run for this step;
+the limitations recorded above still apply.

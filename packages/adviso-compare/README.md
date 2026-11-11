@@ -21,9 +21,13 @@ adviso-compare \
   --reference REFERENCE \
   --query QUERY \
   --output OUTPUT \
-  [--configuration CONFIGURATION] \
-  [--overwrite]
+  [--configuration CONFIGURATION]
 ```
+
+`--output` selects a parent directory. Each complete or incomplete run creates
+its own child named `YYYYMMDDTHHMMSSZ-<run-id>`, containing the JSON result and
+HTML report. Repeated runs preserve existing evidence. The completion summary
+identifies the published run directory.
 
 The current normative artefacts are:
 
