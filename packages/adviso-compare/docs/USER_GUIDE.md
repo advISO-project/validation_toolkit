@@ -53,12 +53,12 @@ adviso-compare \
 | `--query QUERY` | Query dataset produced by the pipeline. Required. |
 | `--output OUTPUT` | New directory in which to place the evidence package. Required. |
 | `--configuration CONFIGURATION` | Custom YAML comparison configuration. If omitted, automatic strict-exact mode is used. |
-| `--overwrite` | Replace an existing complete version 1 evidence package. See below. |
+| `--overwrite` | Replace an existing complete evidence package. See below. |
 | `--version` | Print the installed version and exit. |
 | `--help` | Print concise help and exit. |
 
 The output directory normally must not exist. `--overwrite` can replace only a
-directory that is recognisably a complete version 1 evidence package containing
+directory that is recognisably a complete evidence package containing
 exactly `comparison-results.json` and `comparison-report.html`. It will not
 replace a file, symbolic link, empty or partial directory, or a directory with
 other contents. A failed replacement leaves the old complete package in place.
@@ -109,7 +109,7 @@ Top-level record field names must be non-empty and unique. Duplicate member
 names anywhere in the JSON are rejected.
 
 JSON strings, integers, decimals, booleans, nulls, arrays, and objects retain
-their natural JSON kind. Decimal numbers are read exactly without first being
+their natural JSON type. Decimal numbers are read exactly without first being
 converted to binary floating point, and their original spelling is retained as
 evidence. `NaN` and infinities are not valid JSON numbers.
 
@@ -139,12 +139,12 @@ key as follows:
    is an `input.invalid_record_key` error.
 
 The selected key is compared as a typed string. All other shared fields are
-compared using strict parser-native equality: value kinds must match as well as
+compared using strict parser-native equality: value types must match as well as
 content. For example, JSON integer `1` does not equal JSON string `"1"`.
 Fields found on only one side are reported as exclusions, not differences.
 
 The tool creates an effective configuration internally and includes it in the
-result. It does not guess mappings, normalisation rules, or type conversions.
+result.
 
 ### 4.1 Runnable automatic example
 
@@ -167,26 +167,32 @@ needed, or automatic key selection is ambiguous.
 
 ## 5. Custom comparison configurations
 
-A custom configuration is one UTF-8 YAML document. The root must be a mapping.
-Use `.yaml` or `.yml`. The file is checked before either dataset is read.
+A custom configuration is one UTF-8 YAML document with suffix `.yaml` or
+`.yaml`.
 
-YAML aliases, anchors, merge keys, explicit tags, duplicate keys, and unsafe
-object constructors are rejected. Quote identifiers, versions, field and
-operation names, dates, datetimes, and decimal parameters. Unknown properties
-are rejected. Optional processing properties should be omitted, not written as
-empty lists or objects.
+The file is checked before either dataset is read. YAML aliases, anchors,
+merge keys, explicit tags, duplicate keys, and unsafe
+object constructors are rejected. Identifiers, versions, field and
+operation names, dates, datetimes, and decimal parameters need to be quoted.
+Unknown properties are rejected.
 
 The JSON Schema file
 `comparison-configuration-v1.0.schema.json` is the machine-readable definition
-of the YAML structure after YAML has been loaded. The tool also checks rules
-that JSON Schema cannot fully express, such as whether named fields exist and
-whether a comparator suits a logical type.
+of the expected YAML structure, and input custom configurations that are not
+compliant with the schema are rejected.
+
+The tool also checks relationships that are awkward to express in JSON Schema:
+all named key and in-scope fields must be defined; source field names must be
+unique on each dataset side; mapping sources must not be repeated, conflicting,
+or unreachable; operations and comparators must suit their field; and custom
+configurations must not use the reserved automatic-mode ID
+`org.adviso.automatic-strict-exact`.
 
 ### 5.1 Top-level properties
 
 | Property | Required | Meaning |
 | --- | --- | --- |
-| `schema_version` | Yes | Must be the string `"1.0"`. |
+| `schema_version` | Yes | Must be a supported schema version (e.g. `"1.0"`). |
 | `metadata` | Yes | Identity and description of the configuration. It does not alter the comparison. |
 | `fields` | Yes | Key, scope, field correspondence, and comparison rules. |
 
@@ -209,12 +215,13 @@ whether a comparator suits a logical type.
 
 A definition not listed in `in_scope` is deliberately excluded and appears once
 as `configured_field_excluded`. A source field not named by any definition on
-its side appears as `undeclared_field_excluded`. Neither kind is compared or
-makes a run incomplete.
+its side (reference or query) appears as `undeclared_field_excluded`. Neither kind
+is compared or makes a run incomplete.
 
 ### 5.2 Field definitions
 
-Every entry in `fields.definitions` has the following properties:
+Every entry in `fields.definitions` is object with a canonical field name as
+key, and has the following properties:
 
 | Property | Required | Meaning |
 | --- | --- | --- |
@@ -229,8 +236,8 @@ Every entry in `fields.definitions` has the following properties:
 | `comparator` | Yes | Comparison rule and, where needed, its parameters. |
 | `review_priority` | No | `low`, `normal`, or `high`; defaults to `normal`. It helps organise review and does not change findings, status, exit code, or clinical significance. |
 
-Every key field must be in `definitions` and `in_scope`, required and
-non-nullable on both sides, scalar, and compared with `typed_exact`. Key fields
+Every field part of the record key must be in `definitions` and `in_scope`, required
+and non-nullable on both sides, scalar, and compared with `typed_exact`. Key fields
 may use explicit source normalisation or value mapping.
 
 ### 5.3 Logical types
@@ -251,9 +258,11 @@ The accepted source values are deliberately narrow:
 | `date` | String containing a valid Gregorian `YYYY-MM-DD` date. |
 | `datetime` | String containing a full RFC 3339 date and time with `Z` or a numeric offset. A local time without an offset is not accepted. |
 
-Objects are not accepted by any declared version 1 logical type. They can be
-compared only as preserved, untyped values. Other source representations need
-an explicit mapping; the tool does not add implicit conversions.
+JSON objects cannot be converted to any of the logical types. They may be compared
+as complete, untyped JSON values using `preserved_exact`. More generally, the tool
+does not guess how one source representation should be converted into another: any
+conversion not directly supported by the declared logical type must be stated explicitly
+in value_mapping.
 
 A collection uses an object:
 
@@ -292,11 +301,11 @@ missing_tokens:
       value: "."
 ```
 
-A value description uses `category`: `string`, `integer`, `decimal`, `boolean`,
-or `null`. Strings, integers, and decimals carry a lexical `value` string;
-booleans carry `true` or `false`; null has no `value`. Null descriptions are
-allowed only as a mapping destination. They are not allowed as missing tokens
-or mapping sources because parser-native null is already known.
+Each missing token describes a non-null source value using a category and a value.
+The permitted categories are `string`, `integer`, `decimal`, and `boolean`. Strings,
+integers, and decimals use a textual `value`; booleans use `true` or `false`. An
+actual JSON `null` does not need to be listed because the tool recognises it
+automatically.
 
 ### 5.5 Source normalisation
 
@@ -330,6 +339,11 @@ side must match an entry. An unmapped value produces a `mapping_failure`; it is
 not passed through. Many source values may map to the same destination. A
 destination may be null, after which the null policy applies.
 
+A mapping destination may use category: "null" without a value. This converts
+the mapped source value to null, after which the field’s `null_policy` is applied.
+Mapping from null is not supported because an actual JSON null is recognised and
+handled before value mapping.
+
 Mapping happens after source normalisation and missing-token recognition, and
 before parsing to the logical type.
 
@@ -353,13 +367,58 @@ field-level `source_normalisation`, `value_mapping`, or `typed_normalisation`.
 
 ### 5.8 Typed normalisation
 
-`typed_normalisation` is an optional non-empty ordered list applied to parsed
-values from both sides.
+`typed_normalisation` is an optional, non-empty ordered list of operations
+applied to parsed values from both the reference and query. Operations run
+before the comparator is applied.
 
-| Operation | Required parameters | Effect |
-| --- | --- | --- |
-| `decimal_quantise` | non-negative integer `places`; `rounding`: `half_even`, `half_up`, or `down` | Sets the number of digits after the decimal point. `down` discards towards zero. |
-| `datetime_truncate` | `precision`: `second`, `millisecond`, or `microsecond` | Truncates the UTC value without rounding. |
+#### Decimal quantisation
+
+`decimal_quantise` fixes the number of digits retained after the decimal point:
+
+```yaml
+typed_normalisation:
+  - operation: "decimal_quantise"
+    parameters:
+      places: 2
+      rounding: "half_even"
+```
+
+Here, `places: 2` means that values are quantised to two digits after the
+decimal point. A value is not first converted to binary floating point; exact
+decimal arithmetic is used.
+
+The available rounding methods are:
+
+| Method | Meaning |
+| --- | --- |
+| `half_even` | Round to the nearest value. If the discarded part is exactly halfway between two possible results, choose the result whose last retained digit is even. For example, at two decimal places, `1.235` becomes `1.24`, while `1.245` becomes `1.24`. |
+| `half_up` | Round to the nearest value. If the discarded part is exactly halfway between two possible results, round away from zero. At two decimal places, `1.235` becomes `1.24` and `-1.235` becomes `-1.24`. |
+| `down` | Discard digits beyond the requested number of decimal places, moving towards zero rather than rounding to the nearest value. At two decimal places, `1.239` becomes `1.23` and `-1.239` becomes `-1.23`. |
+
+`places: 0` quantises to a whole-number value, although the field remains
+logically a decimal. Quantisation is applied independently to both reference
+and query values before they are compared.
+
+#### Datetime truncation
+
+`datetime_truncate` limits fractional-second precision after the datetime has
+been converted to UTC:
+
+```yaml
+typed_normalisation:
+  - operation: "datetime_truncate"
+    parameters:
+      precision: "millisecond"
+```
+
+The permitted values are:
+
+- `second`: remove the entire fractional-second part;
+- `millisecond`: retain at most three fractional digits; and
+- `microsecond`: retain at most six fractional digits.
+
+Discarded digits are removed without rounding. For example, millisecond
+truncation changes `.1238` seconds to `.123`, not `.124`.
 
 ### 5.9 Comparators
 
@@ -437,23 +496,37 @@ also declares `curator_note` but leaves it out of `fields.in_scope`, while the
 query's undeclared `pipeline_version` is also excluded. The run is complete and
 reports one `measurement` difference.
 
-Treat laboratory configurations as controlled documents. Give each one a
-stable ID and revision, review changes, retain the exact configuration used for
-a comparison, and test it with representative data. The result embeds the
-effective configuration, but local quality arrangements remain the authority
-for approval and retention.
-
-The tool also checks relationships that are awkward to express in JSON Schema:
-all named key and in-scope fields must be defined; source field names must be
-unique on each dataset side; mapping sources must not be repeated, conflicting,
-or unreachable; operations and comparators must suit their field; and custom
-configurations must not use the reserved automatic-mode ID
-`org.adviso.automatic-strict-exact`.
+Custom configurations should be treated as controlled documents in a
+accreditable environment. Give each one a stable ID and revision, review changes,
+retain the exact configuration used for a comparison, and test it with representative data.
+The result embeds the effective configuration, but local quality arrangements remain
+the authority for approval and retention.
 
 ## 6. How the comparison works
 
-The tool uses three phases. They always run as one full comparison; they are not
-separate command choices.
+The result describes several different aspects of a comparison. Understanding
+their relationship makes the report easier to interpret.
+
+### 6.1 The reporting model
+
+| Concept | What it describes | Examples |
+| --- | --- | --- |
+| Run status | Whether the comparison as a whole could be completed | `complete`, `incomplete`, `error` |
+| Phase status | Whether one of the three comparison phases completed its applicable work | `complete`, `incomplete` |
+| Finding | One reported difference or problem that requires attention | A missing record or an invalid field value |
+| Finding classification | The broad meaning of a finding | `comparison_difference`, `assessment_issue` |
+| Finding code | The specific type of finding | `value_mismatch`, `mapping_failure` |
+| Value-opportunity outcome | What happened when one in-scope field was considered for one aligned record | `matched`, `mismatched`, `not_assessable` |
+| Exclusion | A field that was deliberately or implicitly outside the comparison | A configured or undeclared field exclusion |
+| Review priority | Optional presentation priority for a finding about a configured field | `low`, `normal`, `high` |
+
+A finding is an individual entry in the report. Every finding has one
+classification and one more-specific finding code. The classification explains
+the general nature of the finding; the code explains exactly what happened.
+
+### 6.2 Comparison phases
+
+Every comparison performs three phases in order:
 
 1. **Contract:** checks that configured fields can be found and translated as
    declared, including requiredness, null, type, validity, and mapping rules.
@@ -462,15 +535,25 @@ separate command choices.
 3. **Values:** compares each assessable, in-scope, non-key field in aligned
    records.
 
-A successful translation followed by a remaining difference is a
-`comparison_difference`. Missing records, extra records, and value mismatches
-belong to this class.
+A problem in an earlier phase does not automatically stop all later work. The
+tool continues wherever the required information remains valid and
+unambiguous. The phase attached to a finding records where the finding arose;
+it is separate from the finding's classification.
 
-A problem that prevents the declared translation or assessment is an
-`assessment_issue`. Missing required fields, type mismatches, invalid values,
-null-policy violations, and mapping failures belong to this class. Such an
-issue can be important, but it is not called a post-translation difference
-because translation did not succeed.
+### 6.3 Findings, classifications, and codes
+
+There are two finding classifications.
+
+`comparison_difference` means that the relevant translation and comparison
+prerequisites succeeded, and a difference remained. It includes a reference
+record missing from the query, an extra query record, or two valid translated
+values that do not match.
+
+`assessment_issue` means that the declared translation or assessment could not
+be applied cleanly to some input content. For example, a required field may be
+absent or a source value may not have an entry in a configured mapping. Such an
+issue can be important, but the tool cannot call it a post-translation
+difference because the intended translation did not succeed.
 
 The eight finding codes are:
 
@@ -480,19 +563,72 @@ The eight finding codes are:
 | `extra_record` | `comparison_difference` | A query record has no aligned reference record. |
 | `value_mismatch` | `comparison_difference` | Two valid translated values differ under the comparator. |
 | `missing_required_field` | `assessment_issue` | A required source field is absent. |
-| `type_mismatch` | `assessment_issue` | The source value kind cannot be used for the logical type. |
-| `invalid_field_value` | `assessment_issue` | The kind is acceptable, but the value itself is invalid. |
+| `type_mismatch` | `assessment_issue` | The source value type cannot be used for the declared logical type. |
+| `invalid_field_value` | `assessment_issue` | The source value type is acceptable, but the value itself is invalid. |
 | `null_policy_violation` | `assessment_issue` | A null is present where null is not allowed. |
-| `mapping_failure` | `assessment_issue` | A closed mapping has no entry for the value. |
+| `mapping_failure` | `assessment_issue` | A closed mapping has no entry for the source value. |
 
-Successful matches are counted rather than emitted as individual findings.
-`review_priority` controls only how field findings can be presented for review.
-Record findings have the priority `unassigned`.
+Successful record and value matches are included in summary counts rather than
+reported as individual findings.
 
-`complete` means every applicable comparison was performed. `incomplete` means
-the record model remains trustworthy, but at least one in-scope value
-opportunity was not assessable. `error` means no trustworthy comparison result
-was produced. Differences do not make a complete run incomplete.
+### 6.4 Value-opportunity outcomes
+
+A value opportunity is one in-scope, non-key field considered for one pair of
+aligned records. Every such opportunity is counted as exactly one of:
+
+- `matched`: both sides were assessable and matched under the configured
+  comparator;
+- `mismatched`: both sides were assessable but did not match, producing a
+  `value_mismatch` finding; or
+- `not_assessable`: the intended comparison could not be performed because a
+  prerequisite failed, producing the applicable `assessment_issue` finding.
+
+`not_assessable` is a summary outcome, not a finding code. The associated
+finding explains why the comparison could not be performed. At least one
+not-assessable opportunity makes the values phase, and therefore the run,
+`incomplete`.
+
+### 6.5 Run and phase status
+
+The possible run statuses are:
+
+- `complete`: every applicable comparison was performed;
+- `incomplete`: the record model remains trustworthy, but at least one intended
+  value comparison was not assessable; and
+- `error`: no trustworthy comparison result could be produced, for example
+  because an input was malformed or a record key was invalid.
+
+The contract, records, and values phases each have a status of `complete` or
+`incomplete`. Overall run status is `complete` only when all three phases are
+complete. An errored run has no evidence package and therefore no reported
+phase statuses.
+
+### 6.6 Exclusions and review priority
+
+An exclusion records a field that was outside the comparison:
+
+- `configured_field_excluded` means that the field has a definition but is not
+  listed in `fields.in_scope`;
+- `undeclared_field_excluded` means that a source field was observed but is not
+  represented by a field definition on that side.
+
+Excluded fields are not assessed. They do not produce findings or value
+opportunities, and they do not make a run incomplete. This is different from
+`not_assessable`, which describes an intended comparison that could not be
+performed.
+
+`review_priority` may be `low`, `normal`, or `high`. It helps organise findings
+about configured fields for human review. It does not change the comparison,
+the finding classification, run status, or exit code, and it is not a statement
+of clinical significance. Record findings do not carry a review priority; they
+are counted as `unassigned` in the priority summary.
+
+### 6.7 No acceptance verdict
+
+The tool reports what it compared, what differed, and what it could not assess.
+It does not decide whether the results are acceptable, whether a pipeline has
+passed validation, or whether an ISO 15189 requirement has been met. Those
+decisions belong to the laboratory's separately governed validation process.
 
 ## 7. The evidence package
 
