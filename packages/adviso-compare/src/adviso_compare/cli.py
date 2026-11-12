@@ -1,4 +1,4 @@
-"""Thin command-line adapter for AdvISO Compare."""
+"""Thin command-line adapter for adviso-compare."""
 
 from __future__ import annotations
 

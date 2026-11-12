@@ -142,6 +142,8 @@ def test_html_report_is_a_self_contained_view_of_both_json_documents() -> None:
     ).decode("utf-8")
 
     assert report.startswith("<!doctype html>\n")
+    assert "<title>adviso-compare evidence report</title>" in report
+    assert "<h1>adviso-compare evidence report</h1>" in report
     assert "may contain sensitive patient or laboratory information" in report
     assert "Run completeness" in report
     assert "Incomplete" in report

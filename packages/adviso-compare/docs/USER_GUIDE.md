@@ -1,163 +1,173 @@
-# AdvISO Compare user guide
+# `adviso-compare` user guide
 
-This guide applies to AdvISO Compare version 1 and to version `1.0` of both the
-comparison-configuration schema and the comparison-results schema.
-These are independently versioned formats. The supported combination for this
-version is results schema `1.0` with comparison-configuration schema `1.0`.
+## Contents
 
-AdvISO Compare compares a reference dataset with a query dataset. The two
-datasets may use different field names and ways of writing values. A comparison
-configuration can describe how to translate both datasets into a shared form.
-The tool then reports differences that remain after translation.
+- [1. Introduction](#1-introduction)
+  - [1.1 Records, fields, and comparison rules](#11-records-fields-and-comparison-rules)
+  - [1.2 Findings and run status](#12-findings-and-run-status)
+- [2. Install and check the tool](#2-install-and-check-the-tool)
+  - [2.1 Install with pip](#21-install-with-pip)
+  - [2.2 Install with pipx](#22-install-with-pipx)
+  - [2.3 Check the installation](#23-check-the-installation)
+- [3. Quick start](#3-quick-start)
+  - [3.1 Run your first comparison](#31-run-your-first-comparison)
+  - [3.2 Read and interpret the results](#32-read-and-interpret-the-results)
+- [4. Command and input reference](#4-command-and-input-reference)
+  - [4.1 Command options and exit codes](#41-command-options-and-exit-codes)
+  - [4.2 Input datasets](#42-input-datasets)
+- [5. Custom comparison configurations](#5-custom-comparison-configurations)
+  - [5.1 A small custom comparison](#51-a-small-custom-comparison)
+  - [5.2 Runnable custom example with transformations](#52-runnable-custom-example-with-transformations)
+  - [5.3 Top-level properties](#53-top-level-properties)
+  - [5.4 Field definitions](#54-field-definitions)
+  - [5.5 Logical types](#55-logical-types)
+  - [5.6 Null policy and typed value descriptions](#56-null-policy-and-typed-value-descriptions)
+  - [5.7 Source normalisation](#57-source-normalisation)
+  - [5.8 Value mapping](#58-value-mapping)
+  - [5.9 Collections written as text](#59-collections-written-as-text)
+  - [5.10 Typed normalisation](#510-typed-normalisation)
+  - [5.11 Comparators](#511-comparators)
+  - [5.12 Processing order](#512-processing-order)
+- [6. The evidence package](#6-the-evidence-package)
+- [7. JSON output reference](#7-json-output-reference)
+  - [7.1 `comparison-configuration.json`](#71-comparison-configurationjson)
+  - [7.2 `comparison-results.json`](#72-comparison-resultsjson)
+  - [7.3 Structural and semantic validation](#73-structural-and-semantic-validation)
+- [8. Errors and corrective action](#8-errors-and-corrective-action)
+- [9. Security, governance, and limitations](#9-security-governance-and-limitations)
+- [10. Reproducing the examples](#10-reproducing-the-examples)
 
-The output is comparison evidence. It is not a pass/fail decision, a pipeline
-validation report, or a claim of ISO 15189 compliance. A laboratory must decide
-how the evidence contributes to its own validation and quality processes.
+## 1. Introduction
 
-## 1. Install and check the tool
+`adviso-compare` compares a reference dataset with a query dataset, such as the
+output of a bioinformatics pipeline. A comparison configuration describes how
+to pair records, associate fields, and translate values into a shared form.
+The tool reports differences that remain after translation and problems that
+prevented parts of the comparison.
 
-AdvISO Compare requires Python 3.10 or later. Install a released wheel and its
-dependencies with `pip`. For example:
+The output is comparison evidence. Your laboratory decides how that evidence
+contributes to its validation and quality processes; the tool does not make an
+acceptance decision or establish ISO 15189 compliance.
+
+### 1.1 Records, fields, and comparison rules
+
+A dataset contains **records**, such as rows in a CSV file. Each record has
+**fields**, such as a sample identifier, or measurement. The **reference**
+is the dataset you compare against; the **query** is the dataset being checked.
+
+A **record key** identifies corresponding records on the two sides. For
+example, a sample identifier can pair a reference row with the query row for
+the same sample. A key uses one field, or several fields together as a
+**composite key**. Keys are unique within each dataset; record order does not
+establish correspondence.
+
+A configuration can associate differently named source fields with one
+**canonical field**: a shared name used within the comparison. For example,
+reference field `expected` and query field `observed` could both represent the
+canonical field `measurement`. A **logical type**, such as decimal or date,
+describes how to interpret a value. A **comparator** is the rule used to decide
+whether two values match. The resulting shared representations are called
+**canonical values**.
+
+A **parser-native value** is the value and type read from the input before
+configured transformations. CSV cells start as text; JSON can distinguish
+text, numbers, booleans, and other value types. A scalar is a single value,
+such as a string or number, rather than a collection of values.
+
+A present field can contain **null**, an explicit no-value marker. An absent
+field is missing entirely; an empty string is present text with no characters.
+
+The **effective configuration** is the configuration used for a run. You can
+supply a custom configuration, or let automatic mode generate one. Its
+**scope** selects the fields to assess. Fields outside that scope are reported
+as **exclusions** and are not compared.
+
+### 1.2 Findings and run status
+
+The report contains **findings**: individual differences or problems that
+prevented assessment. Findings have two broad meanings:
+
+- A **comparison difference** remains after the applicable translation and
+  comparison rules have been applied.
+- An **assessment issue** explains a problem applying those rules, such as a
+  required field being absent or a value that cannot be interpreted as declared.
+
+A run is **complete** when every applicable comparison was performed. It can
+be complete and still report differences. A run is **incomplete** when some
+intended value comparisons could not be performed. Both produce an **evidence
+package**: a directory containing the results, configuration, and HTML report.
+An execution error prevents a trustworthy result and produces no new package.
+
+## 2. Installation
+
+`adviso-compare` requires Python 3.10 or later. You can install it into an
+existing virtual environment with `pip`, or use `pipx` to manage a dedicated
+environment for the tool. Creating a new environment yourself is optional.
+
+In the commands below, replace the example wheel path with the actual file
+supplied to you, including its versioned filename.
+
+### 2.1 Install with pip
+
+Activate the virtual environment you want to use, then install the wheel and
+its dependencies:
+
+```console
+python -m pip install /path/to/adviso_compare-VERSION-py3-none-any.whl
+```
+
+If you prefer a new environment, create and activate one before running that
+installation command:
 
 ```console
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install /path/to/adviso_compare-1.0.0-py3-none-any.whl
+```
+
+On Windows Command Prompt, activate it with `.venv\Scripts\activate`; in
+PowerShell, use `.venv\Scripts\Activate.ps1`.
+
+### 2.2 Install with pipx
+
+If you use [pipx](https://pipx.pypa.io/stable/), install the wheel with:
+
+```console
+pipx install /path/to/adviso_compare-VERSION-py3-none-any.whl
+```
+
+`pipx` creates and manages a separate virtual environment for `adviso-compare`
+and makes the command available on your PATH. There is no need to activate
+that environment to run the command.
+
+### 2.3 Check the installation
+
+Installation may use a package index to obtain dependencies. Once installed,
+the comparison itself needs no network service. After either installation,
+check that the command is available:
+
+```console
 adviso-compare --version
 adviso-compare --help
 ```
 
-On Windows, activate the environment with `.venv\Scripts\activate`.
-Installation may use a package index to obtain dependencies. Once installed,
-the comparison itself needs no network service.
-
 The full guide is installed with the software under
-`share/doc/adviso-compare/USER_GUIDE.md` in the Python environment. The two
-JSON schemas are installed as resources in the `adviso_compare.schemas` Python
-package.
+`share/doc/adviso-compare/USER_GUIDE.md` in the Python environment.
+For a `pipx` installation, this is the environment managed by `pipx`; `pipx list`
+shows where it keeps application environments. 
 
-## 2. The command
+## 3. Quick start
 
-The command has no subcommands:
+The installed examples provide a first comparison without creating a
+configuration yourself. Run the automatic example, then use its report to
+explore the results. Section 5 shows how to supply your own configuration.
 
-```text
-adviso-compare \
-  --reference REFERENCE \
-  --query QUERY \
-  --output OUTPUT \
-  [--configuration CONFIGURATION]
-```
+### 3.1 Run your first comparison
 
-| Option | Meaning |
-| --- | --- |
-| `--reference REFERENCE` | Reference dataset. Required. |
-| `--query QUERY` | Query dataset produced by the pipeline. Required. |
-| `--output OUTPUT` | Parent directory under which to create a new run directory. Required. |
-| `--configuration CONFIGURATION` | Custom YAML comparison configuration. If omitted, automatic strict-exact mode is used. |
-| `--version` | Print the installed version and exit. |
-| `--help` | Print concise help and exit. |
+**Automatic strict-exact mode** is suitable when both datasets already use the
+same field names and representations. It generates the comparison configuration
+for you. To try it, omit `--configuration`.
 
-The output parent may already exist and contain any files or directories.
-Existing contents and permissions are preserved. If the parent does not exist,
-the tool creates it privately; its enclosing directory must already exist.
-The selected parent cannot be a symbolic link, regular file, or special
-filesystem object. Symbolic links in ancestor directories are permitted.
-
-Each complete or incomplete run publishes a new immediate child named
-`YYYYMMDDTHHMMSSZ-<run-id>`. The timestamp and full UUID come directly from that
-result's UTC `run.completed_at` and `run.id`. Two runs can share a timestamp
-without sharing a directory. An occupied run-directory path is an error;
-the tool never replaces it or chooses a different name for that run.
-
-The command prints a short completion summary to standard output. An execution
-error is printed to standard error. The exit codes are:
-
-| Code | Meaning |
-| ---: | --- |
-| `0` | The run is complete. This includes complete runs that found differences. |
-| `1` | The run is incomplete because at least one intended value comparison was not assessable. An evidence package is still written. |
-| `2` | Expected operational error, such as an invalid option, configuration, input, key, resource condition, or output destination. No evidence package is written. |
-| `3` | Unexpected internal error. No evidence package is written. |
-
-On error, no new evidence package is published and existing parent contents
-remain intact. A parent created during publication preparation may remain
-empty. Input and configuration errors do not create it. Private temporary
-staging is cleaned up after success and, where safe, after an error.
-
-Do not treat exit code `0` as a statement that the query passed validation. It
-means only that the configured comparison was completed.
-
-## 3. Input datasets
-
-The reference and query can independently be CSV, TSV, or JSON. The
-case-insensitive filename extension selects the format: `.csv`, `.tsv`, or
-`.json`. There is no format override. Both files must be UTF-8.
-
-### 3.1 CSV and TSV
-
-CSV uses commas; TSV uses tabs. Both use a double quote as the quote character.
-A double quote inside a quoted cell is written twice. Quoted cells may contain
-the delimiter or a line break. LF and CRLF line endings are accepted.
-
-A header is required. Header names must be non-empty and unique. Every data row
-must contain the same number of cells as the header. All cells initially count
-as strings, including empty cells and text that looks like a number or boolean.
-
-### 3.2 JSON
-
-JSON must contain one array of record objects at its root, even when there is
-only one record:
-
-```json
-[
-  {"sample_id": "S1", "result": "detected"},
-  {"sample_id": "S2", "result": "not_detected"}
-]
-```
-
-A single root object is not accepted. Every array item must be an object.
-Top-level record field names must be non-empty and unique. Duplicate member
-names anywhere in the JSON are rejected.
-
-JSON strings, integers, decimals, booleans, nulls, arrays, and objects retain
-their natural JSON type. Decimal numbers are read exactly without first being
-converted to binary floating point, and their original spelling is retained as
-evidence. `NaN` and infinities are not valid JSON numbers.
-
-### 3.3 Empty datasets
-
-`[]` is a valid zero-record JSON dataset. A header with no data rows is a valid
-zero-record CSV or TSV dataset. A zero-byte file is not a valid dataset.
-
-A custom configuration can compare empty datasets when it supplies the needed
-field and key information. Automatic mode cannot select a key from two empty
-JSON arrays because they expose no fields.
-
-## 4. Automatic strict-exact mode
-
-Omit `--configuration` to use automatic mode. It is suitable when the two
-datasets already use the same field names and the same representations.
-
-The tool first finds field names shared by both datasets. It selects the record
-key as follows:
-
-1. If both sides contain `record_id`, that field is used. It must contain a
-   unique, non-null string in every record on both sides.
-2. Otherwise, a candidate must be a shared field containing a unique,
-   non-null string in every record on both sides, with at least one value shared
-   between the datasets.
-3. Exactly one candidate must remain. No candidate or more than one candidate
-   is an `input.invalid_record_key` error.
-
-The selected key is compared as a typed string. All other shared fields are
-compared using strict parser-native equality: value types must match as well as
-content. For example, JSON integer `1` does not equal JSON string `"1"`.
-Fields found on only one side are reported as exclusions, not differences.
-
-The tool creates an effective configuration internally and saves it as
-`comparison-configuration.json` alongside the results and report.
-
-### 4.1 Runnable automatic example
+#### 3.1.1 Runnable automatic example
 
 Change to the `examples` directory installed next to this guide, then run:
 
@@ -184,40 +194,386 @@ Evidence package: automatic-evidence/20261111T143205Z-123e4567-e89b-42d3-a456-42
 
 Open `comparison-report.html` inside that run directory to review the findings.
 Run the same command again with `--output automatic-evidence` to add another
-run directory while preserving the first. Section 7 shows the resulting layout.
+run directory while preserving the first. Section 6 shows the resulting layout.
 
 Automatic mode is deliberately conservative. Use a custom configuration when
 source field names differ, values require translation, a composite key is
 needed, or automatic key selection is ambiguous.
 
+#### 3.1.2 How automatic mode selects fields and keys
+
+The tool first finds field names shared by both datasets. It selects the record
+key as follows:
+
+1. If both sides contain `record_id`, that field is used. It must contain a
+   unique, non-null string in every record on both sides.
+2. Otherwise, a candidate must be a shared field containing a unique,
+   non-null string in every record on both sides, with at least one value shared
+   between the datasets.
+3. Exactly one candidate must remain. No candidate or more than one candidate
+   is an `input.invalid_record_key` error.
+
+The selected key is compared as a typed string. All other shared fields are
+compared using strict parser-native equality: value types must match as well as
+content. For example, JSON integer `1` does not equal JSON string `"1"`.
+Fields found on only one side are reported as exclusions, not differences.
+
+The tool creates an effective configuration internally and saves it as
+`comparison-configuration.json` alongside the results and report.
+
+### 3.2 Read and interpret the results
+
+Open `comparison-report.html` in the directory named by the completion
+summary. Beside it are `comparison-results.json`, for software use and detailed
+review, and `comparison-configuration.json`, the effective configuration.
+
+Begin with run completeness, then review comparison differences, assessment
+issues, and exclusions. The automatic example reports a complete run with one
+comparison difference and no assessment issues. Its query-only
+`pipeline_version` field was excluded, so it did not create a finding.
+
+The report describes several aspects of the comparison:
+
+#### 3.2.1 The reporting model
+
+| Concept | What it describes | Examples |
+| --- | --- | --- |
+| Run status | Whether the comparison as a whole could be completed | `complete`, `incomplete`, `error` |
+| Phase status | Whether one of the three comparison phases completed its applicable work | `complete`, `incomplete` |
+| Finding | One reported difference or problem that requires attention | A missing record or an invalid field value |
+| Finding classification | The broad meaning of a finding | `comparison_difference`, `assessment_issue` |
+| Finding code | The specific type of finding | `value_mismatch`, `mapping_failure` |
+| Value-opportunity outcome | What happened when one in-scope field was considered for one aligned record | `matched`, `mismatched`, `not_assessable` |
+| Exclusion | A field that was deliberately or implicitly outside the comparison | A configured or undeclared field exclusion |
+| Review priority | Optional presentation priority for a finding about a configured field | `low`, `normal`, `high` |
+
+A finding is an individual entry in the report. Every finding has one
+classification and one more-specific finding code. The classification explains
+the general nature of the finding; the code explains exactly what happened.
+
+#### 3.2.2 Comparison phases
+
+Every comparison performs three phases in order:
+
+1. **Contract:** checks that configured fields can be found and translated as
+   declared, including requiredness, null, type, validity, and mapping rules.
+2. **Records:** pairs records using their keys and identifies
+   missing and extra records.
+3. **Values:** compares each assessable, in-scope, non-key field in aligned
+   records.
+
+A problem in an earlier phase does not automatically stop all later work. The
+tool continues wherever the required information remains valid and
+unambiguous. The phase attached to a finding records where the finding arose;
+it is separate from the finding's classification.
+
+#### 3.2.3 Findings, classifications, and codes
+
+There are two finding classifications.
+
+`comparison_difference` means that the relevant translation and comparison
+prerequisites succeeded, and a difference remained. It includes a reference
+record missing from the query, an extra query record, or two valid translated
+values that do not match.
+
+`assessment_issue` means that the declared translation or assessment could not
+be applied cleanly to some input content. For example, a required field may be
+absent or a source value may not have an entry in a configured mapping. Such an
+issue can be important, but the tool cannot call it a post-translation
+difference because the intended translation did not succeed.
+
+The eight finding codes are:
+
+| Code | Classification | Meaning |
+| --- | --- | --- |
+| `missing_record` | `comparison_difference` | A reference record has no aligned query record. |
+| `extra_record` | `comparison_difference` | A query record has no aligned reference record. |
+| `value_mismatch` | `comparison_difference` | Two valid translated values differ under the comparator. |
+| `missing_required_field` | `assessment_issue` | A required source field is absent. |
+| `type_mismatch` | `assessment_issue` | The source value type cannot be used for the declared logical type. |
+| `invalid_field_value` | `assessment_issue` | The source value type is acceptable, but the value itself is invalid. |
+| `null_policy_violation` | `assessment_issue` | A null is present where null is not allowed. |
+| `mapping_failure` | `assessment_issue` | A closed mapping has no entry for the source value. |
+
+Successful record and value matches are included in summary counts rather than
+reported as individual findings.
+
+#### 3.2.4 Value-opportunity outcomes
+
+A value opportunity is one in-scope, non-key field considered for one pair of
+aligned records. Every such opportunity is counted as exactly one of:
+
+- `matched`: both sides were assessable and matched under the configured
+  comparator;
+- `mismatched`: both sides were assessable but did not match, producing a
+  `value_mismatch` finding; or
+- `not_assessable`: the intended comparison could not be performed because a
+  prerequisite failed, producing the applicable `assessment_issue` finding.
+
+`not_assessable` is a summary outcome, not a finding code. The associated
+finding explains why the comparison could not be performed. At least one
+not-assessable opportunity makes the values phase, and therefore the run,
+`incomplete`.
+
+#### 3.2.5 Run and phase status
+
+The possible run statuses are:
+
+- `complete`: every applicable comparison was performed;
+- `incomplete`: the record model remains trustworthy, but at least one intended
+  value comparison was not assessable; and
+- `error`: no trustworthy comparison result could be produced, for example
+  because an input was malformed or a record key was invalid.
+
+The contract, records, and values phases each have a status of `complete` or
+`incomplete`. Overall run status is `complete` only when all three phases are
+complete. An errored run has no evidence package and therefore no reported
+phase statuses.
+
+#### 3.2.6 Exclusions and review priority
+
+An exclusion records a field that was outside the comparison:
+
+- `configured_field_excluded` means that the configuration describes the field
+  but leaves it outside the selected scope;
+- `undeclared_field_excluded` means that a source field was observed but is not
+  represented by a field definition on that side.
+
+Excluded fields are not assessed. They do not produce findings or value
+opportunities, and they do not make a run incomplete. This is different from
+`not_assessable`, which describes an intended comparison that could not be
+performed.
+
+`review_priority` may be `low`, `normal`, or `high`. It helps organise findings
+about configured fields for human review. It does not change the comparison,
+the finding classification, run status, or exit code, and it is not a statement
+of clinical significance. Record findings do not carry a review priority; they
+are counted as `unassigned` in the priority summary.
+
+#### 3.2.7 No acceptance verdict
+
+The tool reports what it compared, what differed, and what it could not assess.
+It does not decide whether the results are acceptable, whether a pipeline has
+passed validation, or whether an ISO 15189 requirement has been met. Those
+decisions belong to the laboratory's separately governed validation process.
+
+## 4. Command and input reference
+
+### 4.1 Command options and exit codes
+
+The command has no subcommands:
+
+```text
+adviso-compare \
+  --reference REFERENCE \
+  --query QUERY \
+  --output OUTPUT \
+  [--configuration CONFIGURATION]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--reference REFERENCE` | Reference dataset. Required. |
+| `--query QUERY` | Query dataset produced by the pipeline. Required. |
+| `--output OUTPUT` | Parent directory under which to create a new run directory. Required. |
+| `--configuration CONFIGURATION` | Custom YAML comparison configuration. If omitted, automatic strict-exact mode is used. |
+| `--version` | Print the installed version and exit. |
+| `--help` | Print concise help and exit. |
+
+`--output` selects a parent directory. Each complete or incomplete run
+creates its own directory there and preserves existing content. Section 6
+explains directory names, permissions, and publication errors.
+
+The command prints a short completion summary to standard output. An execution
+error is printed to standard error. The exit codes are:
+
+| Code | Meaning |
+| ---: | --- |
+| `0` | The run is complete. This includes complete runs that found differences. |
+| `1` | The run is incomplete because at least one intended value comparison was not assessable. An evidence package is still written. |
+| `2` | Expected operational error, such as an invalid option, configuration, input, key, resource condition, or output destination. No evidence package is written. |
+| `3` | Unexpected internal error. No evidence package is written. |
+
+Exit code `0` means the configured comparison completed. It does not indicate
+acceptance of the query or its pipeline.
+
+### 4.2 Input datasets
+
+The reference and query can independently be CSV, TSV, or JSON. The
+case-insensitive filename extension selects the format: `.csv`, `.tsv`, or
+`.json`. There is no format override. Both files must be UTF-8.
+
+#### 4.2.1 CSV and TSV
+
+CSV uses commas; TSV uses tabs. Both use a double quote as the quote character.
+A double quote inside a quoted cell is written twice. Quoted cells may contain
+the delimiter or a line break. LF and CRLF line endings are accepted.
+
+A header is required. Header names must be non-empty and unique. Every data row
+must contain the same number of cells as the header. All cells initially count
+as strings, including empty cells and text that looks like a number or boolean.
+
+#### 4.2.2 JSON
+
+JSON must contain one array of record objects at its root, even when there is
+only one record:
+
+```json
+[
+  {"sample_id": "S1", "result": "detected"},
+  {"sample_id": "S2", "result": "not_detected"}
+]
+```
+
+A single root object is not accepted. Every array item must be an object.
+Top-level record field names must be non-empty and unique. Duplicate member
+names anywhere in the JSON are rejected.
+
+JSON strings, integers, decimals, booleans, nulls, arrays, and objects retain
+their natural JSON type. Decimal numbers are read exactly without first being
+converted to binary floating point, and their original spelling is retained as
+evidence. `NaN` and infinities are not valid JSON numbers.
+
+#### 4.2.3 Empty datasets
+
+`[]` is a valid zero-record JSON dataset. A header with no data rows is a valid
+zero-record CSV or TSV dataset. A zero-byte file is not a valid dataset.
+
+A custom configuration can compare empty datasets when it supplies the needed
+field and key information. Automatic mode cannot select a key from two empty
+JSON arrays because they expose no fields.
+
 ## 5. Custom comparison configurations
 
-A custom configuration is one UTF-8 YAML document with suffix `.yaml` or
-`.yml`.
+A custom configuration lets you choose the record key, associate different
+source field names, and declare how values are interpreted and compared. It
+is one UTF-8 YAML document. The `.yaml` or `.yml` suffix is recommended so that
+its format is easy to recognise.
+
+### 5.1 A small custom comparison
+
+This example pairs samples whose identifier fields have different names and
+compares their measurements as decimals. In a working directory of your
+choice, save the following as `reference.csv`:
+
+```csv
+record_id,measurement
+S1,1.00
+S2,2.00
+```
+
+Save the query as `query.csv` in the same directory:
+
+```csv
+sample_id,result
+S1,1
+S2,2.10
+```
+
+Save this complete configuration as `configuration.yaml`:
+
+```yaml
+schema_version: "1.0"
+metadata:
+  id: "org.example.simple-comparison"
+  revision: "1"
+fields:
+  record_key: ["sample"]
+  in_scope: ["sample", "measurement"]
+  definitions:
+    sample:
+      source_fields: {reference: "record_id", query: "sample_id"}
+      required: {reference: true, query: true}
+      logical_type: "string"
+      null_policy: {allowed: false, nulls_equal: false}
+      comparator: {name: "typed_exact"}
+    measurement:
+      source_fields: {reference: "measurement", query: "result"}
+      required: {reference: true, query: true}
+      logical_type: "decimal"
+      null_policy: {allowed: false, nulls_equal: false}
+      comparator: {name: "numeric_exact"}
+```
+
+`schema_version` identifies the configuration format. `metadata` gives this
+configuration a stable ID and revision; it does not change comparison rules.
+`fields` describes record identity, scope, and the values to compare.
+
+The canonical field `sample` associates the two identifier names and provides
+the record key. `measurement` associates the values to compare. Both fields
+are required on both sides, and neither permits null: an explicit missing
+value. An absent field is different from a present field containing null.
+`typed_exact` compares the interpreted key strings; `numeric_exact` compares
+exact decimal values. No tolerance or rounding is applied.
+
+From that directory, run:
+
+```console
+adviso-compare \
+  --reference reference.csv \
+  --query query.csv \
+  --configuration configuration.yaml \
+  --output evidence
+```
+
+The run completes with one comparison difference and no assessment issues.
+For `S1`, `1.00` and `1` represent the same decimal value. For `S2`, `2.00` and
+`2.10` differ, producing one `value_mismatch` finding. The key identifies the
+sample; it is not counted again as a measurement comparison.
+
+### 5.2 Runnable custom example with transformations
+
+For a richer example, change to the `examples` directory installed next to
+this guide and run:
+
+```console
+adviso-compare \
+  --reference custom/reference.json \
+  --query custom/query.csv \
+  --configuration custom/configuration.yaml \
+  --output custom-evidence
+```
+
+The configuration maps different source field names to shared canonical names.
+It shows decimal quantisation and absolute tolerance, string trimming and case
+folding, value mapping, and translation of slash-delimited text to a set. It
+also declares `curator_note` but leaves it out of `fields.in_scope`, while the
+query's undeclared `pipeline_version` is also excluded. The run is complete and
+reports one `measurement` difference.
+
+A stable ID and revision, review of changes, and testing with representative
+data help your laboratory manage each configuration as a controlled document.
+The evidence package retains the complete effective configuration as
+`comparison-configuration.json`. Local quality arrangements remain the
+authority for approval and retention.
+
+#### Configuration checks and conventions
 
 The file is checked before either dataset is read. YAML aliases, anchors,
 merge keys, explicit tags, duplicate keys, and unsafe
-object constructors are rejected. Identifiers, versions, field and
-operation names, dates, datetimes, and decimal parameters need to be quoted.
-Unknown properties are rejected.
+object constructors are rejected, as are unknown properties. Quoting textual
+values helps prevent YAML from interpreting them as numbers, dates, or
+booleans. In particular, `schema_version` is a quoted string, and decimal
+parameters use strings such as `"0.1"`. The examples use quotes to make
+intended string values clear.
 
-The JSON Schema file
-`comparison-configuration-v1.0.schema.json` is the machine-readable definition
-of the expected YAML structure, and input custom configurations that are not
-compliant with the schema are rejected.
+A JSON schema describes a document's permitted structure and values.
+`comparison-configuration-v1.0.schema.json` defines the expected configuration
+structure. After parsing the YAML, the tool checks it against this schema and
+rejects configurations that do not conform.
 
-The tool also checks relationships that are awkward to express in JSON Schema:
-all named key and in-scope fields must be defined; source field names must be
-unique on each dataset side; mapping sources must not be repeated, conflicting,
-or unreachable; operations and comparators must suit their field; and custom
-configurations must not use the reserved automatic-mode ID
+The tool also checks relationships between settings: key and in-scope fields
+have definitions; source field names are unique on each dataset side; mapping
+sources are not repeated, conflicting, or unreachable; and operations and
+comparators suit their field. It rejects custom configurations using the
+reserved automatic-mode ID
 `org.adviso.automatic-strict-exact`.
 
-### 5.1 Top-level properties
+### 5.3 Top-level properties
 
 | Property | Required | Meaning |
 | --- | --- | --- |
-| `schema_version` | Yes | Must be a supported schema version (e.g. `"1.0"`). |
+| `schema_version` | Yes | Configuration format version; the supported version is `"1.0"`. |
 | `metadata` | Yes | Identity and description of the configuration. It does not alter the comparison. |
 | `fields` | Yes | Key, scope, field correspondence, and comparison rules. |
 
@@ -243,9 +599,9 @@ as `configured_field_excluded`. A source field not named by any definition on
 its side (reference or query) appears as `undeclared_field_excluded`. Neither kind
 is compared or makes a run incomplete.
 
-### 5.2 Field definitions
+### 5.4 Field definitions
 
-Every entry in `fields.definitions` is object with a canonical field name as
+Every entry in `fields.definitions` is an object with a canonical field name as
 key, and has the following properties:
 
 | Property | Required | Meaning |
@@ -261,18 +617,19 @@ key, and has the following properties:
 | `comparator` | Yes | Comparison rule and, where needed, its parameters. |
 | `review_priority` | No | `low`, `normal`, or `high`; defaults to `normal`. It helps organise review and does not change findings, status, exit code, or clinical significance. |
 
-Every field part of the record key must be in `definitions` and `in_scope`, required
-and non-nullable on both sides, scalar, and compared with `typed_exact`. Key fields
-may use explicit source normalisation or value mapping.
+For each record-key field, the tool requires an entry in `definitions` and
+`in_scope`, a scalar logical type, and `typed_exact` comparison. The field is
+required and non-nullable on both sides. Key fields may use explicit source
+normalisation or value mapping.
 
-### 5.3 Logical types
+### 5.5 Logical types
 
-A scalar `logical_type` is `string`, `integer`, `decimal`, `boolean`, `date`, or
-`datetime`. Parsing is strict. In particular, CSV and TSV cells start as
+For a scalar field, `logical_type` is `string`, `integer`, `decimal`, `boolean`,
+`date`, or `datetime`. Parsing is strict. In particular, CSV and TSV cells start as
 strings and are parsed only because a logical type was declared. Dates use
 `YYYY-MM-DD`. Datetimes use RFC 3339 with an explicit timezone.
 
-The accepted source values are deliberately narrow:
+The tool accepts these source values for each declared type:
 
 | Logical type | Accepted parser-native input |
 | --- | --- |
@@ -285,9 +642,8 @@ The accepted source values are deliberately narrow:
 
 JSON objects cannot be converted to any of the logical types. They may be compared
 as complete, untyped JSON values using `preserved_exact`. More generally, the tool
-does not guess how one source representation should be converted into another: any
-conversion not directly supported by the declared logical type must be stated explicitly
-in value_mapping.
+uses the declared logical type for parsing. Use `value_mapping` to describe
+translations that type parsing does not provide.
 
 A collection uses an object:
 
@@ -306,7 +662,7 @@ many times each value occurs. Sets and multisets require `typed_exact` elements.
 Lists allow `typed_exact`, or `numeric_tolerance` for integer or decimal
 elements.
 
-### 5.4 Null policy and typed value descriptions
+### 5.6 Null policy and typed value descriptions
 
 `null_policy.allowed` and `null_policy.nulls_equal` are required booleans. If
 null is not allowed, `nulls_equal` must be false. JSON null is always recognised
@@ -332,7 +688,7 @@ integers, and decimals use a textual `value`; booleans use `true` or `false`. An
 actual JSON `null` does not need to be listed because the tool recognises it
 automatically.
 
-### 5.5 Source normalisation
+### 5.7 Source normalisation
 
 `source_normalisation` may have `reference`, `query`, or both. Each present
 side is a non-empty ordered list. Operations affect only parser-native strings
@@ -347,7 +703,7 @@ from that side. Non-strings pass through unchanged.
 Operations run in list order. Case folding does not silently perform Unicode
 normalisation; list both operations when both are needed.
 
-### 5.6 Value mapping
+### 5.8 Value mapping
 
 `value_mapping` may have `reference`, `query`, or both. Each present side is a
 non-empty list of `from` and `to` value descriptions:
@@ -372,7 +728,7 @@ handled before value mapping.
 Mapping happens after source normalisation and missing-token recognition, and
 before parsing to the logical type.
 
-### 5.7 Collections written as text
+### 5.9 Collections written as text
 
 `collection_representation` may have `reference`, `query`, or both. An omitted
 side defaults to `json_array` with no element processing.
@@ -385,12 +741,12 @@ Each side requires `format`:
   non-empty `delimiter` string.
 
 Optional `element_normalisation` is a non-empty ordered list of the text
-operations in Section 5.5. Optional `element_mapping` is a non-empty closed
+operations in Section 5.7. Optional `element_mapping` is a non-empty closed
 mapping whose `from` and `to` values must both be non-null. These act on each
 element, not the collection as a whole. Collection fields cannot also use the
 field-level `source_normalisation`, `value_mapping`, or `typed_normalisation`.
 
-### 5.8 Typed normalisation
+### 5.10 Typed normalisation
 
 `typed_normalisation` is an optional, non-empty ordered list of operations
 applied to parsed values from both the reference and query. Operations run
@@ -445,7 +801,7 @@ The permitted values are:
 Discarded digits are removed without rounding. For example, millisecond
 truncation changes `.1238` seconds to `.123`, not `.124`.
 
-### 5.9 Comparators
+### 5.11 Comparators
 
 Every comparator is an object with `name`. The following take no parameters:
 
@@ -485,178 +841,25 @@ The schema restricts the possible shape of comparators. The tool's further
 checks ensure that a comparator suits the declared logical type and collection
 kind.
 
-### 5.10 Processing order
+### 5.12 Processing order
 
-For a scalar field, the order is:
+For a scalar field, processing follows this order:
 
 1. distinguish absence from a present parser-native value;
 2. apply side-specific source normalisation to strings;
-3. recognise configured missing tokens;
-4. apply the side-specific closed value mapping;
-5. apply the null policy;
-6. parse the declared logical type;
-7. apply typed normalisation to both sides; and
-8. compare the canonical values.
+3. recognise explicit null or configured missing tokens; for null, apply the
+   null policy and skip mapping and type parsing;
+4. for non-null values, apply the side-specific closed value mapping;
+5. if mapping produces null, apply the null policy and skip type parsing;
+6. otherwise parse the declared logical type;
+7. apply typed normalisation where applicable; and
+8. compare the canonical values under the configured null and comparison rules.
 
 For a collection, whole-field missing-token and null handling happens before
 the representation is decoded. Element normalisation, mapping, and typed
 parsing then happen for each element before collection comparison.
 
-### 5.11 Runnable custom example
-
-From the same `examples` directory, run the supplied custom example with:
-
-```console
-adviso-compare \
-  --reference custom/reference.json \
-  --query custom/query.csv \
-  --configuration custom/configuration.yaml \
-  --output custom-evidence
-```
-
-The configuration maps different source field names to shared canonical names.
-It shows decimal quantisation and absolute tolerance, string trimming and case
-folding, value mapping, and translation of slash-delimited text to a set. It
-also declares `curator_note` but leaves it out of `fields.in_scope`, while the
-query's undeclared `pipeline_version` is also excluded. The run is complete and
-reports one `measurement` difference.
-
-Custom configurations should be treated as controlled documents in a
-accreditable environment. Give each one a stable ID and revision, review changes,
-retain the exact configuration used for a comparison, and test it with representative data.
-The evidence package retains the complete effective configuration as
-`comparison-configuration.json`. Local quality arrangements remain the
-authority for approval and retention.
-
-## 6. How the comparison works
-
-The result describes several different aspects of a comparison. Understanding
-their relationship makes the report easier to interpret.
-
-### 6.1 The reporting model
-
-| Concept | What it describes | Examples |
-| --- | --- | --- |
-| Run status | Whether the comparison as a whole could be completed | `complete`, `incomplete`, `error` |
-| Phase status | Whether one of the three comparison phases completed its applicable work | `complete`, `incomplete` |
-| Finding | One reported difference or problem that requires attention | A missing record or an invalid field value |
-| Finding classification | The broad meaning of a finding | `comparison_difference`, `assessment_issue` |
-| Finding code | The specific type of finding | `value_mismatch`, `mapping_failure` |
-| Value-opportunity outcome | What happened when one in-scope field was considered for one aligned record | `matched`, `mismatched`, `not_assessable` |
-| Exclusion | A field that was deliberately or implicitly outside the comparison | A configured or undeclared field exclusion |
-| Review priority | Optional presentation priority for a finding about a configured field | `low`, `normal`, `high` |
-
-A finding is an individual entry in the report. Every finding has one
-classification and one more-specific finding code. The classification explains
-the general nature of the finding; the code explains exactly what happened.
-
-### 6.2 Comparison phases
-
-Every comparison performs three phases in order:
-
-1. **Contract:** checks that configured fields can be found and translated as
-   declared, including requiredness, null, type, validity, and mapping rules.
-2. **Records:** constructs canonical keys, aligns records, and identifies
-   missing and extra records.
-3. **Values:** compares each assessable, in-scope, non-key field in aligned
-   records.
-
-A problem in an earlier phase does not automatically stop all later work. The
-tool continues wherever the required information remains valid and
-unambiguous. The phase attached to a finding records where the finding arose;
-it is separate from the finding's classification.
-
-### 6.3 Findings, classifications, and codes
-
-There are two finding classifications.
-
-`comparison_difference` means that the relevant translation and comparison
-prerequisites succeeded, and a difference remained. It includes a reference
-record missing from the query, an extra query record, or two valid translated
-values that do not match.
-
-`assessment_issue` means that the declared translation or assessment could not
-be applied cleanly to some input content. For example, a required field may be
-absent or a source value may not have an entry in a configured mapping. Such an
-issue can be important, but the tool cannot call it a post-translation
-difference because the intended translation did not succeed.
-
-The eight finding codes are:
-
-| Code | Classification | Meaning |
-| --- | --- | --- |
-| `missing_record` | `comparison_difference` | A reference record has no aligned query record. |
-| `extra_record` | `comparison_difference` | A query record has no aligned reference record. |
-| `value_mismatch` | `comparison_difference` | Two valid translated values differ under the comparator. |
-| `missing_required_field` | `assessment_issue` | A required source field is absent. |
-| `type_mismatch` | `assessment_issue` | The source value type cannot be used for the declared logical type. |
-| `invalid_field_value` | `assessment_issue` | The source value type is acceptable, but the value itself is invalid. |
-| `null_policy_violation` | `assessment_issue` | A null is present where null is not allowed. |
-| `mapping_failure` | `assessment_issue` | A closed mapping has no entry for the source value. |
-
-Successful record and value matches are included in summary counts rather than
-reported as individual findings.
-
-### 6.4 Value-opportunity outcomes
-
-A value opportunity is one in-scope, non-key field considered for one pair of
-aligned records. Every such opportunity is counted as exactly one of:
-
-- `matched`: both sides were assessable and matched under the configured
-  comparator;
-- `mismatched`: both sides were assessable but did not match, producing a
-  `value_mismatch` finding; or
-- `not_assessable`: the intended comparison could not be performed because a
-  prerequisite failed, producing the applicable `assessment_issue` finding.
-
-`not_assessable` is a summary outcome, not a finding code. The associated
-finding explains why the comparison could not be performed. At least one
-not-assessable opportunity makes the values phase, and therefore the run,
-`incomplete`.
-
-### 6.5 Run and phase status
-
-The possible run statuses are:
-
-- `complete`: every applicable comparison was performed;
-- `incomplete`: the record model remains trustworthy, but at least one intended
-  value comparison was not assessable; and
-- `error`: no trustworthy comparison result could be produced, for example
-  because an input was malformed or a record key was invalid.
-
-The contract, records, and values phases each have a status of `complete` or
-`incomplete`. Overall run status is `complete` only when all three phases are
-complete. An errored run has no evidence package and therefore no reported
-phase statuses.
-
-### 6.6 Exclusions and review priority
-
-An exclusion records a field that was outside the comparison:
-
-- `configured_field_excluded` means that the field has a definition but is not
-  listed in `fields.in_scope`;
-- `undeclared_field_excluded` means that a source field was observed but is not
-  represented by a field definition on that side.
-
-Excluded fields are not assessed. They do not produce findings or value
-opportunities, and they do not make a run incomplete. This is different from
-`not_assessable`, which describes an intended comparison that could not be
-performed.
-
-`review_priority` may be `low`, `normal`, or `high`. It helps organise findings
-about configured fields for human review. It does not change the comparison,
-the finding classification, run status, or exit code, and it is not a statement
-of clinical significance. Record findings do not carry a review priority; they
-are counted as `unassigned` in the priority summary.
-
-### 6.7 No acceptance verdict
-
-The tool reports what it compared, what differed, and what it could not assess.
-It does not decide whether the results are acceptable, whether a pipeline has
-passed validation, or whether an ISO 15189 requirement has been met. Those
-decisions belong to the laboratory's separately governed validation process.
-
-## 7. The evidence package
+## 6. The evidence package
 
 Each complete or incomplete run publishes one new directory under `OUTPUT`.
 For example, two successive runs can produce:
@@ -674,18 +877,35 @@ OUTPUT/
 ```
 
 Each run directory contains exactly these three regular evidence files.
-Packages are validated and generated in private staging on the destination filesystem
-before publication. The destination must support exclusive directory rename;
+Packages are validated and generated in private staging on the destination
+filesystem before publication. The destination must support exclusive directory rename;
 if safe publication is unavailable, the run returns `output.write_failed`
 and preserves existing content.
+
+The output parent may already exist and contain any files or directories.
+Existing contents and permissions are preserved. If the parent does not exist,
+the tool creates it privately; its enclosing directory must already exist.
+The selected parent cannot be a symbolic link, regular file, or special
+filesystem object. Symbolic links in ancestor directories are permitted.
+
+Each complete or incomplete run publishes a new immediate child named
+`YYYYMMDDTHHMMSSZ-<run-id>`. The timestamp and full UUID come directly from that
+result's UTC `run.completed_at` and `run.id`. Two runs can share a timestamp
+without sharing a directory. An occupied run-directory path is an error;
+the tool never replaces it or chooses a different name for that run.
+
+On error, no new evidence package is published and existing parent contents
+remain intact. A parent created during publication preparation may remain
+empty. Input and configuration errors do not create it. Private temporary
+staging is cleaned up after success and, where safe, after an error.
 
 The completion summary's `Evidence package:` line identifies the published
 child. With a relative `--output`, it shows the relative parent and child.
 With an absolute `--output`, it shows only the parent basename and child; for
 a filesystem-root parent it shows only the child name. Absolute paths are not
 printed. For automation, retain the selected parent path and use the reported
-child name to locate that run. Do not guess the newest directory: concurrent
-runs may finish in a different order from when they started.
+child name to locate that run. The reported directory identifies this run
+reliably; concurrent runs may finish in a different order from when they started.
 
 Retention and disposal of accumulated evidence remain the laboratory's
 responsibility; the tool does not remove earlier runs or maintain a `latest`
@@ -706,41 +926,93 @@ dynamic names use Unicode code-point order. Identical effective configurations
 produce identical saved bytes, without run identifiers or timestamps.
 
 Keep the three files together. The results link to the saved configuration by
-its exact-byte SHA-256 digest, as explained in Section 8.2.
+its exact-byte SHA-256 digest, as explained in Section 7.2.2.
 `comparison-report.html` is a self-contained, offline view made solely from the
 validated results and saved configuration, with verified linkage. It adds fixed
 explanatory text and external review space, but no comparison facts. Rendering
-does not reread the original YAML. Open the report in an ordinary browser with
-scripting disabled.
+does not reread the original YAML. The report opens in an ordinary browser,
+works offline, and does not require scripting.
 
 The report separates run completeness, comparison differences, and assessment
 issues. It does not apply acceptance thresholds or give a pass/fail verdict.
 
-## 8. Canonical JSON reference
+## 7. JSON output reference
 
-Before consuming a result, check its root `schema_version`. Results version
-`1.0` uses `comparison-results-v1.0.schema.json`. The saved configuration uses
-its own root `schema_version` to select
-`comparison-configuration-v1.0.schema.json` for configuration version `1.0`.
-The fixed filenames distinguish the document families; the bare version string
-does not identify a schema globally. Their canonical `$id` values identify
-distinct schemas. Select supported schemas from trusted installed resources,
-without downloading schemas or constructing arbitrary paths from document values.
+The evidence package contains two JSON documents with different purposes:
 
-The software version and the two schema versions have separate lifecycles.
-Supporting a compatible configuration format need not change the results
-schema; features that change results structure or meaning can require a results
-schema revision. Software must support the selected combination, rather than
-assuming that the two version strings must match.
+| File | Contents |
+| --- | --- |
+| `comparison-configuration.json` | The effective configuration: its identity, field definitions, scope, and comparison rules. |
+| `comparison-results.json` | The run's findings, counts, statuses, input provenance, and digest link to the configuration. |
 
-Validate the package as described in Section 8.5, then use structured properties,
-classifications, and finding codes. Do not extract facts by parsing the English
-`message` text.
+The subsections below describe the fields in each document. Section 7.3
+explains how to validate them together.
 
-Every top-level property below is required, even when `exclusions` or
-`findings` is empty. Unknown properties are not allowed.
+### 7.1 `comparison-configuration.json`
 
-### 8.1 Run and provenance
+This is the complete effective configuration selected or generated for the
+run, saved as JSON. Its schema is
+`comparison-configuration-v1.0.schema.json`, identified by its own root
+`schema_version` value `"1.0"`.
+
+The three root properties are `schema_version`, `metadata`, and `fields`.
+All are required. Their fields are:
+
+| Property | Meaning |
+| --- | --- |
+| `schema_version` | Configuration document format, currently `"1.0"`. |
+| `metadata.id` | Stable identifier of the configuration. |
+| `metadata.revision` | Revision assigned by its owner, or by the tool for automatic mode. |
+| `metadata.title` | Optional human-readable title. |
+| `metadata.description` | Optional human-readable description. |
+| `fields.record_key` | Ordered canonical field names identifying records. |
+| `fields.in_scope` | Canonical fields selected for assessment, including the key fields. |
+| `fields.definitions` | Definitions indexed by canonical field name. Each definition associates source names and supplies the field's requiredness, null policy, comparison rule, and any declared type or transformations. |
+
+Sections 5.3–5.12 describe the permitted configuration properties, values,
+constraints, and interactions; the [field-definition reference](#54-field-definitions)
+lists the settings within each `fields.definitions` entry. The same structure applies to a parsed custom
+YAML configuration and to this saved JSON document. Metadata does not change
+the comparison rules.
+
+The saved configuration preserves explicit declarations and list order.
+Optional properties that were omitted remain absent; internal defaults are
+not added. In automatic mode, `metadata.id` is
+`org.adviso.automatic-strict-exact` and `metadata.revision` is `"1.0"`. This
+revision identifies the generated configuration, separately from its schema
+version.
+
+The saved document contains no run ID or completion timestamp. Its identity
+and revision are read here rather than duplicated in the results. Results link
+to its exact saved bytes through `comparison_configuration_digest`.
+
+### 7.2 `comparison-results.json`
+
+This document describes the comparison outcome. Its schema is
+`comparison-results-v1.0.schema.json`, identified by its root `schema_version`
+value `"1.0"`. For automation, use structured properties, classifications,
+and finding codes; the English `message` text is intended for human readers.
+
+The required root properties are:
+
+| Property | Meaning |
+| --- | --- |
+| `schema_version` | Results document format. |
+| `run` | Run identity, status, and completion time. |
+| `phases` | Completion status of each comparison phase. |
+| `software` | Software identity and version used for the run. |
+| `runtime` | Python, platform, and Unicode-data provenance. |
+| `inputs` | Basenames, formats, sizes, and exact-byte input digests. |
+| `record_key_fields` | Ordered reference, query, and canonical key-field names. |
+| `comparison_configuration_digest` | SHA-256 link to the saved configuration bytes. |
+| `summary` | Record, value-opportunity, and finding counts. |
+| `exclusions` | Fields outside the comparison scope. |
+| `findings` | Individual comparison differences and assessment issues. |
+
+Empty `exclusions` and `findings` arrays remain present. Unknown properties
+are rejected at the defined object levels.
+
+#### 7.2.1 Run and provenance
 
 | Property | Meaning |
 | --- | --- |
@@ -772,7 +1044,7 @@ Every top-level property below is required, even when `exclusions` or
 Absolute paths, usernames, hostnames, environment variables, working
 directories, raw command lines, and dependency inventories are not included.
 
-### 8.2 Key and configuration
+#### 7.2.2 Record keys and configuration digest
 
 `record_key_fields.reference`, `.query`, and `.canonical` are ordered,
 non-empty arrays of unique field names. Their common order is the component
@@ -796,7 +1068,7 @@ document's `schema_version`, `metadata.id`, and `metadata.revision`. They are
 not duplicated in the results. The sibling filename is fixed; no configuration
 path, URI, or alternative filename is selected by the results document.
 
-### 8.3 Summary and exclusions
+#### 7.2.3 Summary and exclusions
 
 `summary.records` contains non-negative counts: `reference`, `query`, `matched`,
 `missing`, and `extra`. The reference count equals matched plus missing; the
@@ -820,14 +1092,14 @@ Each item in `exclusions` has one of two exact forms:
 
 Exclusions are not findings and do not affect run status.
 
-### 8.4 Finding properties
+#### 7.2.4 Finding properties
 
 Every finding has `id`, `classification`, `code`, `phase`, `message`, and
 `affected_side`.
 
 - `id` is a report-local sequence such as `F000001`.
 - `classification` is `comparison_difference` or `assessment_issue`.
-- `code` is one of the eight codes in Section 6.
+- `code` is one of the eight codes in Section 3.2.3.
 - `phase` is `contract`, `records`, or `values`.
 - `message` is deterministic English presentation text. It adds no fact that is
   absent from the structured fields.
@@ -876,7 +1148,26 @@ The schema defines exact finding forms. In summary:
 - value mismatches have identity, locations, field, priority, and evidence for
   both sides.
 
-### 8.5 Structural and semantic validation
+### 7.3 Structural and semantic validation
+
+The supported combination is results schema `1.0` with configuration schema
+`1.0`. These formats are independently versioned.
+
+A JSON schema describes a document's permitted structure and values. The two
+schemas are installed as resources in the `adviso_compare.schemas` Python
+package.
+
+Select a schema using the document family and its root `schema_version`.
+The fixed filenames distinguish the document families; the bare version string
+does not identify a schema globally. Their canonical `$id` values identify
+distinct schemas. Select supported schemas from trusted installed resources,
+without downloading schemas or constructing arbitrary paths from document values.
+
+The software version and the two schema versions have separate lifecycles.
+Supporting a compatible configuration format need not change the results
+schema; features that change results structure or meaning can require a results
+schema revision. Software must support the selected combination, rather than
+assuming that the two version strings must match.
 
 Validation has three layers:
 
@@ -925,8 +1216,8 @@ validation procedure is:
 Both structural validators use JSON Schema Draft 2020-12 format assertion.
 If you implement these checks independently, enable equivalent format checking
 (for example, `Draft202012Validator(schema, format_checker=FormatChecker())`
-with Python's `jsonschema` package). Invalid recognised UUID, date, and
-date-time formats must fail validation. Schemas are loaded from trusted local
+with Python's `jsonschema` package). With format checking enabled, the validator rejects invalid recognised UUID,
+date, and date-time formats. Schemas are loaded from trusted local
 package resources; no network access or schema registry linking the two
 formats is needed.
 
@@ -940,7 +1231,7 @@ Semantic checks available from the saved documents include:
 - key declarations, finding field identities, review priorities, and
   configured-field exclusions agree with the saved configuration.
 
-Before publication, AdvISO Compare additionally has the parsed input datasets
+Before publication, `adviso-compare` additionally has the parsed input datasets
 and comparison-phase results. It checks that the saved configuration agrees
 with the selected effective configuration, input provenance matches the parsed
 inputs, findings and summaries match the phase results, and undeclared-field
@@ -953,7 +1244,7 @@ report.
 
 The normative details are in [Specification Section 9.1.4](SPECIFICATION.md#914-structural-and-semantic-package-validation).
 
-## 9. Errors and corrective action
+## 8. Errors and corrective action
 
 The first error line has the form:
 
@@ -978,12 +1269,12 @@ ERROR [category.code]: message
 | `resource.limit_exceeded` or `resource.exhausted` | Reduce input size or provide more resources, then rerun. No partial result is valid. |
 | `output.invalid_destination` | Select a regular parent with an existing enclosing directory. Check whether the run-directory path is occupied; existing content is never replaced. |
 | `output.write_failed` | Check parent-directory permissions, available storage, and filesystem support for exclusive directory rename. |
-| `internal.unexpected` | Rerun once; if it persists, report the software version and safe reproduction details. Do not disclose clinical data. |
+| `internal.unexpected` | Rerun once; if it persists, report the software version and safe reproduction details. Use synthetic examples when sharing reproduction details. |
 
 An assessment issue inside an otherwise readable and alignable dataset is a
 finding, not an execution error. Review the evidence package for those issues.
 
-## 10. Security, governance, and limitations
+## 9. Security, governance, and limitations
 
 The tool operates locally and does not transmit inputs, configurations, or
 results. The evidence package can contain sensitive laboratory or patient
@@ -1001,30 +1292,33 @@ Routine terminal output and error diagnostics do not reproduce record
 identifiers or source values. The tool does not provide de-identification,
 identifier hashing, access control, encryption, or sensitivity policies.
 
-Version 1 compares one complete reference dataset with one complete query
+`adviso-compare` compares one complete reference dataset with one complete query
 dataset. It does not download data, run a bioinformatics pipeline, subset a
 validation dataset, apply acceptance thresholds, decide fitness for purpose,
 or produce a complete ISO 15189 validation dossier. It supports the evidence
 review that forms part of a wider, governed validation process.
 
-This release sets no fixed input-size or record-count limit. Available memory,
+There is no fixed input-size or record-count limit. Available memory,
 storage, and operating-system resources still impose practical limits. Resource
 exhaustion produces an error and no partial evidence package.
 
-## 11. Reproducing the examples
+## 10. Reproducing the examples
 
-The example inputs and YAML are hand-maintained, synthetic, non-sensitive text
-fixtures under `docs/examples/`. No generation script is needed. Their expected
+The examples use synthetic, non-sensitive data. Section 5.1 provides complete
+file contents to save yourself. The other example inputs and YAML are
+hand-maintained fixtures under `docs/examples/`, installed next to this guide.
+No generation script is needed. Their expected
 stable outcomes are:
 
 | Example | Status | Comparison differences | Assessment issues |
 | --- | --- | ---: | ---: |
-| automatic | `complete` | 1 | 0 |
-| custom | `complete` | 1 | 0 |
+| automatic (Section 3.1.1) | `complete` | 1 | 0 |
+| small custom (Section 5.1) | `complete` | 1 | 0 |
+| custom with transformations (Section 5.2) | `complete` | 1 | 0 |
 
-Run the commands in Sections 4.1 and 5.11, then open the run directory
+Run the commands in Sections 3.1.1, 5.1, and 5.2, then open the run directory
 identified by each completion summary and validate the complete package
-as shown in Section 8.5. The same output parents can be reused: each invocation
+as shown in Section 7.3. The same output parents can be reused: each invocation
 adds a new run directory. Run IDs and completion times change on every run.
 Software and runtime provenance can change between environments. Input digests
 change if the fixture bytes are edited. The comparison outcome above remains

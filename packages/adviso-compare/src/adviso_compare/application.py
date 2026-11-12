@@ -1,4 +1,4 @@
-"""Application orchestration boundary for AdvISO Compare."""
+"""Application orchestration boundary for adviso-compare."""
 
 from __future__ import annotations
 

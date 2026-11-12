@@ -1,4 +1,4 @@
-# AdvISO Compare
+# `adviso-compare`
 
 `adviso-compare` is a command-line tool for comparing a reference dataset with a query dataset. It uses explicit configuration rules to translate different source representations into a common canonical representation, then reports post-translation differences separately from issues that prevented assessment.
 
@@ -35,7 +35,7 @@ summary identifies the published run directory.
 Both JSON formats use their own root `schema_version` and are independently
 versioned. Version 1 supports results schema `1.0` with configuration schema
 `1.0`. Keep the three files together; see the user guide's
-[package-validation procedure](docs/USER_GUIDE.md#85-structural-and-semantic-validation).
+[package-validation procedure](docs/USER_GUIDE.md#73-structural-and-semantic-validation).
 
 The current normative artefacts are:
 

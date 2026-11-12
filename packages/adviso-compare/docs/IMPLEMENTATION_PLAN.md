@@ -1,4 +1,4 @@
-# AdvISO Compare version 1 implementation plan
+# `adviso-compare` version 1 implementation plan
 
 ## 1. Purpose
 

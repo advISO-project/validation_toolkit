@@ -82,14 +82,14 @@ def render_html_report(
         "<head>",
         '<meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>AdvISO Compare evidence report</title>",
+        "<title>adviso-compare evidence report</title>",
         "<style>",
         _STYLES,
         "</style>",
         "</head>",
         "<body>",
         '<header class="page-header">',
-        "<h1>AdvISO Compare evidence report</h1>",
+        "<h1>adviso-compare evidence report</h1>",
         '<p class="warning"><strong>Sensitive information:</strong> This evidence '
         "package may contain sensitive patient or laboratory information. Handle "
         "it under your laboratory’s information-governance arrangements.</p>",

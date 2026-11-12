@@ -1,4 +1,4 @@
-# AdvISO Compare Behaviour Specification
+# `adviso-compare` Behaviour Specification
 
 **Document status:** Draft for review  
 **Specification version:** 0.1.0-draft  
@@ -7,9 +7,9 @@
 
 ## 1. Purpose
 
-This document defines a specification for version 1.0 of AdvISO Compare, a command-line tool that supports bioinformatics validation and verification activities associated with ISO 15189 accreditation.
+This document defines a specification for version 1.0 of `adviso-compare`, a command-line tool that supports bioinformatics validation and verification activities associated with ISO 15189 accreditation.
 
-AdvISO Compare is designed for two datasets that describe the same kinds of samples or observations but may express their fields and values using different names, types, vocabularies, or other source dialects. The declared comparison configuration translates those representations into a common canonical representation, after which the tool compares the canonical records and values. It produces deterministic, machine-readable findings and a human-readable summary suitable for review and retention as one component of a bioinformatics pipeline validation or verification record.
+`adviso-compare` is designed for two datasets that describe the same kinds of samples or observations but may express their fields and values using different names, types, vocabularies, or other source dialects. The declared comparison configuration translates those representations into a common canonical representation, after which the tool compares the canonical records and values. It produces deterministic, machine-readable findings and a human-readable summary suitable for review and retention as one component of a bioinformatics pipeline validation or verification record.
 
 The tool distinguishes differences that remain after successful translation from issues that prevented some intended translation or assessment. It is intended to answer these questions:
 
@@ -32,7 +32,7 @@ The product identities and their roles are:
 
 | Concept | Name | Role |
 | --- | --- | --- |
-| Product | **AdvISO Compare** | User-facing comparison tool |
+| Product | **`adviso-compare`** | User-facing comparison tool |
 | Distribution | `adviso-compare` | Installable Python distribution |
 | Executable | `adviso-compare` | Direct command-line interface |
 | Import package | `adviso_compare` | Python implementation package |
@@ -44,7 +44,7 @@ layer in that package. The comparison engine and supporting configuration,
 provenance, findings, and reporting components are internal modules rather than
 separate products.
 
-**REQ-PRD-001.** **AdvISO Compare** is the user-facing product. The installable distribution package MUST be named **`adviso-compare`**. The command-line executable MUST be named **`adviso-compare`**. The other components, including the **comparison engine**, are internal reusable software components and are not separate products.
+**REQ-PRD-001.** **`adviso-compare`** is the user-facing product. The installable distribution package MUST be named **`adviso-compare`**. The command-line executable MUST be named **`adviso-compare`**. The other components, including the **comparison engine**, are internal reusable software components and are not separate products.
 
 **REQ-PRD-002.** The command-line form MUST be:
 
@@ -1648,7 +1648,7 @@ In operational use, each laboratory is responsible for creating, approving, main
 - **REQ-DOC-013.** every property in the canonical results JSON schema, including finding classifications and codes, typed source and canonical values, counts, exclusions, run and phase statuses, and provenance fields; the guide MUST explain that software consuming a result must first identify the results format using its root `schema_version` and must use structured properties, classifications, and finding codes rather than parsing presentation messages;
 - **REQ-DOC-014.** execution-error diagnostics and common corrective actions;
 - **REQ-DOC-015.** the tool's intended use, non-claims, security and data-governance boundaries, and known limitations; and
-- **REQ-DOC-016.** the software, comparison-configuration-schema, and results-schema versions to which the documentation applies.
+- **REQ-DOC-016.** the comparison-configuration-schema and results-schema versions supported by the bundled software. The guide MUST describe that software's behaviour without requiring a separate software-version label.
 
 **REQ-DOC-002.** The guide MUST include complete, runnable examples covering automatic strict-exact mode, including automatic key discovery, and representative custom configuration features.
 
@@ -1814,7 +1814,7 @@ This catalogue summarises minimum executable scenarios for the first release. It
 
 ### 14.6 Documentation scenarios
 
-- **AT-DOC-001:** The built distribution contains an offline user guide covering every topic required by Section 13.4, and the guide identifies the software and schema versions to which it applies. This consolidated parameterized scenario also covers: Every complete comparison-configuration and canonical-results example in the guide validates independently against its corresponding packaged schema, and every documented command-line invocation uses the version 1 interface. The worked package-validation procedure checks the fixed sibling configuration, exact-byte digest linkage, schema selection through each root `schema_version`, and the documented semantic-assurance limits for both automatic and custom packages.
+- **AT-DOC-001:** The built distribution contains an offline user guide covering every topic required by Section 13.4, and the guide describes its bundled software and identifies the supported comparison-configuration and results schema versions. This consolidated parameterized scenario also covers: Every complete comparison-configuration and canonical-results example in the guide validates independently against its corresponding packaged schema, and every documented command-line invocation uses the version 1 interface. The worked package-validation procedure checks the fixed sibling configuration, exact-byte digest linkage, schema selection through each root `schema_version`, and the documented semantic-assurance limits for both automatic and custom packages.
   - Verifies: `REQ-DOC-001`, `REQ-DOC-006`, `REQ-DOC-007`, `REQ-DOC-008`, `REQ-DOC-009`, `REQ-DOC-010`, `REQ-DOC-011`, `REQ-DOC-012`, `REQ-DOC-013`, `REQ-DOC-014`, `REQ-DOC-015`, `REQ-DOC-016`, `REQ-DOC-002`, `REQ-DOC-003`, `REQ-DOC-004`, `REQ-OUT-111`
 
 ### 14.7 Fixture and compatibility scenarios

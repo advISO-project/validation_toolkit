@@ -1,1 +1,1 @@
-"""AdvISO Compare."""
+"""adviso-compare."""

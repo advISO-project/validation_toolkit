@@ -55,7 +55,7 @@ def _installed_python(environment: Path) -> Path:
 
 
 def _installed_executable(environment: Path) -> Path:
-    """Return the installed AdvISO Compare command on this platform."""
+    """Return the installed adviso-compare command on this platform."""
     executable = (
         "adviso-compare.exe" if sys.platform == "win32" else "adviso-compare"
     )
@@ -154,7 +154,7 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         environment / "share" / "doc" / "adviso-compare" / "USER_GUIDE.md"
     )
     assert installed_guide.is_file()
-    assert "# AdvISO Compare user guide" in installed_guide.read_text(
+    assert "# `adviso-compare` user guide" in installed_guide.read_text(
         encoding="utf-8"
     )
     assert installed_guide.read_bytes() == (

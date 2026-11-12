@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://adviso-project.github.io/validation_toolkit/schemas/comparison-configuration-v1.0.schema.json",
-  "title": "AdvISO comparison configuration",
+  "title": "adviso-compare configuration",
   "description": "Normative structural schema for comparison-configuration schema version 1.0.",
   "type": "object",
   "additionalProperties": false,

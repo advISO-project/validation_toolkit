@@ -1,2 +1,2 @@
-"""Reusable support for the AdvISO Compare test suite."""
+"""Reusable support for the adviso-compare test suite."""
 

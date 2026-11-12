@@ -1,4 +1,4 @@
-# AdvISO Compare version 1 release-candidate verification
+# `adviso-compare` version 1 release-candidate verification
 
 Date: 10 November 2026
 

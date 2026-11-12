@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://adviso-project.github.io/validation_toolkit/schemas/comparison-results-v1.0.schema.json",
-  "title": "AdvISO comparison results",
+  "title": "adviso-compare results",
   "description": "Normative schema for canonical comparison results schema version 1.0. Execution-error diagnostics are not comparison results and do not validate against this schema.",
   "type": "object",
   "additionalProperties": false,

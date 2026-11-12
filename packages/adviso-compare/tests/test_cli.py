@@ -1,4 +1,4 @@
-"""Behavioural tests for the direct AdvISO Compare command line."""
+"""Behavioural tests for the direct adviso-compare command line."""
 
 from __future__ import annotations
 

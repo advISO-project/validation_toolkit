@@ -26,6 +26,7 @@ EXAMPLES = PROJECT_ROOT / "docs" / "examples"
     ("example", "reference_name", "query_name", "configuration_name"),
     [
         ("automatic", "reference.csv", "query.csv", None),
+        ("introductory", "reference.csv", "query.csv", "configuration.yaml"),
         ("custom", "reference.json", "query.csv", "configuration.yaml"),
     ],
 )
@@ -36,9 +37,27 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     query_name: str,
     configuration_name: str | None,
 ) -> None:
-    """Each supplied example is runnable and produces schema-valid evidence."""
+    """Each guide example is runnable and produces schema-valid evidence."""
+    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(
+        encoding="utf-8"
+    )
     working = tmp_path / example
-    shutil.copytree(EXAMPLES / example, working)
+    if example == "introductory":
+        assert configuration_name is not None
+        working.mkdir()
+        tutorial = guide.split(" A small custom comparison\n", 1)[1]
+        tutorial = tutorial.split("\n### ", 1)[0]
+        inputs = re.findall(r"```csv\n(.*?)\n```", tutorial, re.S)
+        configurations = re.findall(r"```yaml\n(.*?)\n```", tutorial, re.S)
+        assert len(inputs) == 2
+        assert len(configurations) == 1
+        for name, content in zip(
+            (reference_name, query_name, configuration_name),
+            (*inputs, configurations[0]),
+        ):
+            (working / name).write_text(content + "\n", encoding="utf-8")
+    else:
+        shutil.copytree(EXAMPLES / example, working)
     configuration = (
         working / configuration_name if configuration_name is not None else None
     )
@@ -75,12 +94,9 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     assert outcome.comparison_differences == 1
     assert outcome.assessment_issues == 0
     assert outcome.exit_code == 0
-    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(
-        encoding="utf-8"
-    )
     validation_section = guide.split(
-        "### 8.5 Structural and semantic validation", 1
-    )[1].split("\n## 9.", 1)[0]
+        " Structural and semantic validation\n", 1
+    )[1].split("\n## ", 1)[0]
     snippets = re.findall(r"```python\n(.*?)\n```", validation_section, re.S)
     assert len(snippets) == 1
     checked = subprocess.run(
@@ -94,7 +110,7 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     assert checked.stderr == ""
 
 
-def test_user_guide_identifies_its_versions_and_maintained_examples() -> None:
+def test_user_guide_identifies_supported_schemas_and_maintained_examples() -> None:
     """The offline guide names its supported schemas and both example modes."""
     guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
 
