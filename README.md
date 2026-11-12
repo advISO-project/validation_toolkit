@@ -17,6 +17,6 @@ is the first tool. Additional tools will be added as peer packages as their
 scope and implementation are agreed.
 
 For development, start with the [contribution guide](CONTRIBUTING.md), then
-follow the selected tool's README for setup, test, and build commands.
+follow the selected tool's developer guidance, linked from its README.
 Repository-wide agent and code-quality guidance is in [`AGENTS.md`](AGENTS.md).
 Product behaviour is defined within each tool's own specification and schemas.
