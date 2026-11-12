@@ -128,7 +128,7 @@ def _snapshot(directory: Path) -> dict[str, tuple[int, bytes | str | None]]:
             content = os.readlink(path)
         elif stat.S_ISREG(mode):
             content = path.read_bytes()
-        snapshot[str(path.relative_to(directory))] = (mode, content)
+        snapshot[path.relative_to(directory).as_posix()] = (mode, content)
     return snapshot
 
 
@@ -431,6 +431,7 @@ def test_output_parent_eligibility_depends_on_its_kind_not_its_contents(
             target.mkdir()
             (target / "keep.txt").write_bytes(b"keep")
         parent.symlink_to(target, target_is_directory=True)
+        original_target = parent.readlink()
     else:
         parent.mkdir()
         if parent_kind == "populated_directory":
@@ -463,7 +464,7 @@ def test_output_parent_eligibility_depends_on_its_kind_not_its_contents(
         assert parent.read_bytes() == b"keep"
     else:
         assert parent.is_symlink()
-        assert parent.readlink() == target
+        assert parent.readlink() == original_target
         if target.exists():
             assert (target / "keep.txt").read_bytes() == b"keep"
     assert not list(tmp_path.glob(".evidence.*"))
