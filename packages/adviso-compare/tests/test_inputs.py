@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from decimal import Decimal
 from hashlib import sha256
@@ -362,16 +363,31 @@ def test_invalid_json_roots_identify_the_value_and_required_structure(
     assert "record object" in raised.value.message
 
 
-def test_malformed_json_reports_its_parser_location(tmp_path: Path) -> None:
-    """JSON syntax errors retain safe one-based line and column context."""
-    path = _write_bytes(tmp_path / "records.json", b'[\n {"a": 1},\n]')
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(b'[\n {"a": 1},\n]', id="array-trailing-comma"),
+        pytest.param(b'[\n {"a": 1,}\n]', id="object-trailing-comma"),
+        pytest.param(b'[\n {"a": }\n]', id="missing-value"),
+    ],
+)
+def test_malformed_json_reports_its_parser_location(
+    tmp_path: Path, content: bytes
+) -> None:
+    """Syntax diagnostics preserve the running JSON parser's location."""
+    # Python versions can attribute trailing commas to different positions.
+    with pytest.raises(json.JSONDecodeError) as parser_error:
+        json.loads(content)
+    location = parser_error.value
+    path = _write_bytes(tmp_path / "records.json", content)
 
     with pytest.raises(InputError) as raised:
         load_dataset(path, InputSide.QUERY)
 
     assert raised.value.code == "invalid_syntax"
     assert raised.value.message == (
-        "query JSON input has invalid syntax at line 3, column 1"
+        f"query JSON input has invalid syntax at line {location.lineno}, "
+        f"column {location.colno}"
     )
 
 
