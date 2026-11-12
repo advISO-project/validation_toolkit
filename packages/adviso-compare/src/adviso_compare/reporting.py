@@ -90,32 +90,58 @@ def render_html_report(
         "<body>",
         '<header class="page-header">',
         "<h1>adviso-compare evidence report</h1>",
+        _identity_section(inputs, metadata, run),
         '<p class="warning"><strong>Sensitive information:</strong> This evidence '
         "package may contain sensitive patient or laboratory information. Handle "
         "it under your laboratory’s information-governance arrangements.</p>",
-        "<p>This run translated two structured datasets according to the "
-        "saved comparison configuration, then performed contract, records, "
-        "and values comparison phases. The report presents measured evidence; "
-        "review and approval occur outside the tool.</p>",
+        '<nav aria-label="Report sections"><a href="#headline">Overview</a>'
+        '<a href="#coverage">Coverage</a><a href="#findings">Findings</a>'
+        '<a href="#supporting">Supporting detail</a>'
+        '<a href="#provenance">Provenance</a>'
+        '<a href="#review">Review</a></nav>',
         "</header>",
         '<main id="main-content">',
         '<section aria-labelledby="headline"><h2 id="headline">Run summary</h2>',
         '<div class="headline-grid">',
-        _metric("Run completeness", status.title(), status),
-        _metric("Comparison differences", str(difference_count), "difference"),
-        _metric("Assessment issues", str(issue_count), "issue"),
+        _metric("Run completeness", status.title(), status, "coverage"),
+        _metric(
+            "Comparison differences", str(difference_count), "difference",
+            "comparison-differences",
+        ),
+        _metric(
+            "Assessment issues", str(issue_count), "issue", "assessment-issues"
+        ),
         "</div>",
+        '<p class="phase-statuses">' + " · ".join(
+            f"<span>{name.title()}: <strong>{_escape(phases[name].title())}"
+            "</strong></span>"
+            for name in ("contract", "records", "values")
+        ) + "</p>",
+        '<p class="explanation">This comparison translated the inputs '
+        "under the saved configuration and performed contract, records, "
+        "and values phases. Completeness describes assessment coverage, "
+        "not acceptance. Review and "
+        "approval occur outside the tool.</p>",
         "</section>",
-        _phase_section(phases),
-        _identity_section(inputs, metadata),
+        '<section aria-labelledby="coverage">'
+        '<h2 id="coverage">Coverage and limitations</h2>',
+        _coverage_summary(summary),
     ]
     if metadata["id"] == AUTOMATIC_CONFIGURATION_ID:
         sections.append(_automatic_mode_notice())
     sections.extend(
         (
+            _limitations_section(exclusions, configuration),
+            "</section>",
+            _findings_section(
+                findings, document["record_key_fields"], configuration
+            ),
+            '<section aria-labelledby="supporting">'
+            '<h2 id="supporting">Supporting detail</h2>'
+            '<details><summary>Full counts and comparison phases</summary>',
+            _phase_section(phases),
             _counts_section(summary),
-            _findings_section(findings),
-            _limitations_section(exclusions, summary),
+            "</details></section>",
             _provenance_section(document, configuration),
             _review_section(),
             "</main>",
@@ -394,11 +420,11 @@ def _fsync_directory(path: Path) -> None:
 # HTML rendering helpers
 
 
-def _metric(label: str, value: str, kind: str) -> str:
-    """Render one labelled headline measure."""
+def _metric(label: str, value: str, kind: str, target: str) -> str:
+    """Render one headline measure linked to its review context."""
     return (
-        f'<div class="metric metric-{_escape(kind)}"><span>{_escape(label)}</span>'
-        f"<strong>{_escape(value)}</strong></div>"
+        f'<a class="metric metric-{_escape(kind)}" href="#{_escape(target)}">'
+        f"<span>{_escape(label)}</span><strong>{_escape(value)}</strong></a>"
     )
 
 
@@ -410,22 +436,33 @@ def _phase_section(phases: Mapping[str, Any]) -> str:
         for name in ("contract", "records", "values")
     )
     return (
-        '<section aria-labelledby="phases"><h2 id="phases">Comparison phases</h2>'
+        '<section aria-labelledby="phases">'
+        '<h3 id="phases">Comparison phases</h3>'
         "<p>The phases were performed in the order shown.</p>"
         f"<table><thead><tr><th>Phase</th><th>Completion status</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
     )
 
 
-def _identity_section(inputs: Mapping[str, Any], metadata: Mapping[str, Any]) -> str:
-    """Render input and effective-configuration identities."""
+def _identity_section(
+    inputs: Mapping[str, Any], metadata: Mapping[str, Any],
+    run: Mapping[str, Any],
+) -> str:
+    """Identify the compared inputs and configuration before the outcome."""
+    title = (
+        f"<dt>Configuration title</dt><dd>{_escape(metadata['title'])}</dd>"
+        if metadata.get("title") else ""
+    )
     return (
         '<section aria-labelledby="identities"><h2 id="identities">Compared inputs '
-        "and configuration</h2><dl>"
+        'and configuration</h2><dl class="identities">'
         f"<dt>Reference</dt><dd>{_escape(inputs['reference']['basename'])}</dd>"
         f"<dt>Query</dt><dd>{_escape(inputs['query']['basename'])}</dd>"
-        f"<dt>Configuration identifier</dt><dd>{_escape(metadata['id'])}</dd>"
+        + title
+        + "<dt>Configuration identifier</dt>"
+        f"<dd>{_escape(metadata['id'])}</dd>"
         f"<dt>Configuration revision</dt><dd>{_escape(metadata['revision'])}</dd>"
+        f"<dt>Completed at (UTC)</dt><dd>{_escape(run['completed_at'])}</dd>"
         "</dl></section>"
     )
 
@@ -439,7 +476,9 @@ def _automatic_mode_notice() -> str:
         "using strict parser-native equality without domain-specific translation. "
         "Review the exclusions before interpreting findings. Use a custom "
         "configuration when record identity, field correspondence, or value "
-        "equivalence requires domain knowledge.</p></aside>"
+        'equivalence requires domain knowledge. '
+        '<a href="#scope-exclusions">View scope and exclusions</a>.'
+        "</p></aside>"
     )
 
 
@@ -449,24 +488,29 @@ def _counts_section(summary: Mapping[str, Any]) -> str:
     values = summary["values"]
     findings = summary["findings"]
     return (
-        '<section aria-labelledby="counts"><h2 id="counts">Measured counts</h2>'
-        "<h3>Records</h3>"
+        '<section aria-labelledby="counts">'
+        '<h3 id="counts">Measured counts</h3>'
+        "<h4>Records</h4>"
         + _definition_list(records)
-        + "<h3>Values</h3>"
+        + "<h4>Values</h4>"
         + _definition_list(values)
-        + "<h3>Findings</h3><p>Total findings: "
+        + "<h4>Findings</h4><p>Total findings: "
         + f"<strong>{findings['total']}</strong></p>"
-        + "<h3>Findings by classification</h3>"
+        + "<h4>Findings by classification</h4>"
         + _definition_list(findings["by_classification"])
-        + "<h3>Findings by code</h3>"
+        + "<h4>Findings by code</h4>"
         + _definition_list(findings["by_code"])
-        + "<h3>Findings by review priority</h3>"
+        + "<h4>Findings by review priority</h4>"
         + _definition_list(findings["by_review_priority"])
         + "</section>"
     )
 
 
-def _findings_section(findings: list[Mapping[str, Any]]) -> str:
+def _findings_section(
+    findings: list[Mapping[str, Any]],
+    key_fields: Mapping[str, Any],
+    configuration: Mapping[str, Any],
+) -> str:
     """Render findings classification-first with phase as traceability."""
     groups = []
     labels = (
@@ -479,10 +523,21 @@ def _findings_section(findings: list[Mapping[str, Any]]) -> str:
             for finding in findings
             if finding["classification"] == classification
         ]
-        items = "".join(_finding_card(finding) for finding in selected)
+        items = "".join(
+            _finding_card(finding, key_fields, configuration)
+            for finding in selected
+        )
         if not items:
             items = "<p>None reported.</p>"
-        groups.append(f"<h3>{label}</h3>{items}")
+        target = (
+            "comparison-differences"
+            if classification == "comparison_difference"
+            else "assessment-issues"
+        )
+        groups.append(
+            f'<section aria-labelledby="{target}"><h3 id="{target}">'
+            f"{label} ({len(selected)})</h3>{items}</section>"
+        )
     return (
         '<section aria-labelledby="findings"><h2 id="findings">Finding details</h2>'
         + "".join(groups)
@@ -490,8 +545,11 @@ def _findings_section(findings: list[Mapping[str, Any]]) -> str:
     )
 
 
-def _finding_card(finding: Mapping[str, Any]) -> str:
-    """Render one finding without adding facts outside its JSON object."""
+def _finding_card(
+    finding: Mapping[str, Any], key_fields: Mapping[str, Any],
+    configuration: Mapping[str, Any],
+) -> str:
+    """Show the affected record, field and value evidence before raw detail."""
     priority = finding.get("review_priority", "unassigned")
     structured = {
         name: value
@@ -499,21 +557,177 @@ def _finding_card(finding: Mapping[str, Any]) -> str:
         if name not in {"id", "classification", "message", "phase", "review_priority"}
     }
     evidence = _escape(json.dumps(structured, ensure_ascii=False, indent=2))
+    identity = finding.get("record_identity")
+    if identity is None:
+        context = "<dt>Scope</dt><dd>Dataset-level finding</dd>"
+    else:
+        context = (
+            "<dt>Record</dt><dd><code>"
+            + _escape(_key_text(
+                key_fields["canonical"], identity["canonical"]
+            ))
+            + "</code></dd>"
+        )
+    field = finding.get("field")
+    if field is not None:
+        context += f"<dt>Field</dt><dd><code>{_escape(field)}</code></dd>"
+    context += (
+        "<dt>Affected side</dt>"
+        f"<dd>{_escape(finding['affected_side'].title())}</dd>"
+    )
+    if "values" in finding:
+        definition = configuration["fields"]["definitions"][field]
+        comparison = _value_table(finding["values"], definition)
+    elif identity is not None:
+        comparison = _record_presence(identity, key_fields)
+    else:
+        comparison = ""
     return (
-        '<article class="finding">'
-        f"<h4>{_escape(finding['id'])}: {_escape(finding['message'])}</h4>"
+        f'<article class="finding" id="{_escape(finding["id"])}">'
+        f"<h4>{_escape(finding['id'])} · "
+        f"{_escape(finding['code'].replace('_', ' ').capitalize())}</h4>"
+        f"<p>{_escape(finding['message'])}</p>"
+        f'<dl class="finding-context">{context}</dl>'
         f'<p><span class="label">Phase: {_escape(finding["phase"])}</span> '
         f'<span class="label priority-{_escape(priority)}">Priority: '
         f"{_escape(priority)}</span></p>"
-        "<details><summary>Structured evidence</summary>"
+        + comparison
+        + "<details><summary>Source locations and structured evidence"
+        "</summary>"
         f"<pre>{evidence}</pre></details>"
         "</article>"
     )
 
 
+def _key_text(names: list[str], values: list[str]) -> str:
+    """Keep composite components and empty key strings unambiguous."""
+    return "; ".join(
+        f"{name} = {json.dumps(value, ensure_ascii=False)}"
+        for name, value in zip(names, values)
+    )
+
+
+def _record_presence(
+    identity: Mapping[str, Any], key_fields: Mapping[str, Any]
+) -> str:
+    """Present missing/extra records without inventing field-value evidence."""
+    entries = {}
+    for side in ("reference", "query"):
+        entries[side] = (
+            "Record absent" if identity[side] is None
+            else _key_text(key_fields[side], identity[side])
+        )
+    return _definition_list(entries)
+
+
+def _value_table(
+    values: Mapping[str, Any], definition: Mapping[str, Any]
+) -> str:
+    """Present recorded evidence without inferring omitted values."""
+    rows = []
+    for side in ("reference", "query"):
+        evidence = values[side]
+        if evidence["state"] == "absent":
+            source = canonical = (
+                '<span class="value-state">Absent field</span>'
+            )
+        else:
+            source = (
+                _source_value(evidence["source"])
+                if "source" in evidence else "Present; value not recorded"
+            )
+            if "canonical" in evidence:
+                canonical = _canonical_value(evidence["canonical"])
+            elif "logical_type" not in definition:
+                canonical = "Not applicable (untyped)"
+            else:
+                canonical = "Not recorded"
+        rows.append(
+            f'<tr><th scope="row">{side.title()}</th>'
+            f"<td>{source}</td><td>{canonical}</td></tr>"
+        )
+    return (
+        '<div class="table-scroll"><table class="value-evidence">'
+        "<caption>Value evidence</caption><thead><tr>"
+        '<th scope="col">Side</th><th scope="col">Source value</th>'
+        '<th scope="col">Canonical value</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _source_value(value: Mapping[str, Any]) -> str:
+    """Show original lexical values and native types, including nested data."""
+    if value["category"] == "null":
+        return '<span class="value-state">Null (present)</span>'
+    return (
+        f'<span class="value-type">{_escape(value["category"])}</span>'
+        f'<code class="value">{_escape(_source_text(value))}</code>'
+    )
+
+
+def _source_text(value: Mapping[str, Any]) -> str:
+    """Render nested native values without converting numeric lexical text."""
+    category = value["category"]
+    if category == "null":
+        return "null"
+    content = value["value"]
+    if category == "array":
+        return "[" + ", ".join(_source_text(item) for item in content) + "]"
+    if category == "object":
+        return "{" + ", ".join(
+            json.dumps(name, ensure_ascii=False) + ": "
+            + _source_text(content[name])
+            for name in sorted(content)
+        ) + "}"
+    return _scalar_text(content, category)
+
+
+def _scalar_text(value: Any, logical_type: str) -> str:
+    """Distinguish empty strings, string-like tokens, booleans and null."""
+    if value is None or logical_type in {"string", "boolean"}:
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _canonical_value(value: Mapping[str, Any]) -> str:
+    """Show canonical type and content while preserving collection order."""
+    logical_type = value["logical_type"]
+    content = value["value"]
+    if content is None:
+        rendered = "Null (present)"
+    elif "element_type" in value:
+        rendered = "[" + ", ".join(
+            _scalar_text(item, value["element_type"]) for item in content
+        ) + "]"
+        logical_type += f" of {value['element_type']}"
+    else:
+        rendered = _scalar_text(content, logical_type)
+    return (
+        f'<span class="value-type">{_escape(logical_type)}</span>'
+        f'<code class="value">{_escape(rendered)}</code>'
+    )
+
+
+def _coverage_summary(summary: Mapping[str, Any]) -> str:
+    """Put the assessed volume and incomplete work beside the outcome."""
+    records, values = summary["records"], summary["values"]
+    return (
+        '<div class="coverage-grid"><div><h3>Records</h3>'
+        f"<p>Reference: <strong>{records['reference']}</strong> · "
+        f"Query: <strong>{records['query']}</strong> · "
+        f"Matched pairs: <strong>{records['matched']}</strong></p></div>"
+        "<div><h3>Value comparisons</h3>"
+        f"<p>Matched: <strong>{values['matched']}</strong> · "
+        f"Mismatched: <strong>{values['mismatched']}</strong> · "
+        f"Not assessable: <strong>{values['not_assessable']}</strong></p>"
+        '<p class="explanation">Counts cover in-scope non-key fields in '
+        "matched record pairs.</p></div></div>"
+    )
+
+
 def _limitations_section(
     exclusions: list[Mapping[str, Any]],
-    summary: Mapping[str, Any],
+    configuration: Mapping[str, Any],
 ) -> str:
     """Render excluded and not-assessable content explicitly."""
     exclusion_items = "".join(
@@ -523,13 +737,14 @@ def _limitations_section(
     )
     if not exclusion_items:
         exclusion_items = "<li>No field exclusions were reported.</li>"
-    not_assessable = summary["values"]["not_assessable"]
+    fields = configuration["fields"]["in_scope"]
+    scope = ", ".join(f"<code>{_escape(name)}</code>" for name in fields)
     return (
-        '<section aria-labelledby="limitations"><h2 id="limitations">Limitations, '
-        "exclusions, and unassessed content</h2>"
-        f"<p>Not-assessable value opportunities: <strong>{not_assessable}</strong>. "
-        "Related assessment-issue findings explain failed prerequisites.</p>"
-        f"<ul>{exclusion_items}</ul></section>"
+        '<details id="scope-exclusions"><summary>'
+        f"Scope: {len(fields)} selected fields (including keys) · "
+        f"Exclusions: {len(exclusions)}</summary>"
+        f"<p>Fields in scope: {scope}.</p>"
+        f"<ul>{exclusion_items}</ul></details>"
     )
 
 
@@ -566,7 +781,8 @@ def _provenance_section(
     config_json = _escape(json.dumps(configuration, ensure_ascii=False, indent=2))
     return (
         '<section aria-labelledby="provenance"><h2 id="provenance">Provenance and '
-        "reproduction</h2><dl>"
+        "reproduction</h2><details><summary>Software, schemas, input digests, "
+        "and configuration</summary><dl>"
         f"<dt>Run identifier</dt><dd>{_escape(run['id'])}</dd>"
         f"<dt>Completed at</dt><dd>{_escape(run['completed_at'])}</dd>"
         f"<dt>Software</dt><dd>{_escape(software['name'])} "
@@ -586,7 +802,7 @@ def _provenance_section(
         "<th>Basename</th><th>Format</th><th>SHA-256</th></tr></thead>"
         f"<tbody>{input_rows}"
         "</tbody></table><details><summary>Effective comparison configuration</summary>"
-        f"<pre>{config_json}</pre></details></section>"
+        f"<pre>{config_json}</pre></details></details></section>"
     )
 
 
@@ -616,54 +832,123 @@ def _escape(value: object) -> str:
 
 
 _STYLES = """
-:root { color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.5; }
-body { color: #17202a; background: #fff; margin: 0; }
-.page-header, main { max-width: 72rem; margin: 0 auto; padding: 1.25rem; }
-.page-header { border-bottom: .35rem solid #244b6b; }
-.warning, .notice { border: .18rem solid #8a4b08; padding: 1rem; background: #fff4df; }
-section, aside { margin-block: 2rem; }
-.headline-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 1rem;
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #17202a;
+  background: #f3f5f7;
 }
-.metric { border: .15rem solid #59636e; padding: 1rem; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.page-header, main { max-width: 76rem; margin: 0 auto; padding: 1.25rem 2rem; }
+.page-header { border-top: .35rem solid #244b6b; background: #fff; }
+h1 { font-size: 1.65rem; margin: 0 0 .75rem; }
+h2 { font-size: 1.3rem; margin: 0 0 .75rem; }
+h3 { font-size: 1.1rem; }
+h4 { font-size: 1rem; }
+p { margin: .5rem 0; }
+a { color: #174e80; text-underline-offset: .15em; }
+a:hover { text-decoration-thickness: .15em; }
+a:focus-visible, summary:focus-visible {
+  outline: .2rem solid #174e80;
+  outline-offset: .2rem;
+}
+[id] { scroll-margin-top: 1rem; }
+nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; padding: .5rem 0; }
+section { margin-block: 1.5rem; }
+.page-header section { margin-block: .5rem; }
+#identities h2 { font-size: 1rem; color: #465563; }
+dl { display: grid; grid-template-columns: minmax(8rem, 1fr) 3fr; gap: .3rem 1rem; }
+dt { font-weight: 650; }
+dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.identities { grid-template-columns: max-content 1fr max-content 1fr; font-size: .9rem; }
+.warning, .notice {
+  border-left: .25rem solid #8a4b08;
+  padding: .6rem .85rem;
+  background: #fff4df;
+  font-size: .9rem;
+}
+.headline-grid, .coverage-grid { display: grid; gap: 1rem; }
+.headline-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.metric {
+  border: 1px solid #b9c5d0;
+  border-top: .25rem solid #244b6b;
+  border-radius: .35rem;
+  padding: .75rem 1rem;
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+}
+.metric:hover { background: #eaf0f6; }
 .metric span, .metric strong { display: block; }
-.metric strong { font-size: 1.6rem; }
-table { border-collapse: collapse; width: 100%; }
-th, td {
-  border: 1px solid #7b8792;
-  padding: .5rem;
-  text-align: left;
-  vertical-align: top;
-}
-dl { display: grid; grid-template-columns: minmax(12rem, 1fr) 3fr; gap: .3rem 1rem; }
-dt { font-weight: 700; }
+.metric strong { font-size: 1.8rem; }
+.metric-incomplete { border-top-color: #8a4b08; }
+.phase-statuses { display: flex; flex-wrap: wrap; gap: .4rem; font-size: .9rem; }
+.explanation { color: #465563; font-size: .9rem; }
+.coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.coverage-grid h3 { margin: .25rem 0; }
+#coverage { border: 1px solid #c7d0d9; padding: 1rem; background: #fff; }
+#coverage aside { margin: .75rem 0; }
+details { margin-top: .75rem; }
+summary { cursor: pointer; color: #174e80; font-weight: 600; padding: .4rem 0; }
+details[open] > summary { margin-bottom: .5rem; }
 .counts { grid-template-columns: repeat(2, minmax(8rem, max-content)); }
 .finding {
-  border-left: .35rem solid #59636e;
-  padding: .25rem 1rem 1rem;
+  border: 1px solid #c7d0d9;
+  border-left: .3rem solid #244b6b;
+  border-radius: .25rem;
+  padding: 1rem;
   margin-block: 1rem;
-  background: #f5f7f8;
+  background: #fff;
 }
+.finding h4 { margin: 0; }
+.finding-context { grid-template-columns: max-content 1fr; margin-block: .75rem; }
 .label {
   display: inline-block;
-  border: 1px solid #59636e;
+  border: 1px solid #667685;
   border-radius: .25rem;
-  padding: .15rem .4rem;
-  margin: .15rem;
+  padding: .1rem .4rem;
+  margin: .1rem .4rem .1rem 0;
+  font-size: .85rem;
 }
 .priority-high::before { content: "▲ "; }
 .priority-normal::before { content: "● "; }
 .priority-low::before { content: "▼ "; }
 .priority-unassigned::before { content: "— "; }
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: #eef1f3;
-  padding: 1rem;
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: #fff; }
+caption { text-align: left; font-weight: 650; padding-block: .4rem; }
+th, td {
+  border: 1px solid #c7d0d9;
+  padding: .6rem;
+  text-align: left;
+  vertical-align: top;
 }
+thead { background: #eaf0f6; }
+.value-evidence { table-layout: fixed; }
+.value-evidence th:first-child { width: 18%; }
+.value-type { display: block; color: #465563; font-size: .85rem; }
+.value { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.value-state { font-style: italic; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #eaf0f6; padding: 1rem; }
 code { overflow-wrap: anywhere; }
-.review-space { min-height: 8rem; border: 1px solid #59636e; }
-@media print { .page-header, main { max-width: none; } details { display: block; } }
+.review-space { min-height: 8rem; border: 1px solid #667685; background: #fff; }
+@media (max-width: 44rem) {
+  .page-header, main { padding: 1rem; }
+  .identities { grid-template-columns: minmax(6rem, 1fr) 2fr; }
+  .headline-grid, .coverage-grid { grid-template-columns: 1fr; }
+  .metric strong { font-size: 1.5rem; }
+  .value-evidence { table-layout: auto; }
+}
+@media print {
+  :root { background: #fff; font-size: 10pt; }
+  .page-header, main { max-width: none; padding: .5rem; }
+  nav { display: none; }
+  .finding { break-inside: avoid; }
+  .headline-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  details::details-content { content-visibility: visible; }
+  details > * { display: block; }
+  .table-scroll { overflow: visible; }
+}
 """.strip()

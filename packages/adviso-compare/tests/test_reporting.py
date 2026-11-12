@@ -9,6 +9,7 @@ import stat
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from hashlib import sha256
+from html.parser import HTMLParser
 from pathlib import Path
 from threading import Barrier
 from typing import Any
@@ -19,7 +20,7 @@ import yaml
 
 import adviso_compare.reporting as reporting
 from adviso_compare.alignment import align_records
-from adviso_compare.application import prepare_comparison
+from adviso_compare.application import execute_comparison, prepare_comparison
 from adviso_compare.contract import assess_contract
 from adviso_compare.invocation import ComparisonInvocation
 from adviso_compare.reporting import (
@@ -45,13 +46,19 @@ def _generated_evidence(
     *,
     incomplete: bool = False,
     automatic: bool = False,
+    reference_value: object = 1,
+    query_value: object = 2,
     run_id: UUID = UUID("123e4567-e89b-42d3-a456-426614174000"),
 ) -> ComparisonEvidence:
     """Generate canonical evidence through all three comparison phases."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     if automatic:
-        reference_text = '[{"record_id":"S1","result":1}]'
-        query_text = '[{"record_id":"S1","result":2}]'
+        reference_text = json.dumps([
+            {"record_id": "S1", "result": reference_value}
+        ])
+        query_text = json.dumps([
+            {"record_id": "S1", "result": query_value}
+        ])
         configuration = None
     else:
         reference_text = '[{"reference_id":"S1","expected_value":1}]'
@@ -125,6 +132,45 @@ def _snapshot(directory: Path) -> dict[str, tuple[int, bytes | str | None]]:
     return snapshot
 
 
+class _ReportView(HTMLParser):
+    """Read default-visible text and navigation targets."""
+
+    def __init__(self, report: str) -> None:
+        super().__init__()
+        self.visible: list[str] = []
+        self.findings: list[str] = []
+        self.ids: list[str] = []
+        self.links: list[str] = []
+        self.hidden = 0
+        self.in_finding = False
+        self.feed(report)
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        attributes = dict(attrs)
+        if attributes.get("id"):
+            self.ids.append(attributes["id"])
+        if tag == "a" and attributes.get("href", "").startswith("#"):
+            self.links.append(attributes["href"][1:])
+        if tag in {"details", "style", "script"}:
+            self.hidden += 1
+        if tag == "article":
+            self.in_finding = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"details", "style", "script"}:
+            self.hidden -= 1
+        if tag == "article":
+            self.in_finding = False
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.visible.append(data)
+            if self.in_finding:
+                self.findings.append(data)
+
+
 def test_html_report_is_a_self_contained_view_of_both_json_documents() -> None:
     """The report presents facts from the linked result and configuration."""
     result = minimal_result(status="incomplete")
@@ -162,6 +208,21 @@ def test_html_report_is_a_self_contained_view_of_both_json_documents() -> None:
     assert "clinically validated" not in report
     assert "<script" not in report
     assert "http://" not in report and "https://" not in report
+    view = _ReportView(report)
+    assert len(view.ids) == len(set(view.ids))
+    assert view.links and set(view.links) <= set(view.ids)
+    assert report.index('id="identities"') < report.index('id="headline"')
+    assert report.index('id="coverage"') < report.index('id="findings"')
+    assert report.index('id="findings"') < report.index('id="counts"')
+    visible = " ".join(view.visible)
+    assert result["run"]["completed_at"] in visible
+    assert "Not assessable" in visible
+    finding_text = " ".join(view.findings)
+    assert 'record_id = "sample-1"' in finding_text
+    assert "measured_value" in finding_text
+    assert "Absent field" in finding_text
+    assert "Present; value not recorded" in finding_text
+    assert '"record_identity"' not in finding_text
 
 
 def test_automatic_mode_report_explains_its_limits(tmp_path: Path) -> None:
@@ -176,6 +237,117 @@ def test_automatic_mode_report_explains_its_limits(tmp_path: Path) -> None:
     assert "Automatic strict-exact mode" in report
     assert "identically named fields observed on both sides" in report
     assert "Review the exclusions" in report
+
+
+def test_value_mismatch_is_readable_without_expanding_structured_evidence(
+    tmp_path: Path,
+) -> None:
+    """Show the affected record, field, and both value forms directly."""
+    evidence = _generated_evidence(tmp_path)
+    report = render_html_report(
+        evidence.document(), evidence.configuration_document()
+    ).decode("utf-8")
+    text = " ".join(_ReportView(report).findings)
+
+    assert 'record_id = "S1"' in text
+    assert "measured_value" in text
+    assert "Source value" in text and "Canonical value" in text
+    assert "decimal" in text and "1" in text and "2" in text
+    assert "Value mismatch" in text
+
+
+@pytest.mark.parametrize(
+    ("reference", "query", "expected"),
+    [
+        (None, "", ["Null (present)", '""', "string"]),
+        (1, "1", ["integer", "string", '"1"']),
+        (True, False, ["boolean", "true", "false"]),
+        ([1, None], {"x": [False, "<script>"]},
+         ["array", "object", "[1, null]", '<script>']),
+    ],
+)
+def test_untyped_finding_values_preserve_types_and_nested_content(
+    tmp_path: Path, reference: object, query: object, expected: list[str]
+) -> None:
+    """Distinguish null, text, booleans and nested structures."""
+    evidence = _generated_evidence(
+        tmp_path, automatic=True,
+        reference_value=reference, query_value=query,
+    )
+    report = render_html_report(
+        evidence.document(), evidence.configuration_document()
+    ).decode("utf-8")
+    text = " ".join(_ReportView(report).findings)
+
+    for value in expected:
+        assert value in text
+    assert "Not applicable (untyped)" in text
+    assert "<script" not in report
+
+
+def test_empty_report_retains_navigation_and_empty_finding_groups() -> None:
+    """A zero-finding run still presents coverage and empty groups."""
+    report = render_html_report(
+        minimal_result(), minimal_configuration()
+    ).decode("utf-8")
+    view = _ReportView(report)
+
+    assert set(view.links) <= set(view.ids)
+    assert not view.findings
+    assert "None reported." in " ".join(view.visible)
+    assert "No field exclusions were reported." in report
+
+
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        ("missing-record", ["Missing record", "Record absent"]),
+        ("dataset-field", ["Dataset-level finding", "measured_value"]),
+        ("collection", ["list of string", '["WT", "MUT"]']),
+        ("typed-null", ["Null policy violation", "Null (present)", "decimal"]),
+    ],
+)
+def test_finding_forms_show_only_the_available_record_and_value_evidence(
+    tmp_path: Path, case: str, expected: list[str]
+) -> None:
+    """Render record, dataset, collection and null findings directly."""
+    configuration = minimal_configuration()
+    reference_text = '[{"reference_id":"S1","expected_value":1}]'
+    query_text = '[{"query_id":"S1","observed_value":null}]'
+    suffix = "json"
+    if case == "missing-record":
+        query_text = "[]"
+    elif case == "dataset-field":
+        reference_text = "reference_id,expected_value\n"
+        query_text = "query_id\n"
+        suffix = "csv"
+    elif case == "collection":
+        field = configuration["fields"]["definitions"]["measured_value"]
+        field["logical_type"] = {
+            "collection_type": "list", "element_type": "string",
+            "element_comparator": {"name": "typed_exact"},
+        }
+        field["comparator"] = {"name": "list_exact"}
+        reference_text = '[{"reference_id":"S1","expected_value":["WT"]}]'
+        query_text = '[{"query_id":"S1","observed_value":["WT","MUT"]}]'
+    reference = tmp_path / f"reference.{suffix}"
+    query = tmp_path / f"query.{suffix}"
+    reference.write_text(reference_text, encoding="utf-8")
+    query.write_text(query_text, encoding="utf-8")
+    rules = tmp_path / "configuration.yaml"
+    rules.write_text(yaml.safe_dump(configuration), encoding="utf-8")
+    outcome = execute_comparison(ComparisonInvocation(
+        reference=reference, query=query, configuration=rules,
+        output=tmp_path / "evidence",
+    ))
+    report = (outcome.output / "comparison-report.html").read_text("utf-8")
+    text = " ".join(_ReportView(report).findings)
+
+    for value in expected:
+        assert value in text
+    if case == "dataset-field":
+        assert "Record absent" not in text
+        assert "Source value" not in text
 
 
 @pytest.mark.parametrize("status", ["complete", "incomplete"])
