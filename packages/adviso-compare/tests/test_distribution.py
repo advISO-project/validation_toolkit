@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import site
 import subprocess
 import sys
 import tarfile
@@ -12,6 +11,8 @@ import venv
 import zipfile
 from email.parser import BytesParser
 from pathlib import Path
+
+import pytest
 
 from tests.support.documents import minimal_configuration
 from tests.support.evidence import assert_run_package
@@ -63,12 +64,13 @@ def _installed_executable(environment: Path) -> Path:
     return environment / scripts / executable
 
 
-def test_distributions_and_installed_executable_cover_the_product_path(
-    tmp_path: Path,
-) -> None:
-    """Built artefacts carry resources and support installed command execution."""
+@pytest.fixture(scope="module")
+def built_distributions(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> tuple[Path, Path]:
+    """Build both archives once, retaining them with the test-run evidence."""
     project_root = Path(__file__).resolve().parents[1]
-    output = tmp_path / "dist"
+    output = tmp_path_factory.getbasetemp() / "distributions"
     subprocess.run(
         [
             sys.executable,
@@ -83,9 +85,24 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         capture_output=True,
         text=True,
     )
+    return next(output.glob("*.whl")), next(output.glob("*.tar.gz"))
 
-    wheel = next(output.glob("*.whl"))
-    source_distribution = next(output.glob("*.tar.gz"))
+
+@pytest.mark.parametrize("archive_format", ["wheel", "sdist"])
+def test_distributions_and_installed_executable_cover_the_product_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    built_distributions: tuple[Path, Path],
+    archive_format: str,
+) -> None:
+    """Clean installations carry resources and run the complete product path."""
+    project_root = Path(__file__).resolve().parents[1]
+    wheel, source_distribution = built_distributions
+    # Commands run outside the checkout without borrowed development packages.
+    monkeypatch.chdir(tmp_path)
+    runtime_environment = os.environ.copy()
+    runtime_environment.pop("PYTHONPATH", None)
+    runtime_environment.pop("PYTHONHOME", None)
 
     with zipfile.ZipFile(wheel) as distribution:
         wheel_members = set(distribution.namelist())
@@ -102,6 +119,7 @@ def test_distributions_and_installed_executable_cover_the_product_path(
     sdist_members = _relative_sdist_members(source_distribution)
 
     assert metadata["Name"] == "adviso-compare"
+    assert metadata["Requires-Python"] == ">=3.11"
     assert REQUIRED_PACKAGE_MEMBERS <= wheel_members
     assert all(
         any(member.endswith(path) for member in wheel_members)
@@ -128,12 +146,30 @@ def test_distributions_and_installed_executable_cover_the_product_path(
             "-m",
             "pip",
             "install",
-            "--no-deps",
-            str(wheel),
+            "--disable-pip-version-check",
+            str(wheel if archive_format == "wheel" else source_distribution),
         ],
         check=True,
         capture_output=True,
         text=True,
+        env=runtime_environment,
+    )
+    subprocess.run(
+        [str(installed_python), "-m", "pip", "check"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=runtime_environment,
+    )
+    dependencies = subprocess.run(
+        [str(installed_python), "-m", "pip", "list", "--format=freeze"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=runtime_environment,
+    )
+    (wheel.parent / f"{archive_format}-dependencies.txt").write_text(
+        dependencies.stdout, encoding="utf-8"
     )
     resource_check = (
         "import json; "
@@ -149,6 +185,7 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         check=True,
         capture_output=True,
         text=True,
+        env=runtime_environment,
     )
     installed_guide = (
         environment / "share" / "doc" / "adviso-compare" / "USER_GUIDE.md"
@@ -162,12 +199,11 @@ def test_distributions_and_installed_executable_cover_the_product_path(
     ).read_bytes()
 
     executable = _installed_executable(environment)
-    runtime_environment = os.environ.copy()
-    runtime_environment["PYTHONPATH"] = os.pathsep.join(site.getsitepackages())
     installed_location_check = (
-        "from pathlib import Path; import adviso_compare; "
-        "assert Path(adviso_compare.__file__).is_relative_to("
-        f"Path({str(environment)!r}))"
+        "from pathlib import Path; import adviso_compare, jsonschema, yaml; "
+        "assert all(Path(module.__file__).is_relative_to("
+        f"Path({str(environment)!r})) "
+        "for module in (adviso_compare, jsonschema, yaml))"
     )
     subprocess.run(
         [str(installed_python), "-c", installed_location_check],
@@ -176,6 +212,20 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         text=True,
         env=runtime_environment,
     )
+    version = subprocess.run(
+        [str(executable), "--version"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=runtime_environment,
+    )
+    assert version.stdout.strip() == f"adviso-compare {metadata['Version']}"
+    for member in REQUIRED_DOCUMENTATION_MEMBERS:
+        relative = member.removeprefix("share/doc/adviso-compare/")
+        assert (environment / member).read_bytes() == (
+            project_root / "docs" / relative
+        ).read_bytes()
+
     automatic = tmp_path / "automatic"
     automatic.mkdir()
     automatic_reference = automatic / "reference.json"
@@ -313,32 +363,17 @@ def test_distributions_and_installed_executable_cover_the_product_path(
     )
     assert not failed_output.exists()
 
-    source_environment = tmp_path / "installed-from-source"
-    venv.EnvBuilder(with_pip=True).create(source_environment)
-    source_python = _installed_python(source_environment)
-    subprocess.run(
-        [
-            str(source_python),
-            "-m",
-            "pip",
-            "install",
-            "--no-build-isolation",
-            "--no-deps",
-            str(source_distribution),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=runtime_environment,
-    )
-    source_location_check = (
-        "from pathlib import Path; import adviso_compare; "
-        "assert Path(adviso_compare.__file__).is_relative_to("
-        f"Path({str(source_environment)!r}))"
-    )
-    subprocess.run(
-        [str(source_python), "-c", source_location_check],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    for package in (automatic_package, repeated_package, custom_package):
+        subprocess.run(
+            [
+                str(installed_python),
+                "-c",
+                "from pathlib import Path; "
+                "from adviso_compare.reporting import validate_evidence_package; "
+                f"validate_evidence_package(Path({str(package)!r}))",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=runtime_environment,
+        )

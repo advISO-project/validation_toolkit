@@ -1,0 +1,90 @@
+name: adviso-compare CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: adviso-compare / ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15']
+    defaults:
+      run:
+        shell: bash
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - name: Check out source and version history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install package and development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install './packages/adviso-compare[dev]'
+          python -m pip check
+
+      - name: Record verification environment
+        run: |
+          mkdir -p ci-output
+          python --version > ci-output/python.txt
+          python -c "import platform; print(platform.platform()); print(platform.machine())" > ci-output/platform.txt
+          git rev-parse HEAD > ci-output/commit.txt
+          python -m pip list --format=freeze > ci-output/test-dependencies.txt
+
+      - name: Run suite, builds, and clean installation scenarios
+        run: >-
+          python -m pytest packages/adviso-compare/tests -q
+          --junitxml=ci-output/tests.xml
+          --basetemp=ci-output/tmp
+
+      - name: Retain test reports, distributions, and dependency records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: adviso-compare-${{ matrix.os }}-python-${{ matrix.python }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ci-output/*.txt
+            ci-output/tests.xml
+            ci-output/tmp/distributions/*
+
+  ci:
+    name: adviso-compare CI passed
+    needs: test
+    if: always()
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Require every matrix job to succeed
+        env:
+          MATRIX_RESULT: ${{ needs.test.result }}
+        run: test "$MATRIX_RESULT" = success

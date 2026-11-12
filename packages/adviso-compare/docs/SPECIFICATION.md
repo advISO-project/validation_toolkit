@@ -1556,6 +1556,12 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 
 ## 12. Deployment, accessibility, and reliability
 
+The supported runtime matrix is CPython 3.11, 3.12, 3.13, 3.14, and 3.15 on
+Linux, macOS, and Windows, using the latest available patch release of each
+Python minor version. Python 3.11 is the installation minimum. Support for a
+new Python minor version requires an explicit matrix update and verification;
+it is not implied by the open-ended installation minimum.
+
 - **REQ-DEP-001.** Once the software and its dependencies are installed, all core comparison functionality MUST operate fully offline;
 - **REQ-DEP-002.** During operation, the tool MUST NOT require a hosted service, account, licence server, telemetry connection, or any other network service;
 - **REQ-DEP-003.** Version 1 does not require an offline installation bundle. Installation MAY use a network connection to obtain the `adviso-compare` distribution and its declared dependencies from package indexes. This allowance applies only to installation and MUST NOT weaken the offline-operation requirements in `REQ-SEC-002`, `REQ-SEC-003`, `REQ-DEP-001`, or `REQ-DEP-002`;

@@ -354,3 +354,51 @@ review, and immutable release evidence remain release verification work. No
 formatter, linter, type checker, or Markdown linter is configured, and none is
 claimed to have run. Local completion of this change does not establish release
 readiness across the supported matrix.
+
+## CI configuration and Python support verification — 2026-11-12
+
+The supported runtime matrix is now CPython 3.11–3.15 on Linux, macOS, and
+Windows. Package metadata sets Python 3.11 as the installation minimum. The
+specification, README, user guide, architecture guide, and contribution guide
+reflect this policy. Earlier interpreter and CI statements in this report
+record the environments and configuration at their respective verification dates.
+
+The repository now contains `.github/workflows/adviso-compare-ci.yml`. It
+configures all 15 Python/OS combinations, runs on pull requests into `main`,
+pushes to `main`, a weekly schedule, and manual dispatch, and retains reports,
+built archives, and dependency records for 30 days. The final
+`adviso-compare CI passed` job requires every matrix job to succeed. No release
+publication, formatter, linter, or type checker was added to the CI checks.
+
+The existing distribution test is parameterized over wheel and source archive.
+Each archive is installed with its declared dependencies in a fresh environment,
+with source builds isolated, outside the checkout and without development
+`PYTHONPATH`. Both cases exercise version reporting, installed resources,
+automatic/custom comparisons, repeated publication, expected errors, and saved
+package validation. Dependency consistency and installed module locations are
+checked. The built metadata test was first confirmed to fail against the former
+minimum, then passed after updating package metadata.
+
+Local verification used CPython 3.12.16 on macOS ARM64:
+
+```console
+python -m pytest packages/adviso-compare/tests -q --junitxml=ci-output/tests.xml --basetemp=ci-output/tmp
+```
+
+Result: **397 passed in 35.33s**, with `ci-output/` created before invoking pytest.
+The focused clean installation run also passed both archive cases. These checks
+used network access to obtain declared dependencies. The development editable
+installation was refreshed for the updated metadata and bundled guide.
+
+Additional checks passed: temporary checksum-verified `actionlint` 1.7.12
+validation (without optional shellcheck/pyflakes integrations), YAML trigger and
+15-job matrix checks, action commit-pin checks, package metadata inspection,
+`pip check`, Python compilation, local documentation links/anchors and code
+fences, and `git diff --check`. No schema content or comparison behaviour changed.
+
+This is local verification of the implementation, not evidence that the hosted
+matrix passed. GitHub execution of all supported environments, branch-protection
+configuration, and release review remain outstanding. Repository settings must
+require the named final CI check; committing the workflow alone does not enforce
+merging policy. Another person's approval is not a required merge check under
+the chosen policy. These records do not attest an immutable release artefact.

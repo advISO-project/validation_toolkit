@@ -9,8 +9,10 @@ development setup.
 
 ## Environment and editable installation
 
-Use Python 3.10 or later. Activate an existing development environment, or
-create one with:
+Use a supported CPython version: 3.11, 3.12, 3.13, 3.14, or 3.15, with its
+latest available patch release. Python 3.11 is the installation minimum;
+future Python minor versions need verification before joining the support
+matrix. Activate an existing development environment, or create one with:
 
 ```console
 python -m venv .venv
@@ -56,7 +58,9 @@ python -m compileall -q packages/adviso-compare/src packages/adviso-compare/test
 git diff --check
 ```
 
-No formatter, linter, type checker, or CI workflow is currently configured.
+No formatter, linter, or type checker is currently configured. The
+[CI workflow](../../.github/workflows/adviso-compare-ci.yml) runs the existing
+test, schema, example, build, and installed-product checks.
 
 ## Build distributions
 
@@ -66,11 +70,17 @@ With the development dependencies installed, build a wheel and source archive:
 python -m build --no-isolation --outdir packages/adviso-compare/dist packages/adviso-compare
 ```
 
-The output directory is generated content. The distribution test builds into a
-temporary directory and verifies installed resources and the wheel's command.
-It supplies dependencies from the development environment's site-packages;
-it does not verify clean dependency resolution. Source-archive installation
-is checked for an importable package, without repeating the full CLI scenarios.
+The output directory is generated content. The distribution test builds both
+archives once, then installs each into a separate fresh virtual environment.
+It resolves declared dependencies without borrowing development site-packages;
+source-archive installation also uses isolated build dependencies. These tests
+may need network access to a package index.
+
+Both installations run outside the checkout, check dependency consistency and
+installed resources, and exercise the same automatic, custom, repeated-run, and
+error scenarios. Evidence is also validated using each installed package. The
+archives and resolved dependency records remain in the pytest base temporary
+directory for the run.
 
 ## Documentation and examples
 
@@ -92,9 +102,67 @@ the initial delivery sequence, and `VERIFICATION_REPORT.md` contains dated
 verification records. Consult their dates and scope when assessing evidence
 for the current source revision.
 
-Release verification still includes the supported Python/OS matrix, clean
-dependency installation, CI enforcement, and independent review. Local test
-success alone does not establish those checks.
+Release verification still requires successful runs across the supported
+Python/OS matrix, CI enforcement, and applicable release review. A configured
+workflow or passing local suite alone does not establish those checks.
+
+## Continuous integration
+
+The workflow runs on pull requests targeting `main` (including updates to those
+pull requests), pushes to `main`, Tuesdays at 04:23 UTC, and manual requests.
+Pushes to development branches without an open pull request do not trigger it.
+It does not publish releases.
+
+Each run tests all 15 combinations of CPython 3.11–3.15 and these standard
+GitHub-hosted runners:
+
+| Runner | Architecture |
+| --- | --- |
+| `ubuntu-24.04` | x86-64 |
+| `macos-15` | ARM64 |
+| `windows-2025` | x86-64 |
+
+These identify the environments exercised by CI, rather than every supported
+OS release or architecture. Runner images and Python patch releases can change;
+each job records the platform, architecture, Python version, checked-out commit,
+and resolved test dependencies. The distribution tests also record dependencies
+for each clean installation. Every job installs the package normally, rather
+than relying on an editable source installation, before running the full suite.
+The scheduled run resolves dependencies afresh, just as pull-request runs do.
+
+The workflow retains JUnit test results, built wheel/source archives, and
+version/dependency records for 30 days, including available reports on failure.
+It does not upload the temporary comparison datasets or evidence packages.
+Development CI artefacts are temporary verification records; release evidence
+needs separate retention. Superseded pull-request runs are cancelled. Other
+matrix jobs continue after a failure to show the full set of outcomes.
+
+To reproduce the test command locally, use a supported Python environment with
+the development dependencies installed:
+
+```console
+python -c "from pathlib import Path; Path('ci-output').mkdir(exist_ok=True)"
+python -m pytest packages/adviso-compare/tests -q --junitxml=ci-output/tests.xml --basetemp=ci-output/tmp
+```
+
+`ci-output/` is ignored generated content. Pytest clears the selected base
+temporary directory before a run; use this command only with that disposable
+path. The normal test command above lets pytest manage its own temporary path.
+
+### GitHub merge settings
+
+After the workflow has run on GitHub, configure branch protection or a ruleset
+for `main` to require a pull request and the **`adviso-compare CI passed`** status
+check from GitHub Actions. This final job succeeds only when every matrix job
+succeeds. Enable the requirement for the branch to be up to date before merging
+so checks cover the current base branch. Another person's review approval is
+not required by this project's chosen merge policy.
+
+These settings are configured in GitHub, separately from the workflow file;
+committing the workflow does not enable them. Workflow changes themselves are
+part of the proposed change and deserve scrutiny, since a pull request runs the
+workflow from its temporary merged state. Keep action commit pins and runner
+labels current through deliberate updates and rerun CI when changing them.
 
 ## Making a change
 

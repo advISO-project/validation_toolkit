@@ -11,7 +11,7 @@ name = "adviso-compare"
 dynamic = ["version"]
 description = "Translate, compare, and report differences between structured bioinformatics datasets."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Bruhad Dave", email = "bd8@sanger.ac.uk" },
 ]
