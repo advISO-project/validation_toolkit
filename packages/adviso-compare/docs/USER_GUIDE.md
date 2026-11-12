@@ -5,7 +5,7 @@
 - [1. Introduction](#1-introduction)
   - [1.1 Records, fields, and comparison rules](#11-records-fields-and-comparison-rules)
   - [1.2 Findings and run status](#12-findings-and-run-status)
-- [2. Install and check the tool](#2-install-and-check-the-tool)
+- [2. Installation](#2-installation)
   - [2.1 Install with pip](#21-install-with-pip)
   - [2.2 Install with pipx](#22-install-with-pipx)
   - [2.3 Check the installation](#23-check-the-installation)
@@ -18,16 +18,17 @@
 - [5. Custom comparison configurations](#5-custom-comparison-configurations)
   - [5.1 A small custom comparison](#51-a-small-custom-comparison)
   - [5.2 Runnable custom example with transformations](#52-runnable-custom-example-with-transformations)
-  - [5.3 Top-level properties](#53-top-level-properties)
-  - [5.4 Field definitions](#54-field-definitions)
-  - [5.5 Logical types](#55-logical-types)
-  - [5.6 Null policy and typed value descriptions](#56-null-policy-and-typed-value-descriptions)
-  - [5.7 Source normalisation](#57-source-normalisation)
-  - [5.8 Value mapping](#58-value-mapping)
-  - [5.9 Collections written as text](#59-collections-written-as-text)
-  - [5.10 Typed normalisation](#510-typed-normalisation)
-  - [5.11 Comparators](#511-comparators)
-  - [5.12 Processing order](#512-processing-order)
+  - [5.3 Configuration checks and conventions](#53-configuration-checks-and-conventions)
+  - [5.4 Top-level properties](#54-top-level-properties)
+  - [5.5 Field definitions](#55-field-definitions)
+  - [5.6 Logical types](#56-logical-types)
+  - [5.7 Null policy and typed value descriptions](#57-null-policy-and-typed-value-descriptions)
+  - [5.8 Source normalisation](#58-source-normalisation)
+  - [5.9 Value mapping](#59-value-mapping)
+  - [5.10 Collections written as text](#510-collections-written-as-text)
+  - [5.11 Typed normalisation](#511-typed-normalisation)
+  - [5.12 Comparators](#512-comparators)
+  - [5.13 Processing order](#513-processing-order)
 - [6. The evidence package](#6-the-evidence-package)
 - [7. JSON output reference](#7-json-output-reference)
   - [7.1 `comparison-configuration.json`](#71-comparison-configurationjson)
@@ -52,7 +53,7 @@ acceptance decision or establish ISO 15189 compliance.
 ### 1.1 Records, fields, and comparison rules
 
 A dataset contains **records**, such as rows in a CSV file. Each record has
-**fields**, such as a sample identifier, or measurement. The **reference**
+**fields**, such as a sample identifier or a measurement. The **reference**
 is the dataset you compare against; the **query** is the dataset being checked.
 
 A **record key** identifies corresponding records on the two sides. For
@@ -153,7 +154,7 @@ adviso-compare --help
 The full guide is installed with the software under
 `share/doc/adviso-compare/USER_GUIDE.md` in the Python environment.
 For a `pipx` installation, this is the environment managed by `pipx`; `pipx list`
-shows where it keeps application environments. 
+shows where it keeps application environments.
 
 ## 3. Quick start
 
@@ -169,7 +170,13 @@ for you. To try it, omit `--configuration`.
 
 #### 3.1.1 Runnable automatic example
 
-Change to the `examples` directory installed next to this guide, then run:
+Copy the `examples` directory installed next to this guide into a writable
+working directory outside the Python environment. Keep its `automatic` and
+`custom` subdirectories together, then change into the copied `examples`
+directory. The commands below create evidence beside your copies of the inputs,
+leaving the installed files unchanged.
+
+From that copied directory, run:
 
 ```console
 adviso-compare \
@@ -192,7 +199,6 @@ Assessment issues: 0
 Evidence package: automatic-evidence/20261111T143205Z-123e4567-e89b-42d3-a456-426614174000
 ```
 
-Open `comparison-report.html` inside that run directory to review the findings.
 Run the same command again with `--output automatic-evidence` to add another
 run directory while preserving the first. Section 6 shows the resulting layout.
 
@@ -202,8 +208,8 @@ needed, or automatic key selection is ambiguous.
 
 #### 3.1.2 How automatic mode selects fields and keys
 
-The tool first finds field names shared by both datasets. It selects the record
-key as follows:
+`adviso-compare` first finds field names shared by both datasets. It selects
+the record key as follows:
 
 1. If both sides contain `record_id`, that field is used. It must contain a
    unique, non-null string in every record on both sides.
@@ -523,8 +529,10 @@ sample; it is not counted again as a measurement comparison.
 
 ### 5.2 Runnable custom example with transformations
 
-For a richer example, change to the `examples` directory installed next to
-this guide and run:
+For a richer example, use the writable copy of the `examples` directory from
+Section 3.1.1. If you are starting here, copy the installed `examples` directory
+to a working directory outside the Python environment first, then change into
+that copy and run:
 
 ```console
 adviso-compare \
@@ -547,7 +555,7 @@ The evidence package retains the complete effective configuration as
 `comparison-configuration.json`. Local quality arrangements remain the
 authority for approval and retention.
 
-#### Configuration checks and conventions
+### 5.3 Configuration checks and conventions
 
 The file is checked before either dataset is read. YAML aliases, anchors,
 merge keys, explicit tags, duplicate keys, and unsafe
@@ -569,7 +577,7 @@ comparators suit their field. It rejects custom configurations using the
 reserved automatic-mode ID
 `org.adviso.automatic-strict-exact`.
 
-### 5.3 Top-level properties
+### 5.4 Top-level properties
 
 | Property | Required | Meaning |
 | --- | --- | --- |
@@ -599,7 +607,7 @@ as `configured_field_excluded`. A source field not named by any definition on
 its side (reference or query) appears as `undeclared_field_excluded`. Neither kind
 is compared or makes a run incomplete.
 
-### 5.4 Field definitions
+### 5.5 Field definitions
 
 Every entry in `fields.definitions` is an object with a canonical field name as
 key, and has the following properties:
@@ -622,11 +630,11 @@ For each record-key field, the tool requires an entry in `definitions` and
 required and non-nullable on both sides. Key fields may use explicit source
 normalisation or value mapping.
 
-### 5.5 Logical types
+### 5.6 Logical types
 
 For a scalar field, `logical_type` is `string`, `integer`, `decimal`, `boolean`,
-`date`, or `datetime`. Parsing is strict. In particular, CSV and TSV cells start as
-strings and are parsed only because a logical type was declared. Dates use
+`date`, or `datetime`. Parsing is strict. In particular, CSV and TSV cells
+start as strings and are parsed only because a logical type was declared. Dates use
 `YYYY-MM-DD`. Datetimes use RFC 3339 with an explicit timezone.
 
 The tool accepts these source values for each declared type:
@@ -662,24 +670,28 @@ many times each value occurs. Sets and multisets require `typed_exact` elements.
 Lists allow `typed_exact`, or `numeric_tolerance` for integer or decimal
 elements.
 
-### 5.6 Null policy and typed value descriptions
+### 5.7 Null policy and typed value descriptions
 
 `null_policy.allowed` and `null_policy.nulls_equal` are required booleans. If
 null is not allowed, `nulls_equal` must be false. JSON null is always recognised
 as null. A missing field is different from a present field containing null.
 
-Optional `missing_tokens` may contain a non-empty `reference` list, a non-empty
-`query` list, or both. Each item describes a parser-native value to treat as
-null. For example:
+Within a field's `null_policy`, optional `missing_tokens` may contain a
+non-empty `reference` list, a non-empty `query` list, or both. Each item
+describes a parser-native value to treat as null. For example, this fragment
+belongs inside a field definition:
 
 ```yaml
-missing_tokens:
-  reference:
-    - category: "string"
-      value: "NA"
-  query:
-    - category: "string"
-      value: "."
+null_policy:
+  allowed: true
+  nulls_equal: true
+  missing_tokens:
+    reference:
+      - category: "string"
+        value: "NA"
+    query:
+      - category: "string"
+        value: "."
 ```
 
 Each missing token describes a non-null source value using a category and a value.
@@ -688,7 +700,7 @@ integers, and decimals use a textual `value`; booleans use `true` or `false`. An
 actual JSON `null` does not need to be listed because the tool recognises it
 automatically.
 
-### 5.7 Source normalisation
+### 5.8 Source normalisation
 
 `source_normalisation` may have `reference`, `query`, or both. Each present
 side is a non-empty ordered list. Operations affect only parser-native strings
@@ -703,7 +715,7 @@ from that side. Non-strings pass through unchanged.
 Operations run in list order. Case folding does not silently perform Unicode
 normalisation; list both operations when both are needed.
 
-### 5.8 Value mapping
+### 5.9 Value mapping
 
 `value_mapping` may have `reference`, `query`, or both. Each present side is a
 non-empty list of `from` and `to` value descriptions:
@@ -720,7 +732,7 @@ side must match an entry. An unmapped value produces a `mapping_failure`; it is
 not passed through. Many source values may map to the same destination. A
 destination may be null, after which the null policy applies.
 
-A mapping destination may use category: "null" without a value. This converts
+A mapping destination may use `category: "null"` without a `value`. This converts
 the mapped source value to null, after which the field’s `null_policy` is applied.
 Mapping from null is not supported because an actual JSON null is recognised and
 handled before value mapping.
@@ -728,7 +740,7 @@ handled before value mapping.
 Mapping happens after source normalisation and missing-token recognition, and
 before parsing to the logical type.
 
-### 5.9 Collections written as text
+### 5.10 Collections written as text
 
 `collection_representation` may have `reference`, `query`, or both. An omitted
 side defaults to `json_array` with no element processing.
@@ -741,12 +753,12 @@ Each side requires `format`:
   non-empty `delimiter` string.
 
 Optional `element_normalisation` is a non-empty ordered list of the text
-operations in Section 5.7. Optional `element_mapping` is a non-empty closed
+operations in Section 5.8. Optional `element_mapping` is a non-empty closed
 mapping whose `from` and `to` values must both be non-null. These act on each
 element, not the collection as a whole. Collection fields cannot also use the
 field-level `source_normalisation`, `value_mapping`, or `typed_normalisation`.
 
-### 5.10 Typed normalisation
+### 5.11 Typed normalisation
 
 `typed_normalisation` is an optional, non-empty ordered list of operations
 applied to parsed values from both the reference and query. Operations run
@@ -801,7 +813,7 @@ The permitted values are:
 Discarded digits are removed without rounding. For example, millisecond
 truncation changes `.1238` seconds to `.123`, not `.124`.
 
-### 5.11 Comparators
+### 5.12 Comparators
 
 Every comparator is an object with `name`. The following take no parameters:
 
@@ -825,9 +837,19 @@ normalisation operation. `preserved_exact` is the only comparator with no
 `logical_type`, and it cannot be combined with normalisation, mapping,
 collection representation, typed normalisation, or configured missing tokens.
 
-`numeric_tolerance` requires exactly one parameter. With
-`absolute_tolerance`, values match when their absolute difference is no greater
-than the tolerance. With `relative_tolerance`, values match when:
+`numeric_tolerance` requires exactly one entry inside `parameters`. For
+example, this field-level comparator allows an absolute difference of up to
+`0.1`:
+
+```yaml
+comparator:
+  name: "numeric_tolerance"
+  parameters:
+    absolute_tolerance: "0.1"
+```
+
+With `absolute_tolerance`, values match when their absolute difference is no
+greater than the tolerance. Use `relative_tolerance` in its place to match when:
 
 ```text
 absolute difference <= relative tolerance × absolute reference value
@@ -841,7 +863,7 @@ The schema restricts the possible shape of comparators. The tool's further
 checks ensure that a comparator suits the declared logical type and collection
 kind.
 
-### 5.12 Processing order
+### 5.13 Processing order
 
 For a scalar field, processing follows this order:
 
@@ -878,7 +900,8 @@ OUTPUT/
 
 Each run directory contains exactly these three regular evidence files.
 Packages are validated and generated in private staging on the destination
-filesystem before publication. The destination must support exclusive directory rename;
+filesystem before publication. The destination must support exclusive
+directory rename;
 if safe publication is unavailable, the run returns `output.write_failed`
 and preserves existing content.
 
@@ -969,10 +992,10 @@ All are required. Their fields are:
 | `fields.in_scope` | Canonical fields selected for assessment, including the key fields. |
 | `fields.definitions` | Definitions indexed by canonical field name. Each definition associates source names and supplies the field's requiredness, null policy, comparison rule, and any declared type or transformations. |
 
-Sections 5.3–5.12 describe the permitted configuration properties, values,
-constraints, and interactions; the [field-definition reference](#54-field-definitions)
-lists the settings within each `fields.definitions` entry. The same structure applies to a parsed custom
-YAML configuration and to this saved JSON document. Metadata does not change
+Sections 5.4–5.13 describe the permitted configuration properties, values,
+constraints, and interactions; the [field-definition reference](#55-field-definitions)
+lists the settings within each `fields.definitions` entry. The same structure
+applies to a parsed custom YAML configuration and to this saved JSON document. Metadata does not change
 the comparison rules.
 
 The saved configuration preserves explicit declarations and list order.
@@ -1179,8 +1202,27 @@ Validation has three layers:
 
 A results-schema check alone is not full package validation. A valid digest
 also does not establish that the configuration or comparison is semantically
-valid. To inspect a saved package with the installed software, change into the
-published run directory and run this Python code:
+valid. To inspect a saved package, use the Python interpreter from the
+environment where `adviso-compare` is installed:
+
+- For installation with `pip`, activate the environment used in Section 2.1.
+  Its `python` command can import the installed package.
+- For the `pipx` installation in Section 2.2, run `pipx list` and find the
+  directory shown after `venvs are in`. The tool's environment is the
+  `adviso-compare` directory within it. The interpreter paths are:
+
+  | Platform | Python interpreter |
+  | --- | --- |
+  | macOS or Linux | `<venvs directory>/adviso-compare/bin/python` |
+  | Windows | `<venvs directory>\adviso-compare\Scripts\python.exe` |
+
+  Replace `<venvs directory>` with the reported path. When starting an
+  interpreter whose path contains spaces, quote its full path; in PowerShell,
+  precede a quoted executable path with `&`.
+
+Change into the published run directory, start that Python interpreter, and
+paste the following code at its prompt. `Path(".")` selects the current run
+directory:
 
 ```python
 from pathlib import Path
@@ -1216,8 +1258,8 @@ validation procedure is:
 Both structural validators use JSON Schema Draft 2020-12 format assertion.
 If you implement these checks independently, enable equivalent format checking
 (for example, `Draft202012Validator(schema, format_checker=FormatChecker())`
-with Python's `jsonschema` package). With format checking enabled, the validator rejects invalid recognised UUID,
-date, and date-time formats. Schemas are loaded from trusted local
+with Python's `jsonschema` package). With format checking enabled, the
+validator rejects invalid recognised UUID, date, and date-time formats. Schemas are loaded from trusted local
 package resources; no network access or schema registry linking the two
 formats is needed.
 
@@ -1307,8 +1349,7 @@ exhaustion produces an error and no partial evidence package.
 The examples use synthetic, non-sensitive data. Section 5.1 provides complete
 file contents to save yourself. The other example inputs and YAML are
 hand-maintained fixtures under `docs/examples/`, installed next to this guide.
-No generation script is needed. Their expected
-stable outcomes are:
+No generation script is needed. Their expected stable outcomes are:
 
 | Example | Status | Comparison differences | Assessment issues |
 | --- | --- | ---: | ---: |

@@ -13,7 +13,9 @@ import pytest
 import yaml
 
 from adviso_compare.application import execute_comparison
+from adviso_compare.configuration import load_comparison_configuration
 from adviso_compare.invocation import ComparisonInvocation
+from tests.support.documents import minimal_configuration
 from tests.support.evidence import assert_run_package
 from tests.support.schemas import configuration_validator, results_validator
 
@@ -108,6 +110,29 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     )
     assert checked.stdout == "Package checks passed for the saved evidence.\n"
     assert checked.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "heading", ["Null policy and typed value descriptions", "Comparators"]
+)
+def test_configuration_fragments_fit_a_complete_field_definition(
+    tmp_path: Path, heading: str
+) -> None:
+    """Guide fragments can be inserted into a configuration and validated."""
+    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(
+        encoding="utf-8"
+    )
+    section = guide.split(f" {heading}\n", 1)[1].split("\n### ", 1)[0]
+    snippets = re.findall(r"```yaml\n(.*?)\n```", section, re.S)
+    assert len(snippets) == 1
+    fragment = yaml.safe_load(snippets[0])
+    document = minimal_configuration()
+    document["fields"]["definitions"]["measured_value"].update(fragment)
+    configuration_validator().validate(document)
+    path = tmp_path / "configuration.yaml"
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+    assert load_comparison_configuration(path).document == document
 
 
 def test_user_guide_identifies_supported_schemas_and_maintained_examples() -> None:
