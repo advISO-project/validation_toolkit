@@ -61,7 +61,7 @@ class RecordModel:
     by_key: Mapping[RecordKey, KeyedRecord]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class RecordKeyError(Exception):
     """An expected input failure that prevents unambiguous record identity."""
 

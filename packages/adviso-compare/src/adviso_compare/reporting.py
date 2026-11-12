@@ -36,7 +36,7 @@ _RENAME_EXCL = 4
 # Public reporting API
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class OutputError(Exception):
     """An expected failure while selecting or publishing output."""
 

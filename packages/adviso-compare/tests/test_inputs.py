@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
+from typing import Iterator
 
 import pytest
 
@@ -13,9 +15,11 @@ from adviso_compare.inputs import (
     InputFormat,
     InputSide,
     JsonLocation,
+    JsonValueError,
     NativeCategory,
     NativeValue,
     TabularLocation,
+    decode_json_value,
     load_dataset,
 )
 
@@ -369,6 +373,46 @@ def test_malformed_json_reports_its_parser_location(tmp_path: Path) -> None:
     assert raised.value.message == (
         "query JSON input has invalid syntax at line 3, column 1"
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [("[\n", "invalid_syntax"), ('{"x":1,"x":2}', "duplicate_member"),
+     ("NaN", "non_finite")],
+)
+def test_json_errors_survive_cleanup_with_their_original_context(
+    text: str, kind: str
+) -> None:
+    """Cleanup preserves the parser error, its cause, and location metadata."""
+    originals: list[JsonValueError] = []
+    causes: list[BaseException | None] = []
+    cleanup_finished = False
+
+    @contextmanager
+    def cleanup() -> Iterator[None]:
+        nonlocal cleanup_finished
+        try:
+            yield
+        finally:
+            cleanup_finished = True
+
+    with pytest.raises(JsonValueError) as raised:
+        with cleanup():
+            try:
+                decode_json_value(text)
+            except JsonValueError as error:
+                originals.append(error)
+                causes.append(error.__cause__)
+                raise
+
+    assert cleanup_finished
+    assert raised.value is originals[0]
+    assert raised.value.__cause__ is causes[0]
+    assert raised.value.kind == kind
+    if kind == "invalid_syntax":
+        assert (raised.value.line, raised.value.column) == (2, 1)
+    else:
+        assert (raised.value.line, raised.value.column) == (None, None)
 
 
 @pytest.mark.parametrize(

@@ -130,7 +130,7 @@ class ParsedDataset:
     records: tuple[ParsedRecord, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class InputError(Exception):
     """A classified expected failure while discovering or parsing an input."""
 
@@ -161,7 +161,7 @@ class _NonFiniteNumber(ValueError):
     """Signal a non-standard non-finite JSON numerical token."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class JsonValueError(ValueError):
     """A syntax or structural failure while decoding one JSON value."""
 

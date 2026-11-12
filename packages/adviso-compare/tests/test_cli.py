@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import FrozenInstanceError
 from importlib.metadata import version
 from pathlib import Path
+from typing import Iterator
 
 import pytest
 import yaml
@@ -169,6 +171,7 @@ def test_cli_executes_custom_automatic_and_incomplete_comparisons_end_to_end(
     assert str(tmp_path) not in captured.out
 
 
+@pytest.mark.parametrize("through_cleanup", [False, True])
 @pytest.mark.parametrize(
     ("error", "expected_diagnostic"),
     [
@@ -195,11 +198,29 @@ def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
     capsys: pytest.CaptureFixture[str],
     error: Exception,
     expected_diagnostic: str,
+    through_cleanup: bool,
 ) -> None:
     """Classified operational failures publish nothing and omit tracebacks."""
     output = tmp_path / "evidence"
+    cleanup_finished = False
+    original_args = error.args
+
+    @contextmanager
+    def cleanup() -> Iterator[None]:
+        nonlocal cleanup_finished
+        try:
+            yield
+        finally:
+            cleanup_finished = True
 
     def fail(_: ComparisonInvocation) -> ComparisonOutcome:
+        if through_cleanup:
+            try:
+                with cleanup():
+                    raise error
+            except type(error) as observed:
+                assert observed is error
+                raise
         raise error
 
     exit_code = main(
@@ -220,6 +241,8 @@ def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
     assert captured.err == expected_diagnostic
     assert "Traceback" not in captured.err
     assert not output.exists()
+    assert error.args == original_args
+    assert cleanup_finished is through_cleanup
 
 
 @pytest.mark.parametrize(

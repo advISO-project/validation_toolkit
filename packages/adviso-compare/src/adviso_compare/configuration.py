@@ -155,7 +155,7 @@ class EffectiveConfiguration:
             raise KeyError(f"unknown canonical field: {name}") from error
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ConfigurationError(Exception):
     """A classified expected failure while loading a custom configuration."""
 
