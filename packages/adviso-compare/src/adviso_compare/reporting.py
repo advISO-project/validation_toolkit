@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping
 from uuid import uuid4
 
+from adviso_compare.configuration import AUTOMATIC_CONFIGURATION_ID
 from adviso_compare.results import (
     ComparisonEvidence,
     ResultValidationError,
@@ -27,7 +28,6 @@ from adviso_compare.results import (
 RESULTS_FILENAME = "comparison-results.json"
 CONFIGURATION_FILENAME = "comparison-configuration.json"
 REPORT_FILENAME = "comparison-report.html"
-AUTOMATIC_CONFIGURATION_ID = "org.adviso.automatic-strict-exact"
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
 _RENAME_EXCL = 4

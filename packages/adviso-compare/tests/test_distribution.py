@@ -215,7 +215,7 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         )
     )
     assert saved_automatic["metadata"]["id"] == (
-        "org.adviso.automatic-strict-exact"
+        "adviso-compare:automatic-strict-exact"
     )
     displayed = Path(automatic_output.name) / automatic_package.name
     assert f"Evidence package: {displayed}\n" in completed.stdout

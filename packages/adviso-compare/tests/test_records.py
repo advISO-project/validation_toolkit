@@ -269,7 +269,7 @@ def test_automatic_record_id_declares_shared_fields_and_omits_one_sided_fields(
     prepared = prepare_comparison(_invocation(tmp_path, reference, query))
 
     configuration = prepared.configuration
-    assert configuration.metadata.id == "org.adviso.automatic-strict-exact"
+    assert configuration.metadata.id == "adviso-compare:automatic-strict-exact"
     assert configuration.metadata.revision == "1.0"
     assert configuration.record_key == ("record_id",)
     assert configuration.in_scope == ("record_id", "a", "z")

@@ -400,7 +400,7 @@ def _duplicate_query_source(document: JsonObject) -> None:
 
 
 def _reserved_identifier(document: JsonObject) -> None:
-    document["metadata"]["id"] = "org.adviso.automatic-strict-exact"
+    document["metadata"]["id"] = "adviso-compare:automatic-strict-exact"
 
 
 def _duplicate_mapping_source(document: JsonObject) -> None:

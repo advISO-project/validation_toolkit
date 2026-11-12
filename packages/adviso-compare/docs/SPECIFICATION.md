@@ -719,7 +719,7 @@ The standalone schema file is the authoritative machine-readable definition.
 - **REQ-CFG-108.** source-value descriptors contain lexically valid values for their declared categories, and each side’s value mapping has unique `from` values;
 - **REQ-CFG-144.** each `collection_representation` is used only with a collection logical type, and each side's element mapping has unique `from` values and contains no conflicting or unreachable entries;
 - **REQ-CFG-127.** the `source_fields.reference` names are unique across canonical field definitions, and the `source_fields.query` names are independently unique across canonical field definitions;
-- **REQ-CFG-136.** a custom configuration does not use the reserved automatic-mode identifier `org.adviso.automatic-strict-exact`;
+- **REQ-CFG-136.** a custom configuration does not use the reserved automatic-mode identifier `adviso-compare:automatic-strict-exact`;
 
 **REQ-CFG-091.** A failure of any semantic check MUST be reported as an invalid comparison configuration with the relevant configuration path and violated rule.
 
@@ -944,7 +944,7 @@ Requirements in this subsection describe field-level `value_mapping` unless they
 
 #### 6.9.2 Generated field definitions
 
-- **REQ-CFG-130.** The generated effective configuration MUST use `schema_version: "1.0"`, `metadata.id: "org.adviso.automatic-strict-exact"`, and `metadata.revision: "1.0"`. The identifier is reserved for tool-generated automatic configurations so that result consumers can identify the configuration's origin without an additional results property.
+- **REQ-CFG-130.** The generated effective configuration MUST use `schema_version: "1.0"`, `metadata.id: "adviso-compare:automatic-strict-exact"`, and `metadata.revision: "1.0"`. The identifier is reserved for tool-generated automatic configurations so that result consumers can identify the configuration's origin without an additional results property.
 - **REQ-CFG-131.** The selected key field's canonical, reference source, and query source names MUST be identical. It MUST be declared as required and non-nullable on both sides, with logical type `string` and comparator `typed_exact`.
 - **REQ-CFG-132.** Every non-key source-field name observed on both sides MUST become one generated canonical field whose canonical, reference source, and query source names are identical. It MUST be included in `fields.in_scope`, be optional on both sides, permit null with null equal to null, use `preserved_exact`, and have no logical type, missing tokens, mapping, normalisation, coercion, or tolerance.
 - **REQ-CFG-133.** A source field observed on only one side MUST remain undefined in the generated configuration and MUST be represented by an `undeclared_field_excluded` entry under Section 9.1.3. It MUST NOT produce a finding or value opportunity.

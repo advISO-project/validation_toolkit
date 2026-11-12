@@ -91,7 +91,7 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     if configuration is not None:
         assert saved == document
     else:
-        assert saved["metadata"]["id"] == "org.adviso.automatic-strict-exact"
+        assert saved["metadata"]["id"] == "adviso-compare:automatic-strict-exact"
     assert outcome.run_status == "complete"
     assert outcome.comparison_differences == 1
     assert outcome.assessment_issues == 0

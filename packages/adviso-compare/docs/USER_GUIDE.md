@@ -575,7 +575,7 @@ have definitions; source field names are unique on each dataset side; mapping
 sources are not repeated, conflicting, or unreachable; and operations and
 comparators suit their field. It rejects custom configurations using the
 reserved automatic-mode ID
-`org.adviso.automatic-strict-exact`.
+`adviso-compare:automatic-strict-exact`.
 
 ### 5.4 Top-level properties
 
@@ -1001,7 +1001,7 @@ the comparison rules.
 The saved configuration preserves explicit declarations and list order.
 Optional properties that were omitted remain absent; internal defaults are
 not added. In automatic mode, `metadata.id` is
-`org.adviso.automatic-strict-exact` and `metadata.revision` is `"1.0"`. This
+`adviso-compare:automatic-strict-exact` and `metadata.revision` is `"1.0"`. This
 revision identifies the generated configuration, separately from its schema
 version.
 

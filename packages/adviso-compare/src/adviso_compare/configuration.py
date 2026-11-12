@@ -26,7 +26,7 @@ from adviso_compare.schemas import load_schema
 
 
 SUPPORTED_SCHEMA_VERSION = "1.0"
-AUTOMATIC_CONFIGURATION_ID = "org.adviso.automatic-strict-exact"
+AUTOMATIC_CONFIGURATION_ID = "adviso-compare:automatic-strict-exact"
 
 JsonObject = dict[str, Any]
 T = TypeVar("T")

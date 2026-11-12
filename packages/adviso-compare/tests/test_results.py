@@ -956,7 +956,7 @@ def test_generated_configuration_can_be_validated_as_saved_evidence(
     )
     evidence = _assemble_evidence(prepared)
     assert evidence.configuration_document()["metadata"]["id"] == (
-        "org.adviso.automatic-strict-exact"
+        "adviso-compare:automatic-strict-exact"
     )
 
     validate_result(
