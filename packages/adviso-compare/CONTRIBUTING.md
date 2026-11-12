@@ -113,14 +113,20 @@ pull requests), pushes to `main`, Tuesdays at 04:23 UTC, and manual requests.
 Pushes to development branches without an open pull request do not trigger it.
 It does not publish releases.
 
-Each run tests all 15 combinations of CPython 3.11–3.15 and these standard
-GitHub-hosted runners:
+Each run tests nine combinations. Linux is the primary platform and exercises
+every supported Python minor version. Windows and macOS exercise the minimum
+and newest supported versions on these standard GitHub-hosted runners:
 
-| Runner | Architecture |
-| --- | --- |
-| `ubuntu-24.04` | x86-64 |
-| `macos-15` | ARM64 |
-| `windows-2025` | x86-64 |
+| Runner | Architecture | CPython versions |
+| --- | --- | --- |
+| `ubuntu-24.04` | x86-64 | 3.11, 3.12, 3.13, 3.14, 3.15 |
+| `macos-15` | ARM64 | 3.11, 3.15 |
+| `windows-2025` | x86-64 | 3.11, 3.15 |
+
+The same matrix applies to pull requests, `main`, scheduled runs, and manual
+runs. Intermediate Python versions on Windows and macOS remain supported but
+are not exercised by routine CI. Review this coverage when preparing a release
+or updating the support policy.
 
 These identify the environments exercised by CI, rather than every supported
 OS release or architecture. Runner images and Python patch releases can change;

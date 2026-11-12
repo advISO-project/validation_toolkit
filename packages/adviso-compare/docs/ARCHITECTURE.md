@@ -216,7 +216,7 @@ and runs the same installed-command scenarios after fresh wheel and
 source-archive installations. Each installation resolves its own dependencies
 and runs outside the checkout. The
 [CI workflow](../../../.github/workflows/adviso-compare-ci.yml) exercises the
-supported Python/OS matrix; its scope and merge settings are explained in the
+routine Python/OS matrix; its scope and merge settings are explained in the
 [contribution guide](../CONTRIBUTING.md#continuous-integration).
 
 ## Where to make a change

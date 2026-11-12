@@ -1630,6 +1630,11 @@ In operational use, each laboratory is responsible for creating, approving, main
 
 ### 13.3 Continuous integration
 
+The routine CI matrix covers CPython 3.11–3.15 on Linux and CPython 3.11 and
+3.15 on each of Windows and macOS. Linux is the primary deployment platform.
+This CI coverage is a subset of the supported runtime combinations in Section
+12; intermediate Python versions on Windows and macOS remain supported.
+
 **REQ-TST-008.** CI MUST:
 
 - **REQ-TST-028.** run on proposed changes and protected branches;
