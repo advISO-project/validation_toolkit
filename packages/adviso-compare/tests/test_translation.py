@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import Callable
 
@@ -15,6 +15,7 @@ from adviso_compare.translation import (
     TranslationIssueCode,
     TranslationStage,
     ValueDisposition,
+    render_canonical_scalar,
     translate_field_value,
 )
 from tests.support.documents import JsonObject, minimal_configuration
@@ -700,3 +701,25 @@ def test_preserved_exact_retains_recursive_parser_native_content(
     assert result.source is source
     assert result.preserved is source
     assert result.canonical is None
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("-0.00", "0"),
+        ("1000", "1e3"),
+        ("12.3000", "1.23e1"),
+        ("0.0010", "1e-3"),
+        ("-0.00100", "-1e-3"),
+        ("1.00000000000000000000000000001", "1.00000000000000000000000000001"),
+        ("1e1000000", "1e1000000"),
+        ("1e-1000000", "1e-1000000"),
+    ],
+)
+def test_canonical_decimal_text_preserves_precision_without_context_rounding(
+    source: str, expected: str,
+) -> None:
+    """Formatting removes insignificant zeros without numerical operations."""
+    with localcontext() as context:
+        context.prec = 2
+        assert render_canonical_scalar(Decimal(source), "decimal") == expected

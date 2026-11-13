@@ -159,7 +159,10 @@ created. Reserializing configuration later would risk breaking that byte link.
 `reporting.render_html_report` renders the results and configuration documents
 from that validated pair. It does not reread the original YAML or source
 datasets. Presentation choices remain in the renderer; the JSON evidence
-defines the facts displayed.
+defines the facts displayed. Finding explanations use saved source-field
+mappings, recorded values, and configured rules. Numeric explanations share
+exact difference/tolerance arithmetic with `comparators.py`, avoiding a separate
+interpretation of the comparison rule.
 
 `reporting.publish_evidence_package` renders HTML before preparing output,
 writes all three members into a private staging directory inside the output

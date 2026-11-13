@@ -191,20 +191,35 @@ def _numbers_within_tolerance(
     comparator: Comparator,
 ) -> bool:
     """Evaluate absolute or reference-directed relative tolerance exactly."""
+    difference, allowed = numeric_difference_and_tolerance(
+        reference, query, comparator.parameters
+    )
+    return difference <= allowed
+
+
+def numeric_difference_and_tolerance(
+    reference: object,
+    query: object,
+    parameters: Mapping[str, object],
+) -> tuple[Fraction, Fraction]:
+    """Return the exact difference and allowed difference for numeric values.
+
+    Values must be canonical integers or decimals and parameters must contain
+    a validated absolute or relative tolerance. Rendering shares this arithmetic
+    to explain a recorded finding without introducing rounding differences.
+    """
     reference_fraction = _number_fraction(reference)
     query_fraction = _number_fraction(query)
     difference = abs(reference_fraction - query_fraction)
-    if "absolute_tolerance" in comparator.parameters:
+    if "absolute_tolerance" in parameters:
+        allowed = _tolerance_fraction(parameters["absolute_tolerance"])
+    elif "relative_tolerance" in parameters:
         allowed = _tolerance_fraction(
-            comparator.parameters["absolute_tolerance"]
-        )
-    elif "relative_tolerance" in comparator.parameters:
-        allowed = _tolerance_fraction(
-            comparator.parameters["relative_tolerance"]
+            parameters["relative_tolerance"]
         ) * abs(reference_fraction)
     else:
         raise AssertionError("numeric tolerance has no validated parameter")
-    return difference <= allowed
+    return difference, allowed
 
 
 def _number_fraction(value: object) -> Fraction:

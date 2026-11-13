@@ -551,7 +551,17 @@ It shows decimal quantisation and absolute tolerance, string trimming and case
 folding, value mapping, and translation of slash-delimited text to a set. It
 also declares `curator_note` but leaves it out of `fields.in_scope`, while the
 query's undeclared `pipeline_version` is also excluded. The run is complete and
-reports one `measurement` difference.
+reports three comparison differences, with no assessment issues:
+
+- `SAMPLE-001`: `reported_interpretation` maps to `not_detected`, while the
+  reference's `expected_interpretation` maps to `detected`.
+- `SAMPLE-002`: `reported_markers` contains an additional `MUT` member after
+  translation, compared with `expected_markers`.
+- `SAMPLE-002`: `reported_value` differs from `expected_value` by 0.2 after
+  quantisation, exceeding the absolute tolerance of 0.01.
+
+For `SAMPLE-001`, the numerical difference is within tolerance and the marker
+sets match after translation. These successful comparisons produce no findings.
 
 A stable ID and revision, review of changes, and testing with representative
 data help your laboratory manage each configuration as a controlled document.
@@ -1359,7 +1369,7 @@ No generation script is needed. Their expected stable outcomes are:
 | --- | --- | ---: | ---: |
 | automatic (Section 3.1.1) | `complete` | 1 | 0 |
 | small custom (Section 5.1) | `complete` | 1 | 0 |
-| custom with transformations (Section 5.2) | `complete` | 1 | 0 |
+| custom with transformations (Section 5.2) | `complete` | 3 | 0 |
 
 Run the commands in Sections 3.1.1, 5.1, and 5.2, then open the run directory
 identified by each completion summary and validate the complete package

@@ -93,9 +93,33 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     else:
         assert saved["metadata"]["id"] == "adviso-compare:automatic-strict-exact"
     assert outcome.run_status == "complete"
-    assert outcome.comparison_differences == 1
+    assert outcome.comparison_differences == (3 if example == "custom" else 1)
+    if example == "custom":
+        assert [
+            (finding["record_identity"]["canonical"], finding["field"],
+             finding["code"])
+            for finding in result["findings"]
+        ] == [
+            (["SAMPLE-001"], "interpretation", "value_mismatch"),
+            (["SAMPLE-002"], "markers", "value_mismatch"),
+            (["SAMPLE-002"], "measurement", "value_mismatch"),
+        ]
+        report = (selected / "comparison-report.html").read_text("utf-8")
+        assert report.count('<article class="finding"') == 3
+        for finding in result["findings"]:
+            assert report.count(f'id="{finding["id"]}"') == 1
     assert outcome.assessment_issues == 0
     assert outcome.exit_code == 0
+    label = {
+        "automatic": "automatic", "introductory": "small custom",
+        "custom": "custom with transformations",
+    }[example]
+    outcome_row = next(
+        line for line in guide.splitlines() if line.startswith(f"| {label} (Section")
+    )
+    assert [cell.strip() for cell in outcome_row.split("|")[2:-1]] == [
+        "`complete`", str(outcome.comparison_differences), "0",
+    ]
     validation_section = guide.split(
         " Structural and semantic validation\n", 1
     )[1].split("\n## ", 1)[0]

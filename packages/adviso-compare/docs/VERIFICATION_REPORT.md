@@ -402,3 +402,44 @@ configuration, and release review remain outstanding. Repository settings must
 require the named final CI check; committing the workflow alone does not enforce
 merging policy. Another person's approval is not a required merge check under
 the chosen policy. These records do not attest an immutable release artefact.
+
+## Finding presentation and example verification — 2026-11-13
+
+The custom user-guide example now produces three comparison differences across
+SAMPLE-001 and SAMPLE-002: interpretation, marker-set membership, and a numeric
+tolerance failure. It remains complete with no assessment issues. The guide's
+worked explanation and reproduction table describe those outcomes.
+
+HTML field findings lead with query and reference source-field names. Query
+values appear first; translated values remain visible as the values used for
+comparison. Canonical field names and the saved rules are available in expandable
+detail. Reasons are derived from finding codes, saved values, and configuration;
+numeric reasons use shared exact difference/tolerance arithmetic, including
+reference-directed relative tolerance. Canonical JSON messages, schemas, and
+comparison rules were not changed.
+
+A precision regression exposed existing rounding in canonical decimal text:
+Decimal.normalize() applied ambient precision and exponent limits. Formatting
+now removes insignificant coefficient zeros without numerical normalisation,
+preserving exact values and large exponents in the existing canonical format.
+Regression cases failed before this correction and passed afterwards.
+
+Existing reporting and documentation tests were adapted first. Added cases
+cover exact tolerance explanations, negative/zero references, post-quantisation
+values, precision beyond the default decimal context, escaped source names, and
+assessment-issue explanations. Example tests verify the exact three findings,
+separate HTML finding articles, and agreement with the guide's outcome table.
+
+On CPython 3.12.16/macOS ARM64, the full suite passed: **417 tests in 35.93s**.
+After the final documentation update, documentation/distribution checks passed
+(**8 tests**), including clean wheel/source installations and installed resources;
+reporting checks passed (**56 tests**). Schema coverage ran in the full suite.
+Compilation, dependency consistency, documentation links/anchors and code fences,
+and git diff whitespace checks passed. A fresh custom evidence package passed
+saved-package validation and its generated HTML contained all three named field
+findings and their explanations.
+
+The editable installation was refreshed. Its installed guide and changed example
+were explicitly synchronized and checked against source, since editable installs
+do not reliably refresh documentation data files. No browser or print visual
+verification was completed. Other Python/OS combinations remain for hosted CI.

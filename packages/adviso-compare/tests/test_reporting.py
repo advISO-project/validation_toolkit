@@ -8,6 +8,7 @@ import os
 import stat
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from decimal import localcontext
 from hashlib import sha256
 from html.parser import HTMLParser
 from pathlib import Path
@@ -48,6 +49,7 @@ def _generated_evidence(
     automatic: bool = False,
     reference_value: object = 1,
     query_value: object = 2,
+    configuration_document: dict[str, Any] | None = None,
     run_id: UUID = UUID("123e4567-e89b-42d3-a456-426614174000"),
 ) -> ComparisonEvidence:
     """Generate canonical evidence through all three comparison phases."""
@@ -61,13 +63,20 @@ def _generated_evidence(
         ])
         configuration = None
     else:
-        reference_text = '[{"reference_id":"S1","expected_value":1}]'
-        query_text = (
-            '[{"query_id":"S1"}]'
-            if incomplete
-            else '[{"query_id":"S1","observed_value":2}]'
+        configuration = (
+            minimal_configuration()
+            if configuration_document is None else configuration_document
         )
-        configuration = minimal_configuration()
+        sources = configuration["fields"]["definitions"]["measured_value"][
+            "source_fields"
+        ]
+        reference_text = json.dumps([
+            {"reference_id": "S1", sources["reference"]: reference_value}
+        ])
+        query_record: dict[str, object] = {"query_id": "S1"}
+        if not incomplete:
+            query_record[sources["query"]] = query_value
+        query_text = json.dumps([query_record])
     reference = tmp_path / "reference.json"
     query = tmp_path / "query.json"
     reference.write_text(reference_text, encoding="utf-8")
@@ -219,7 +228,9 @@ def test_html_report_is_a_self_contained_view_of_both_json_documents() -> None:
     assert "Not assessable" in visible
     finding_text = " ".join(view.findings)
     assert 'record_id = "sample-1"' in finding_text
-    assert "measured_value" in finding_text
+    assert "observed_value" in finding_text
+    assert "expected_value" in finding_text
+    assert "measured_value" not in finding_text
     assert "Absent field" in finding_text
     assert "Present; value not recorded" in finding_text
     assert '"record_identity"' not in finding_text
@@ -247,13 +258,86 @@ def test_value_mismatch_is_readable_without_expanding_structured_evidence(
     report = render_html_report(
         evidence.document(), evidence.configuration_document()
     ).decode("utf-8")
-    text = " ".join(_ReportView(report).findings)
+    text = " ".join(" ".join(_ReportView(report).findings).split())
 
     assert 'record_id = "S1"' in text
-    assert "measured_value" in text
-    assert "Source value" in text and "Canonical value" in text
+    assert "Query observed_value compared with reference expected_value" in text
+    assert "measured_value" not in text
+    assert "Canonical field" in report and "measured_value" in report
+    assert "Source value" in text and "Value used for comparison" in text
+    assert text.index("Query observed_value") < text.index("Reference expected_value")
+    assert "The numbers used for comparison are not exactly equal." in text
     assert "decimal" in text and "1" in text and "2" in text
     assert "Value mismatch" in text
+
+
+@pytest.mark.parametrize(
+    ("reference", "query", "parameters", "quantise", "difference", "limit"),
+    [
+        ("2.5", "2.7", {"absolute_tolerance": "0.01"}, False, "0.2", "0.01"),
+        ("-100", "-111", {"relative_tolerance": "0.1"}, False, "11", "10"),
+        ("0", "0.001", {"relative_tolerance": "0.05"}, False, "0.001", "0"),
+        ("2.50049", "2.70001", {"absolute_tolerance": "0.1"}, True, "0.2", "0.1"),
+        ("1.00000000000000000000000000001", "1.00000000000000000000000000003",
+         {"absolute_tolerance": "0.00000000000000000000000000001"}, False,
+         "0.00000000000000000000000000002", "0.00000000000000000000000000001"),
+    ],
+)
+def test_tolerance_finding_explains_exact_translated_difference_and_limit(
+    tmp_path: Path, reference: str, query: str, parameters: dict[str, str],
+    quantise: bool, difference: str, limit: str,
+) -> None:
+    """Use recorded translated numbers and the reference-directed rule."""
+    configuration = minimal_configuration()
+    field = configuration["fields"]["definitions"]["measured_value"]
+    field["comparator"] = {"name": "numeric_tolerance", "parameters": parameters}
+    if quantise:
+        field["typed_normalisation"] = [{
+            "operation": "decimal_quantise",
+            "parameters": {"places": 3, "rounding": "half_even"},
+        }]
+    evidence = _generated_evidence(
+        tmp_path, reference_value=reference, query_value=query,
+        configuration_document=configuration,
+    )
+    original = evidence.json_bytes
+    with localcontext() as context:
+        context.prec = 2
+        report = render_html_report(
+            evidence.document(), evidence.configuration_document()
+        ).decode("utf-8")
+    text = " ".join(" ".join(_ReportView(report).findings).split())
+
+    assert (
+        f"absolute difference between the values used for comparison is {difference}"
+        in text
+    )
+    if "absolute_tolerance" in parameters:
+        assert f"exceeding the configured absolute tolerance of {limit}" in text
+    else:
+        assert f"exceeding the allowed difference of {limit}" in text
+        assert f"|reference {reference}|" in text
+    assert evidence.json_bytes == original
+
+
+def test_finding_source_field_names_are_escaped_in_headings_and_tables(
+    tmp_path: Path,
+) -> None:
+    """Source-oriented labels retain literal field names without HTML markup."""
+    configuration = minimal_configuration()
+    configuration["fields"]["definitions"]["measured_value"]["source_fields"] = {
+        "reference": "expected<value>", "query": "observed<script>&value",
+    }
+    evidence = _generated_evidence(tmp_path, configuration_document=configuration)
+    report = render_html_report(
+        evidence.document(), evidence.configuration_document()
+    ).decode("utf-8")
+    text = " ".join(" ".join(_ReportView(report).findings).split())
+
+    assert "observed<script>&value" in text
+    assert "expected<value>" in text
+    assert "observed&lt;script&gt;&amp;value" in report
+    assert "<script" not in report
 
 
 @pytest.mark.parametrize(
@@ -277,11 +361,11 @@ def test_untyped_finding_values_preserve_types_and_nested_content(
     report = render_html_report(
         evidence.document(), evidence.configuration_document()
     ).decode("utf-8")
-    text = " ".join(_ReportView(report).findings)
+    text = " ".join(" ".join(_ReportView(report).findings).split())
 
     for value in expected:
         assert value in text
-    assert "Not applicable (untyped)" in text
+    assert "Value used for comparison" in text
     assert "<script" not in report
 
 
@@ -302,9 +386,17 @@ def test_empty_report_retains_navigation_and_empty_finding_groups() -> None:
     ("case", "expected"),
     [
         ("missing-record", ["Missing record", "Record absent"]),
-        ("dataset-field", ["Dataset-level finding", "measured_value"]),
-        ("collection", ["list of string", '["WT", "MUT"]']),
-        ("typed-null", ["Null policy violation", "Null (present)", "decimal"]),
+        ("dataset-field", ["Dataset-level finding", "observed_value",
+                           "required by the configuration but is absent"]),
+        ("collection", ["list of string", '["WT", "MUT"]',
+                        "Lists are compared by position"]),
+        ("typed-null", ["Null policy violation", "Null (present)", "decimal",
+                        "does not allow null values"]),
+        ("type-mismatch", ["Type mismatch", "source type", "decimal"]),
+        ("invalid-value", ["Invalid field value", "valid decimal"]),
+        ("mapping", ["Mapping failure", "no entry in the configured mapping"]),
+        ("null-mismatch", ["Value mismatch", "Both values are null",
+                           "does not treat two null values as equal"]),
     ],
 )
 def test_finding_forms_show_only_the_available_record_and_value_evidence(
@@ -321,6 +413,21 @@ def test_finding_forms_show_only_the_available_record_and_value_evidence(
         reference_text = "reference_id,expected_value\n"
         query_text = "query_id\n"
         suffix = "csv"
+    elif case == "type-mismatch":
+        query_text = '[{"query_id":"S1","observed_value":[]}]'
+    elif case == "invalid-value":
+        query_text = '[{"query_id":"S1","observed_value":"not a number"}]'
+    elif case == "mapping":
+        field = configuration["fields"]["definitions"]["measured_value"]
+        field["value_mapping"] = {"query": [
+            {"from": {"category": "integer", "value": "1"},
+             "to": {"category": "integer", "value": "1"}}
+        ]}
+        query_text = '[{"query_id":"S1","observed_value":2}]'
+    elif case == "null-mismatch":
+        field = configuration["fields"]["definitions"]["measured_value"]
+        field["null_policy"] = {"allowed": True, "nulls_equal": False}
+        reference_text = '[{"reference_id":"S1","expected_value":null}]'
     elif case == "collection":
         field = configuration["fields"]["definitions"]["measured_value"]
         field["logical_type"] = {
@@ -341,7 +448,7 @@ def test_finding_forms_show_only_the_available_record_and_value_evidence(
         output=tmp_path / "evidence",
     ))
     report = (outcome.output / "comparison-report.html").read_text("utf-8")
-    text = " ".join(_ReportView(report).findings)
+    text = " ".join(" ".join(_ReportView(report).findings).split())
 
     for value in expected:
         assert value in text

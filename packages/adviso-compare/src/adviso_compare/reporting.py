@@ -12,10 +12,13 @@ import stat
 import sys
 import tempfile
 from dataclasses import dataclass
+from decimal import Decimal
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Mapping
 from uuid import uuid4
 
+from adviso_compare.comparators import numeric_difference_and_tolerance
 from adviso_compare.configuration import AUTOMATIC_CONFIGURATION_ID
 from adviso_compare.results import (
     ComparisonEvidence,
@@ -569,14 +572,33 @@ def _finding_card(
             + "</code></dd>"
         )
     field = finding.get("field")
-    if field is not None:
-        context += f"<dt>Field</dt><dd><code>{_escape(field)}</code></dd>"
+    definition = (
+        configuration["fields"]["definitions"][field]
+        if field is not None else None
+    )
+    code_label = finding["code"].replace("_", " ").capitalize()
+    heading = _escape(code_label)
+    rule_detail = ""
+    if definition is not None:
+        sources = definition["source_fields"]
+        heading = (
+            f"Query <code>{_escape(sources['query'])}</code> compared with "
+            f"reference <code>{_escape(sources['reference'])}</code>"
+        )
+        rule_detail = (
+            "<dl><dt>Canonical field</dt>"
+            f"<dd><code>{_escape(field)}</code></dd></dl>"
+            "<h5>Configured comparison rule</h5><pre>"
+            + _escape(json.dumps(definition, ensure_ascii=False, indent=2))
+            + "</pre>"
+        )
     context += (
         "<dt>Affected side</dt>"
         f"<dd>{_escape(finding['affected_side'].title())}</dd>"
     )
     if "values" in finding:
-        definition = configuration["fields"]["definitions"][field]
+        if definition is None:
+            raise AssertionError("field-value finding has no field definition")
         comparison = _value_table(finding["values"], definition)
     elif identity is not None:
         comparison = _record_presence(identity, key_fields)
@@ -584,19 +606,165 @@ def _finding_card(
         comparison = ""
     return (
         f'<article class="finding" id="{_escape(finding["id"])}">'
-        f"<h4>{_escape(finding['id'])} · "
-        f"{_escape(finding['code'].replace('_', ' ').capitalize())}</h4>"
-        f"<p>{_escape(finding['message'])}</p>"
+        f"<h4>{heading}</h4>"
+        f'<p class="finding-label">{_escape(finding["id"])} · '
+        f"{_escape(code_label)}</p>"
+        f'<p class="finding-reason">'
+        f"{_escape(_finding_explanation(finding, definition))}</p>"
         f'<dl class="finding-context">{context}</dl>'
         f'<p><span class="label">Phase: {_escape(finding["phase"])}</span> '
         f'<span class="label priority-{_escape(priority)}">Priority: '
         f"{_escape(priority)}</span></p>"
         + comparison
-        + "<details><summary>Source locations and structured evidence"
+        + "<details><summary>Comparison rule, source locations, and structured evidence"
         "</summary>"
-        f"<pre>{evidence}</pre></details>"
+        + rule_detail
+        + f"<pre>{evidence}</pre></details>"
         "</article>"
     )
+
+
+def _finding_explanation(
+    finding: Mapping[str, Any], definition: Mapping[str, Any] | None,
+) -> str:
+    """Explain a recorded finding using only its evidence and saved rules."""
+    code = finding["code"]
+    side = finding["affected_side"]
+    if code == "missing_record":
+        return "This reference record has no query record with the same comparison key."
+    if code == "extra_record":
+        return "This query record has no reference record with the same comparison key."
+    if definition is None:
+        raise AssertionError("field finding has no saved definition")
+    logical_type = definition.get("logical_type")
+    type_label = (
+        f"{logical_type['collection_type']} of {logical_type['element_type']}"
+        if isinstance(logical_type, Mapping) else str(logical_type)
+    )
+    if code == "missing_required_field":
+        return f"The {side} field is required by the configuration but is absent."
+    if code == "type_mismatch":
+        return (
+            f"The {side} value has a source type that the configured logical "
+            f"type ({type_label}) does not accept."
+        )
+    if code == "invalid_field_value":
+        return (
+            f"The {side} value could not be interpreted as a valid {type_label} "
+            "under the configured processing rules."
+        )
+    if code == "null_policy_violation":
+        return (
+            f"The {side} value is null after processing, but this field "
+            "does not allow null values."
+        )
+    if code == "mapping_failure":
+        subject = (
+            f"At least one {side} collection element"
+            if isinstance(logical_type, Mapping) else f"The {side} value"
+        )
+        return f"{subject} has no entry in the configured mapping."
+    if code != "value_mismatch":
+        raise AssertionError("unregistered finding code")
+
+    values = finding["values"]
+    if any(values[side]["state"] == "absent" for side in ("reference", "query")):
+        return "An optional field is absent on one side and present on the other."
+    nulls = [
+        ("canonical" in evidence and evidence["canonical"]["value"] is None)
+        or evidence.get("source", {}).get("category") == "null"
+        for evidence in (values["reference"], values["query"])
+    ]
+    if all(nulls):
+        return (
+            "Both values are null, but the configuration does not treat two "
+            "null values as equal."
+        )
+    if any(nulls):
+        return "One value used for comparison is null and the other is not."
+
+    comparator = definition["comparator"]["name"]
+    if comparator == "numeric_tolerance":
+        return _tolerance_explanation(values, definition["comparator"]["parameters"])
+    explanations = {
+        "preserved_exact": (
+            "The source values differ in native type or content; "
+            "no translation is applied."
+        ),
+        "typed_exact": (
+            "The values used for comparison are unequal after the "
+            "configured translation."
+        ),
+        "normalised_string": (
+            "The strings remain unequal after the configured normalisation."
+        ),
+        "numeric_exact": "The numbers used for comparison are not exactly equal.",
+        "date_exact": "The dates used for comparison differ.",
+        "datetime_exact": (
+            "The datetimes represent different instants after the "
+            "configured normalisation."
+        ),
+        "list_exact": (
+            "Lists are compared by position: their lengths or at least one pair "
+            "of corresponding elements differ under the configured element comparison."
+        ),
+        "set_exact": (
+            "The sets contain different members; "
+            "element order does not affect equality."
+        ),
+        "multiset_exact": (
+            "The collections have different elements or occurrence counts; "
+            "element order does not affect equality."
+        ),
+    }
+    return explanations[comparator]
+
+
+def _tolerance_explanation(
+    values: Mapping[str, Any], parameters: Mapping[str, Any],
+) -> str:
+    """Describe exact arithmetic on recorded post-transformation values."""
+    reference = Decimal(values["reference"]["canonical"]["value"])
+    query = Decimal(values["query"]["canonical"]["value"])
+    difference, allowed = numeric_difference_and_tolerance(reference, query, parameters)
+    introduction = (
+        "The absolute difference between the values used for comparison is "
+        f"{_exact_decimal(difference)}, "
+    )
+    if "absolute_tolerance" in parameters:
+        return introduction + (
+            f"exceeding the configured absolute tolerance of {_exact_decimal(allowed)}."
+        )
+    percentage = _exact_decimal(
+        Fraction(Decimal(parameters["relative_tolerance"])) * 100
+    )
+    reference_text = _exact_decimal(Fraction(reference))
+    return introduction + (
+        f"exceeding the allowed difference of {_exact_decimal(allowed)} "
+        f"(relative tolerance {percentage}% × |reference {reference_text}|)."
+    )
+
+
+def _exact_decimal(value: Fraction) -> str:
+    """Format a finite decimal fraction without ambient decimal rounding."""
+    denominator = value.denominator
+    twos = fives = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        twos += 1
+    while denominator % 5 == 0:
+        denominator //= 5
+        fives += 1
+    if denominator != 1:
+        raise AssertionError(
+            "numeric evidence does not have a finite decimal expansion"
+        )
+    places = max(twos, fives)
+    coefficient = abs(value.numerator) * 2 ** (places - twos) * 5 ** (places - fives)
+    digits = str(coefficient).rjust(places + 1, "0")
+    if places:
+        digits = (digits[:-places] + "." + digits[-places:]).rstrip("0").rstrip(".")
+    return ("-" if value < 0 else "") + digits
 
 
 def _key_text(names: list[str], values: list[str]) -> str:
@@ -625,7 +793,7 @@ def _value_table(
 ) -> str:
     """Present recorded evidence without inferring omitted values."""
     rows = []
-    for side in ("reference", "query"):
+    for side in ("query", "reference"):
         evidence = values[side]
         if evidence["state"] == "absent":
             source = canonical = (
@@ -639,18 +807,20 @@ def _value_table(
             if "canonical" in evidence:
                 canonical = _canonical_value(evidence["canonical"])
             elif "logical_type" not in definition:
-                canonical = "Not applicable (untyped)"
+                canonical = source
             else:
                 canonical = "Not recorded"
         rows.append(
             f'<tr><th scope="row">{side.title()}</th>'
+            f"<td><code>{_escape(definition['source_fields'][side])}</code></td>"
             f"<td>{source}</td><td>{canonical}</td></tr>"
         )
     return (
         '<div class="table-scroll"><table class="value-evidence">'
         "<caption>Value evidence</caption><thead><tr>"
-        '<th scope="col">Side</th><th scope="col">Source value</th>'
-        '<th scope="col">Canonical value</th></tr></thead>'
+        '<th scope="col">Side</th><th scope="col">Field in input</th>'
+        '<th scope="col">Source value</th>'
+        '<th scope="col">Value used for comparison</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
@@ -903,6 +1073,7 @@ details[open] > summary { margin-bottom: .5rem; }
   background: #fff;
 }
 .finding h4 { margin: 0; }
+.finding-label { color: #465563; margin-block: .35rem; font-size: .9rem; }
 .finding-context { grid-template-columns: max-content 1fr; margin-block: .75rem; }
 .label {
   display: inline-block;
@@ -927,7 +1098,7 @@ th, td {
 }
 thead { background: #eaf0f6; }
 .value-evidence { table-layout: fixed; }
-.value-evidence th:first-child { width: 18%; }
+.value-evidence th:first-child { width: 12%; }
 .value-type { display: block; color: #465563; font-size: .85rem; }
 .value { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 .value-state { font-style: italic; }

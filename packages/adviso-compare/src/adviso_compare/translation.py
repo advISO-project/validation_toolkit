@@ -623,10 +623,11 @@ def _render_decimal(value: Decimal) -> str:
     """Render one finite decimal in the canonical normalized scientific form."""
     if value.is_zero():
         return "0"
-    normalized = value.normalize()
-    sign = "-" if normalized.is_signed() else ""
-    digits = "".join(str(digit) for digit in normalized.as_tuple().digits)
-    exponent = normalized.adjusted()
+    # Decimal.normalize() applies the ambient precision and exponent limits.
+    # Formatting must instead preserve the exact coefficient and exponent.
+    sign = "-" if value.is_signed() else ""
+    digits = "".join(str(digit) for digit in value.as_tuple().digits).rstrip("0")
+    exponent = value.adjusted()
     coefficient = digits[0]
     if len(digits) > 1:
         coefficient += f".{digits[1:]}"
