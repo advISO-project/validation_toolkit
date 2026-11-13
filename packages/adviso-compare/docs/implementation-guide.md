@@ -1,9 +1,9 @@
-# Architecture of `adviso-compare`
+# Implementation guide for `adviso-compare`
 
 This guide describes the current implementation for developers maintaining the
 tool. It explains responsibilities and boundaries rather than defining product
 behaviour. The packaged [schemas](../src/adviso_compare/schemas/) define JSON
-structures and structural constraints; the [user guide](USER_GUIDE.md) defines
+structures and structural constraints; the [user guide](user-guide.md) defines
 observable behaviour and semantic rules, including comparison concepts and
 terminology.
 For setup, commands, and the development workflow, see
@@ -241,7 +241,7 @@ locates responsibilities; it does not authorize a behavioural or schema change.
 | HTML presentation, saved-package inspection, or publication | Separate functions in `reporting.py`; [reporting tests](../tests/test_reporting.py). |
 | Command behaviour or boundary errors | `cli.py`, `invocation.py`, `application.py`; [CLI tests](../tests/test_cli.py). |
 | Installed resources or packaging | `pyproject.toml`; distribution tests. |
-| Published examples and user instructions | `docs/USER_GUIDE.md`, `docs/examples/`; [documentation tests](../tests/test_documentation.py) and distribution tests. |
+| Published examples and user instructions | `docs/user-guide.md`, `docs/examples/`; [documentation tests](../tests/test_documentation.py) and distribution tests. |
 
 Cross-cutting changes often need tests at more than one boundary. For example,
 a new configuration operation affects schema validation, resolved rules,

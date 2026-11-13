@@ -162,7 +162,7 @@ adviso-compare --help
 ```
 
 The full guide is installed with the software under
-`share/doc/adviso-compare/USER_GUIDE.md` in the Python environment.
+`share/doc/adviso-compare/user-guide.md` in the Python environment.
 For a `pipx` installation, this is the environment managed by `pipx`; `pipx list`
 shows where it keeps application environments.
 

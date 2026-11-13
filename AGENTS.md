@@ -9,9 +9,9 @@ This file governs how agents work in this monorepo. It does not define product b
 For `adviso-compare`, authority is assigned by subject:
 
 - The packaged schemas in `packages/adviso-compare/src/adviso_compare/schemas/` define the permitted JSON structures and structural constraints for their respective document families.
-- `packages/adviso-compare/docs/USER_GUIDE.md` defines observable behaviour and semantic rules that the schemas cannot express.
+- `packages/adviso-compare/docs/user-guide.md` defines observable behaviour and semantic rules that the schemas cannot express.
 - `packages/adviso-compare/CONTRIBUTING.md` defines package development, verification, compatibility, and release procedures.
-- `packages/adviso-compare/docs/ARCHITECTURE.md` explains the implementation; it does not define product behaviour.
+- `packages/adviso-compare/docs/implementation-guide.md` explains the implementation; it does not define product behaviour.
 - Tests and controlled fixtures verify the documented contract; they do not override it or supply undocumented requirements.
 
 If these sources appear inconsistent, stop and report the exact conflict and its consequences. Do not silently choose an interpretation, weaken a requirement, or invent behaviour.

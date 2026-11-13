@@ -25,7 +25,7 @@ REQUIRED_PACKAGE_MEMBERS = {
 }
 
 REQUIRED_DOCUMENTATION_MEMBERS = {
-    "share/doc/adviso-compare/USER_GUIDE.md",
+    "share/doc/adviso-compare/user-guide.md",
     "share/doc/adviso-compare/examples/automatic/query.csv",
     "share/doc/adviso-compare/examples/automatic/reference.csv",
     "share/doc/adviso-compare/examples/custom/configuration.yaml",
@@ -129,7 +129,7 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         f"src/{member}" for member in REQUIRED_PACKAGE_MEMBERS
     } <= sdist_members
     assert {
-        "docs/USER_GUIDE.md",
+        "docs/user-guide.md",
         "docs/examples/automatic/query.csv",
         "docs/examples/automatic/reference.csv",
         "docs/examples/custom/configuration.yaml",
@@ -188,14 +188,14 @@ def test_distributions_and_installed_executable_cover_the_product_path(
         env=runtime_environment,
     )
     installed_guide = (
-        environment / "share" / "doc" / "adviso-compare" / "USER_GUIDE.md"
+        environment / "share" / "doc" / "adviso-compare" / "user-guide.md"
     )
     assert installed_guide.is_file()
     assert "# `adviso-compare` user guide" in installed_guide.read_text(
         encoding="utf-8"
     )
     assert installed_guide.read_bytes() == (
-        project_root / "docs" / "USER_GUIDE.md"
+        project_root / "docs" / "user-guide.md"
     ).read_bytes()
 
     executable = _installed_executable(environment)

@@ -58,7 +58,7 @@ namespaces = false
 "adviso_compare.schemas" = ["*.json"]
 
 [tool.setuptools.data-files]
-"share/doc/adviso-compare" = ["docs/USER_GUIDE.md"]
+"share/doc/adviso-compare" = ["docs/user-guide.md"]
 "share/doc/adviso-compare/examples/automatic" = [
     "docs/examples/automatic/query.csv",
     "docs/examples/automatic/reference.csv",

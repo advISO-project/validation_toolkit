@@ -16,7 +16,7 @@ non-error run produces canonical JSON results, the complete effective
 configuration as JSON, and a self-contained HTML report.
 
 For installation, commands, configuration rules, output fields, examples, and
-troubleshooting, read the [user guide](docs/USER_GUIDE.md).
+troubleshooting, read the [user guide](docs/user-guide.md).
 
 The basic command is:
 
@@ -38,11 +38,11 @@ summary identifies the published run directory.
 Both JSON formats use their own root `schema_version` and are independently
 versioned. Version 1 supports results schema `1.0` with configuration schema
 `1.0`. Keep the three files together; see the user guide's
-[package-validation procedure](docs/USER_GUIDE.md#73-structural-and-semantic-validation).
+[package-validation procedure](docs/user-guide.md#73-structural-and-semantic-validation).
 
 The behavioural contract is defined by subject:
 
-- [User guide](docs/USER_GUIDE.md): observable behaviour and semantic rules.
+- [User guide](docs/user-guide.md): observable behaviour and semantic rules.
 - [Comparison-configuration schema](src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json)
 - [Canonical-results schema](src/adviso_compare/schemas/comparison-results-v1.0.schema.json)
 
@@ -56,5 +56,5 @@ package is `adviso_compare`.
 ## Development
 
 See the [package contribution guide](CONTRIBUTING.md) for environment setup,
-tests, builds, and the change workflow. The [architecture guide](docs/ARCHITECTURE.md)
+tests, builds, and the change workflow. The [implementation guide](docs/implementation-guide.md)
 explains the implementation, data flow, and validation boundaries.

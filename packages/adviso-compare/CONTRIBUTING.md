@@ -2,7 +2,7 @@
 
 Read the repository [contribution guide](../../CONTRIBUTING.md) and applicable
 [agent guidance](../../AGENTS.md). The
-[architecture guide](docs/ARCHITECTURE.md) explains the implementation and
+[implementation guide](docs/implementation-guide.md) explains the implementation and
 points to the code and tests for each responsibility. The commands below run
 from the repository root and apply to this package. Other tools have their own
 development setup.
@@ -127,7 +127,7 @@ directory for the run.
 
 ## Documentation and examples
 
-The [user guide](docs/USER_GUIDE.md) and `docs/examples/` are installed with the
+The [user guide](docs/user-guide.md) and `docs/examples/` are installed with the
 distribution. Check their runnable examples and installed copies with:
 
 ```console
@@ -139,10 +139,10 @@ with edits to their source files. Use the maintained source guide during
 development; the distribution test checks the guide installed from a fresh
 wheel against that source.
 
-The [user guide](docs/USER_GUIDE.md) defines observable behaviour and semantic
+The [user guide](docs/user-guide.md) defines observable behaviour and semantic
 rules. The packaged [schemas](src/adviso_compare/schemas/) define permitted JSON
 structures and structural constraints. Tests verify this contract; the
-architecture guide explains its implementation. Resolve disagreements explicitly
+implementation guide explains its implementation. Resolve disagreements explicitly
 rather than allowing one document or a passing test to silently override another.
 
 The guide must remain usable offline and cover the complete CLI, supported
@@ -220,10 +220,10 @@ labels current through deliberate updates and rerun CI when changing them.
 
 ## Making a change
 
-Start with the [user guide](docs/USER_GUIDE.md) and the relevant packaged
+Start with the [user guide](docs/user-guide.md) and the relevant packaged
 [schema definitions](src/adviso_compare/schemas/). Resolve any disagreement
-between those sources before changing behaviour. The architecture guide's
-[change map](docs/ARCHITECTURE.md#where-to-make-a-change) helps locate the
+between those sources before changing behaviour. The implementation guide's
+[change map](docs/implementation-guide.md#where-to-make-a-change) helps locate the
 implementation and existing tests.
 
 For a behaviour change, review the existing tests first: adapt or remove cases
@@ -234,7 +234,7 @@ For documentation-only work, check links and examples; run the documentation
 and distribution tests when changing published instructions or installed files.
 
 Keep the schemas, controlled examples, and user guide aligned
-with the implemented behaviour. Update the architecture guide when module
+with the implemented behaviour. Update the implementation guide when module
 responsibilities or data flow change. These developer guides explain how to
 maintain the software; the user guide and schemas define product behaviour.
 

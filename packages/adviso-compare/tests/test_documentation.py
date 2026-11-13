@@ -43,7 +43,7 @@ def test_user_guide_examples_run_with_the_documented_outcome(
     configuration_name: str | None,
 ) -> None:
     """Each guide example is runnable and produces schema-valid evidence."""
-    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(
+    guide = (PROJECT_ROOT / "docs" / "user-guide.md").read_text(
         encoding="utf-8"
     )
     working = tmp_path / example
@@ -146,7 +146,7 @@ def test_configuration_fragments_fit_a_complete_field_definition(
     tmp_path: Path, heading: str
 ) -> None:
     """Guide fragments can be inserted into a configuration and validated."""
-    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(
+    guide = (PROJECT_ROOT / "docs" / "user-guide.md").read_text(
         encoding="utf-8"
     )
     section = guide.split(f" {heading}\n", 1)[1].split("\n### ", 1)[0]
@@ -164,7 +164,7 @@ def test_configuration_fragments_fit_a_complete_field_definition(
 
 def test_user_guide_identifies_supported_schemas_and_maintained_examples() -> None:
     """The offline guide names its supported schemas and both example modes."""
-    guide = (PROJECT_ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    guide = (PROJECT_ROOT / "docs" / "user-guide.md").read_text(encoding="utf-8")
 
     assert "comparison-configuration-v1.0.schema.json" in guide
     assert "comparison-results-v1.0.schema.json" in guide

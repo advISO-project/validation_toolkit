@@ -34,7 +34,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "three-file evidence package."
         ),
         epilog=(
-            "Full user guide: share/doc/adviso-compare/USER_GUIDE.md in the "
+            "Full user guide: share/doc/adviso-compare/user-guide.md in the "
             "Python installation."
         ),
         allow_abbrev=False,
