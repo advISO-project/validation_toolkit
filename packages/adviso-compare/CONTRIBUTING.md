@@ -49,7 +49,7 @@ python -m pytest packages/adviso-compare/tests/test_inputs.py -q
 
 The suite includes configuration and results schema validation, CLI behaviour,
 documentation examples, and distribution builds and installation. The
-[test conventions](tests/README.md) describe shared fixtures and schema helpers.
+[test conventions](#test-conventions) describe shared fixtures and schema helpers.
 
 Additional local checks are:
 
@@ -62,6 +62,33 @@ git diff --check
 No formatter, linter, or type checker is currently configured. The
 [CI workflow](../../.github/workflows/adviso-compare-ci.yml) runs the existing
 test, schema, example, build, and installed-product checks.
+
+### Test conventions
+
+Tests use descriptive behavioural names and assertions that remain meaningful
+without the development specification. Test modules, names, markers, fixtures,
+and snapshots do not embed specification requirement identifiers or acceptance
+scenario identifiers. During development, any formal traceability is maintained
+in the specification and review records as a one-way reference to the tests.
+
+Give parameterized cases descriptive IDs when their inputs include complex
+objects, mutations, or several expected values. Name the condition or boundary
+being tested so a CI failure is understandable without decoding a parameter
+dump. Simple scalar parameters such as `csv` or `complete` can keep their
+default IDs. Keep related rule variants in one table; use separate tests when
+different behaviours need substantially different setup or assertions. Small
+local helpers can share mechanical setup while leaving inputs and expectations
+visible in each test.
+
+Reusable synthetic documents are built in `tests/support/documents.py`. Builders
+return new objects on every call so tests can modify a document without leaking
+state into another test. Fixed values are intentional: generated fixtures must
+be deterministic and reviewable. A future generated on-disk fixture must record
+its generator and regeneration command alongside the fixture.
+
+Schema loading and validator construction live in `tests/support/schemas.py`.
+Structural validators load each document's packaged schema independently and
+enable JSON Schema format assertion.
 
 ## Build distributions
 
@@ -98,10 +125,9 @@ development; the distribution test checks the guide installed from a fresh
 wheel against that source.
 
 The [specification](docs/SPECIFICATION.md) and packaged schemas define the
-current behavioural contract. The original `IMPLEMENTATION_PLAN.md` describes
-the initial delivery sequence, and `VERIFICATION_REPORT.md` contains dated
-verification records. Consult their dates and scope when assessing evidence
-for the current source revision.
+current behavioural contract. The [verification report](docs/VERIFICATION_REPORT.md)
+contains dated verification records. Consult their dates and scope when
+assessing evidence for the current source revision.
 
 Release verification still requires successful runs across the supported
 Python/OS matrix, CI enforcement, and applicable release review. A configured

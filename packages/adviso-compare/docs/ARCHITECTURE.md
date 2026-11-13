@@ -245,4 +245,4 @@ locates responsibilities; it does not authorize a behavioural or schema change.
 Cross-cutting changes often need tests at more than one boundary. For example,
 a new configuration operation affects schema validation, resolved rules,
 translation, and recorded evidence. Existing tests and the
-[test conventions](../tests/README.md) provide the starting point.
+[test conventions](../CONTRIBUTING.md#test-conventions) provide the starting point.
