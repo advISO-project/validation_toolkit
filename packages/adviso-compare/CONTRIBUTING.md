@@ -9,10 +9,11 @@ development setup.
 
 ## Environment and editable installation
 
-Use a supported CPython version: 3.11, 3.12, 3.13, 3.14, or 3.15, with its
-latest available patch release. Python 3.11 is the installation minimum;
-future Python minor versions need verification before joining the support
-matrix. Activate an existing development environment, or create one with:
+Linux is fully supported with CPython 3.11, 3.12, 3.13, 3.14, and 3.15. Windows
+and macOS are expected to work, with full CI coverage on CPython 3.15 only.
+Use the latest available patch release. Python 3.11 is the installation minimum;
+additional Python/platform combinations need verification before joining the
+verified matrix. Activate an existing development environment, or create one with:
 
 ```console
 python -m venv .venv
@@ -113,20 +114,22 @@ pull requests), pushes to `main`, Tuesdays at 04:23 UTC, and manual requests.
 Pushes to development branches without an open pull request do not trigger it.
 It does not publish releases.
 
-Each run tests nine combinations. Linux is the primary platform and exercises
-every supported Python minor version. Windows and macOS exercise the minimum
-and newest supported versions on these standard GitHub-hosted runners:
+Each run executes the full suite, including schema/example checks, builds,
+and clean wheel/source-archive installation scenarios, on all seven combinations
+in the verification matrix using these standard GitHub-hosted runners:
 
 | Runner | Architecture | CPython versions |
 | --- | --- | --- |
 | `ubuntu-24.04` | x86-64 | 3.11, 3.12, 3.13, 3.14, 3.15 |
-| `macos-15` | ARM64 | 3.11, 3.15 |
-| `windows-2025` | x86-64 | 3.11, 3.15 |
+| `macos-15` | ARM64 | 3.15 |
+| `windows-2025` | x86-64 | 3.15 |
 
-The same matrix applies to pull requests, `main`, scheduled runs, and manual
-runs. Intermediate Python versions on Windows and macOS remain supported but
-are not exercised by routine CI. Review this coverage when preparing a release
-or updating the support policy.
+The same full suite and matrix apply to pull requests, `main`, scheduled runs,
+and manual runs. Linux is the fully supported deployment platform. Windows and
+macOS compatibility is checked on Python 3.15; other Python versions on those
+platforms are outside the verified matrix. No reduced test selection is used
+for any matrix job. Review this coverage when preparing a release or updating
+the support policy.
 
 These identify the environments exercised by CI, rather than every supported
 OS release or architecture. Runner images and Python patch releases can change;

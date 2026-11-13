@@ -7,8 +7,9 @@ The project is intended to support bioinformatics validation and verification ac
 ## Project status
 
 The tool is implemented and unreleased. Release verification is ongoing.
-The supported runtime matrix is CPython 3.11–3.15 on Linux, macOS, and Windows;
-Python 3.11 is the installation minimum.
+The tool is fully supported on Linux with CPython 3.11–3.15. Windows and macOS
+are expected to work, with full CI coverage limited to CPython 3.15 on those
+platforms. Python 3.11 is the installation minimum.
 It supports automatic strict-exact comparisons
 and custom YAML comparison configurations across CSV, TSV, and JSON inputs. A
 non-error run produces canonical JSON results, the complete effective

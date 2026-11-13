@@ -1556,11 +1556,14 @@ Error classes represented by exit codes 2 and 3 have run status `error`. The dis
 
 ## 12. Deployment, accessibility, and reliability
 
-The supported runtime matrix is CPython 3.11, 3.12, 3.13, 3.14, and 3.15 on
-Linux, macOS, and Windows, using the latest available patch release of each
-Python minor version. Python 3.11 is the installation minimum. Support for a
-new Python minor version requires an explicit matrix update and verification;
-it is not implied by the open-ended installation minimum.
+Linux is the fully supported deployment platform with CPython 3.11, 3.12,
+3.13, 3.14, and 3.15. Windows and macOS are expected to work; their full-suite
+compatibility verification is limited to CPython 3.15. Other Python versions on
+Windows and macOS are outside the verified runtime matrix. Each listed Python
+minor version uses its latest available patch release. Python 3.11 is the
+installation minimum. Additional Python/platform combinations require an
+explicit matrix update and verification; support is not implied by the
+open-ended installation minimum.
 
 - **REQ-DEP-001.** Once the software and its dependencies are installed, all core comparison functionality MUST operate fully offline;
 - **REQ-DEP-002.** During operation, the tool MUST NOT require a hosted service, account, licence server, telemetry connection, or any other network service;
@@ -1630,10 +1633,10 @@ In operational use, each laboratory is responsible for creating, approving, main
 
 ### 13.3 Continuous integration
 
-The routine CI matrix covers CPython 3.11–3.15 on Linux and CPython 3.11 and
-3.15 on each of Windows and macOS. Linux is the primary deployment platform.
-This CI coverage is a subset of the supported runtime combinations in Section
-12; intermediate Python versions on Windows and macOS remain supported.
+CI runs the full test suite on all seven runtime combinations identified in
+Section 12: CPython 3.11–3.15 on Linux and CPython 3.15 on each of Windows and
+macOS. Each job includes schema and example checks, builds, and clean wheel and
+source-distribution installation scenarios.
 
 **REQ-TST-008.** CI MUST:
 

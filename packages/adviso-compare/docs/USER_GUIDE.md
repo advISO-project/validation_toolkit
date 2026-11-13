@@ -101,9 +101,10 @@ An execution error prevents a trustworthy result and produces no new package.
 
 ## 2. Installation
 
-`adviso-compare` requires Python 3.11 or later. Supported Python versions are
-CPython 3.11, 3.12, 3.13, 3.14, and 3.15, on Linux, macOS, and Windows. Use the
-latest available patch release of your selected Python version.
+`adviso-compare` requires Python 3.11 or later. It is fully supported on Linux
+with CPython 3.11, 3.12, 3.13, 3.14, and 3.15. Windows and macOS are expected to
+work, but has only been tested with CPython 3.15 on those platforms. Use the latest
+available patch release of your selected Python version.
 
 You can install it into an existing virtual environment with `pip`, or use
 `pipx` to manage a dedicated environment for the tool. Creating a new
