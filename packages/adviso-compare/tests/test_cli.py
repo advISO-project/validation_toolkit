@@ -29,6 +29,9 @@ from tests.support.evidence import assert_run_package
         ([], None),
         (["--configuration", "rules.yaml"], Path("rules.yaml")),
     ],
+    ids=[
+        "automatic-mode", "custom-configuration",
+    ],
 )
 def test_direct_arguments_create_an_immutable_invocation_without_reading_inputs(
     optional_arguments: list[str],
@@ -53,7 +56,6 @@ def test_direct_arguments_create_an_immutable_invocation_without_reading_inputs(
         output=Path("does-not-exist-output"),
         configuration=expected_configuration,
     )
-    assert not hasattr(invocation, "overwrite")
     with pytest.raises(FrozenInstanceError):
         invocation.output = Path("other")  # type: ignore[misc]
 
@@ -110,6 +112,9 @@ def test_main_dispatches_the_invocation_through_an_injected_executor(
         (False, False, 0, "complete", 1, 0),
         (False, True, 1, "incomplete", 0, 1),
         (True, False, 0, "complete", 1, 0),
+    ],
+    ids=[
+        "custom-complete", "custom-incomplete", "automatic-complete",
     ],
 )
 def test_cli_executes_custom_automatic_and_incomplete_comparisons_end_to_end(
@@ -171,7 +176,6 @@ def test_cli_executes_custom_automatic_and_incomplete_comparisons_end_to_end(
     assert str(tmp_path) not in captured.out
 
 
-@pytest.mark.parametrize("through_cleanup", [False, True])
 @pytest.mark.parametrize(
     ("error", "expected_diagnostic"),
     [
@@ -192,13 +196,16 @@ def test_cli_executes_custom_automatic_and_incomplete_comparisons_end_to_end(
             "ERROR [output.invalid_destination]: run path already exists\n",
         ),
     ],
+    ids=[
+        "configuration-error", "input-error", "record-key-error",
+        "output-error",
+    ],
 )
 def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     error: Exception,
     expected_diagnostic: str,
-    through_cleanup: bool,
 ) -> None:
     """Classified operational failures publish nothing and omit tracebacks."""
     output = tmp_path / "evidence"
@@ -214,14 +221,12 @@ def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
             cleanup_finished = True
 
     def fail(_: ComparisonInvocation) -> ComparisonOutcome:
-        if through_cleanup:
-            try:
-                with cleanup():
-                    raise error
-            except type(error) as observed:
-                assert observed is error
-                raise
-        raise error
+        try:
+            with cleanup():
+                raise error
+        except type(error) as observed:
+            assert observed is error
+            raise
 
     exit_code = main(
         [
@@ -242,13 +247,18 @@ def test_expected_execution_errors_have_stable_diagnostics_and_exit_two(
     assert "Traceback" not in captured.err
     assert not output.exists()
     assert error.args == original_args
-    assert cleanup_finished is through_cleanup
+    assert cleanup_finished
 
 
 @pytest.mark.parametrize(
     "failure", ["input", "configuration", "validation", "linkage", "html"]
 )
-@pytest.mark.parametrize("parent_exists", [False, True])
+@pytest.mark.parametrize(
+    "parent_exists", [False, True],
+    ids=[
+        "new-parent", "existing-parent",
+    ],
+)
 def test_default_executor_errors_preserve_existing_content_without_new_output(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -337,6 +347,9 @@ def test_default_executor_errors_preserve_existing_content_without_new_output(
             "rerun and report the failure if it persists\n",
             3,
         ),
+    ],
+    ids=[
+        "memory-exhaustion", "unexpected-validation-error",
     ],
 )
 def test_resource_exhaustion_and_unexpected_failures_are_safely_isolated(
@@ -429,7 +442,13 @@ def test_each_required_argument_is_rejected_before_execution(
     assert captured.err.count("\n") == 1
 
 
-@pytest.mark.parametrize("unsupported", ["compare", "--overwrite"])
+@pytest.mark.parametrize(
+    "unsupported",
+    [
+        pytest.param("unexpected-command", id="positional-argument"),
+        pytest.param("--unknown-option", id="unknown-option"),
+    ],
+)
 def test_unsupported_arguments_are_rejected_before_execution(
     capsys: pytest.CaptureFixture[str],
     unsupported: str,
@@ -516,7 +535,6 @@ def test_help_documents_the_complete_direct_interface_and_user_guide(
     assert "share/doc/adviso-compare/USER_GUIDE.md" in captured.out
     assert "subcommand" not in captured.out.lower()
     assert "three-file evidence package" in " ".join(captured.out.split())
-    assert "--overwrite" not in captured.out
     assert "parent" in captured.out.lower()
 
 

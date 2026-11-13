@@ -279,6 +279,13 @@ def test_fixed_comparator_matrix(
         ({"relative_tolerance": "0.05"}, "0", "0", True),
         ({"relative_tolerance": "0.05"}, "0", "0.0000000000000001", False),
     ],
+    ids=[
+        "absolute-upper-bound", "absolute-lower-bound",
+        "above-absolute-bound", "relative-upper-bound",
+        "relative-lower-bound", "above-relative-bound",
+        "reference-directed-relative-bound", "negative-reference",
+        "zero-reference-equal", "zero-reference-unequal",
+    ],
 )
 def test_numeric_tolerance_is_exact_inclusive_and_reference_directed(
     tmp_path: Path,

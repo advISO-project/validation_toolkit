@@ -36,6 +36,9 @@ RESULTS_SCHEMA_ID = (
         (CONFIGURATION_SCHEMA_FILE, CONFIGURATION_SCHEMA_ID),
         (RESULTS_SCHEMA_FILE, RESULTS_SCHEMA_ID),
     ],
+    ids=[
+        "configuration", "results",
+    ],
 )
 def test_authoritative_schemas_are_packaged_valid_draft_2020_12_documents(
     filename: str,
@@ -131,6 +134,9 @@ def _references(value: Any) -> list[str]:
         ("configuration", CONFIGURATION_SCHEMA_FILE),
         ("results", RESULTS_SCHEMA_FILE),
     ],
+    ids=[
+        "configuration-family", "results-family",
+    ],
 )
 def test_schema_lookup_selects_the_document_family_and_version(
     family: str, filename: str,
@@ -142,6 +148,10 @@ def test_schema_lookup_selects_the_document_family_and_version(
 @pytest.mark.parametrize(
     ("family", "version"),
     [("configuration", "2.0"), ("results", "2.0"), ("unknown", "1.0")],
+    ids=[
+        "unknown-configuration-version", "unknown-results-version",
+        "unknown-family",
+    ],
 )
 def test_schema_lookup_rejects_unknown_families_and_versions(
     family: str, version: str,
@@ -152,7 +162,13 @@ def test_schema_lookup_rejects_unknown_families_and_versions(
 
 
 @pytest.mark.parametrize("family", ["configuration", "results"])
-@pytest.mark.parametrize("version", [None, "2.0", 1.0, ""])
+@pytest.mark.parametrize(
+    'version', [None, "2.0", 1.0, ""],
+    ids=[
+        "missing-version", "unsupported-version", "numeric-version",
+        "empty-version",
+    ],
+)
 def test_each_document_requires_its_own_supported_root_version(
     family: str, version: object,
 ) -> None:
@@ -200,15 +216,22 @@ def test_configuration_digest_has_exact_required_properties(mutation: Any) -> No
     assert not results_validator().is_valid(document)
 
 
-@pytest.mark.parametrize("digest_field", ["configuration", "input"])
 @pytest.mark.parametrize(
-    "value", ["", "0" * 63, "0" * 65, "A" * 64, "0" * 64 + "\n", 0],
-    ids=["empty", "short", "long", "uppercase", "trailing-newline", "not-text"],
+    ("digest_field", "value"),
+    [
+        pytest.param("configuration", "", id="empty"),
+        pytest.param("configuration", "0" * 63, id="short"),
+        pytest.param("configuration", "0" * 65, id="long"),
+        pytest.param("configuration", "A" * 64, id="uppercase"),
+        pytest.param("configuration", "0" * 64 + "\n", id="trailing-newline"),
+        pytest.param("configuration", 0, id="not-text"),
+        pytest.param("input", "A" * 64, id="input-digest-rejection"),
+    ],
 )
 def test_sha256_digests_require_exact_lowercase_hexadecimal_text(
     digest_field: str, value: object,
 ) -> None:
-    """Each digest contains exactly 64 lowercase hexadecimal characters."""
+    """Exercise shared digest constraints and their use in input provenance."""
     document = minimal_result()
     digest = (
         document["comparison_configuration_digest"]

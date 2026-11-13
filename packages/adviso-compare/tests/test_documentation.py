@@ -31,6 +31,9 @@ EXAMPLES = PROJECT_ROOT / "docs" / "examples"
         ("introductory", "reference.csv", "query.csv", "configuration.yaml"),
         ("custom", "reference.json", "query.csv", "configuration.yaml"),
     ],
+    ids=[
+        "automatic", "introductory-custom", "custom-transformations",
+    ],
 )
 def test_user_guide_examples_run_with_the_documented_outcome(
     tmp_path: Path,

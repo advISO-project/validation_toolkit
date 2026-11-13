@@ -278,6 +278,9 @@ def test_missing_and_extra_records_are_all_reported_deterministically(
             ("extra_record",),
         ),
     ],
+    ids=[
+        "both-empty", "reference-only", "query-only",
+    ],
 )
 def test_empty_and_one_sided_datasets_reconcile_without_special_cases(
     tmp_path: Path,

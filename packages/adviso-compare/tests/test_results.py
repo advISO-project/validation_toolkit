@@ -294,6 +294,10 @@ def test_incomplete_result_retains_causal_evidence_without_duplicate_finding(
         ("untyped_null", "null", "null_policy_violation", "null", False),
         ("mapping", '"unknown"', "mapping_failure", "string", False),
     ],
+    ids=[
+        "type-mismatch", "invalid-value", "typed-null", "untyped-null",
+        "unmapped-value",
+    ],
 )
 def test_contract_finding_registry_renders_code_specific_value_evidence(
     tmp_path: Path,
@@ -394,6 +398,11 @@ def test_dataset_level_missing_field_uses_the_distinct_compact_finding_form(
         lambda result: result["findings"][0].update(id="F000009"),
         lambda result: result["record_key_fields"].update(canonical=["wrong"]),
     ],
+    ids=[
+        "run-phase-disagreement", "record-count-disagreement",
+        "finding-total-disagreement", "nonsequential-finding-id",
+        "wrong-canonical-key-name",
+    ],
 )
 def test_semantic_validation_rejects_internally_incoherent_results(
     tmp_path: Path,
@@ -425,6 +434,9 @@ def test_semantic_validation_rejects_internally_incoherent_results(
             result["run"].update(status="incomplete"),
             result["phases"].update(values="incomplete"),
         ),
+    ],
+    ids=[
+        "wrong-matched-value-count", "incomplete-without-blocked-values",
     ],
 )
 def test_semantic_validation_reconciles_opportunities_and_values_status(
@@ -575,6 +587,10 @@ def test_finding_total_order_coalesces_duplicates_before_assigning_ids(
                 "value": ["1", "3"],
             },
         ),
+    ],
+    ids=[
+        "integer", "string", "boolean", "date", "datetime",
+        "list-of-decimals",
     ],
 )
 def test_typed_value_evidence_uses_each_canonical_rendering_form(

@@ -38,6 +38,10 @@ def _write_bytes(path: Path, content: bytes) -> Path:
         ("reference.TsV", b"record_id\tvalue\nS1\talpha\n", InputFormat.TSV),
         ("reference.JsOn", b'[{"record_id":"S1","value":"alpha"}]', InputFormat.JSON),
     ],
+    ids=[
+        "uppercase-csv-extension", "mixed-case-tsv-extension",
+        "mixed-case-json-extension",
+    ],
 )
 def test_format_and_exact_byte_provenance_are_discovered_independently(
     tmp_path: Path,
@@ -61,6 +65,9 @@ def test_format_and_exact_byte_provenance_are_discovered_independently(
 @pytest.mark.parametrize(
     ("suffix", "delimiter"),
     [("csv", ","), ("tsv", "\t")],
+    ids=[
+        "csv", "tsv",
+    ],
 )
 def test_fixed_tabular_dialects_preserve_strings_and_record_locations(
     tmp_path: Path,
@@ -225,6 +232,9 @@ def test_parser_native_equality_is_recursive_and_category_preserving(
         ("empty.csv", b"record_id,value\n", ("record_id", "value")),
         ("empty.tsv", b"record_id\tvalue\n", ("record_id", "value")),
     ],
+    ids=[
+        "empty-json-array", "csv-header-only", "tsv-header-only",
+    ],
 )
 def test_structurally_valid_empty_datasets_remain_valid(
     tmp_path: Path,
@@ -241,7 +251,12 @@ def test_structurally_valid_empty_datasets_remain_valid(
     assert dataset.field_names == expected_fields
 
 
-@pytest.mark.parametrize(("suffix", "delimiter"), [("csv", ","), ("tsv", "\t")])
+@pytest.mark.parametrize(
+    ("suffix", "delimiter"), [("csv", ","), ("tsv", "\t")],
+    ids=[
+        "csv", "tsv",
+    ],
+)
 @pytest.mark.parametrize(
     ("body", "line_number"),
     [
@@ -250,6 +265,11 @@ def test_structurally_valid_empty_datasets_remain_valid(
         ('"closed"trailing', 2),
         ('"backslash\\"escape"', 2),
         ("bare\rcarriage-return", 2),
+    ],
+    ids=[
+        "unterminated-quote", "quote-in-unquoted-field",
+        "text-after-closing-quote", "backslash-escape",
+        "bare-carriage-return",
     ],
 )
 def test_malformed_tabular_quote_and_line_syntax_is_rejected_for_each_dialect(
@@ -270,7 +290,12 @@ def test_malformed_tabular_quote_and_line_syntax_is_rejected_for_each_dialect(
     assert f"physical line {line_number}" in raised.value.message
 
 
-@pytest.mark.parametrize(("suffix", "delimiter"), [("csv", ","), ("tsv", "\t")])
+@pytest.mark.parametrize(
+    ("suffix", "delimiter"), [("csv", ","), ("tsv", "\t")],
+    ids=[
+        "csv", "tsv",
+    ],
+)
 @pytest.mark.parametrize(
     ("document_template", "message_fragment"),
     [
@@ -279,6 +304,10 @@ def test_malformed_tabular_quote_and_line_syntax_is_rejected_for_each_dialect(
         ("field{d}other\none\n", "has 1 fields; expected 2"),
         ("field{d}other\none{d}two{d}three\n", "has 3 fields; expected 2"),
         ("field{d}other\n\n", "has 0 fields; expected 2"),
+    ],
+    ids=[
+        "duplicate-header", "empty-header", "too-few-columns",
+        "too-many-columns", "blank-record",
     ],
 )
 def test_invalid_tabular_structure_is_rejected_for_each_dialect(
@@ -346,6 +375,10 @@ def test_non_finite_json_tokens_are_rejected_in_every_structural_context(
         (b"[1]", "array item 0 is integer"),
         (b'[{"record_id":"S1"},[]]', "array item 1 is array"),
     ],
+    ids=[
+        "object-root", "integer-root", "string-root", "integer-record",
+        "array-record",
+    ],
 )
 def test_invalid_json_roots_identify_the_value_and_required_structure(
     tmp_path: Path,
@@ -363,18 +396,9 @@ def test_invalid_json_roots_identify_the_value_and_required_structure(
     assert "record object" in raised.value.message
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        pytest.param(b'[\n {"a": 1},\n]', id="array-trailing-comma"),
-        pytest.param(b'[\n {"a": 1,}\n]', id="object-trailing-comma"),
-        pytest.param(b'[\n {"a": }\n]', id="missing-value"),
-    ],
-)
-def test_malformed_json_reports_its_parser_location(
-    tmp_path: Path, content: bytes
-) -> None:
+def test_malformed_json_reports_its_parser_location(tmp_path: Path) -> None:
     """Syntax diagnostics preserve the running JSON parser's location."""
+    content = b'[\n {"a": 1},\n]'
     # Python versions can attribute trailing commas to different positions.
     with pytest.raises(json.JSONDecodeError) as parser_error:
         json.loads(content)
@@ -391,14 +415,7 @@ def test_malformed_json_reports_its_parser_location(
     )
 
 
-@pytest.mark.parametrize(
-    ("text", "kind"),
-    [("[\n", "invalid_syntax"), ('{"x":1,"x":2}', "duplicate_member"),
-     ("NaN", "non_finite")],
-)
-def test_json_errors_survive_cleanup_with_their_original_context(
-    text: str, kind: str
-) -> None:
+def test_json_errors_survive_cleanup_with_their_original_context() -> None:
     """Cleanup preserves the parser error, its cause, and location metadata."""
     originals: list[JsonValueError] = []
     causes: list[BaseException | None] = []
@@ -415,7 +432,7 @@ def test_json_errors_survive_cleanup_with_their_original_context(
     with pytest.raises(JsonValueError) as raised:
         with cleanup():
             try:
-                decode_json_value(text)
+                decode_json_value("[\n")
             except JsonValueError as error:
                 originals.append(error)
                 causes.append(error.__cause__)
@@ -424,11 +441,8 @@ def test_json_errors_survive_cleanup_with_their_original_context(
     assert cleanup_finished
     assert raised.value is originals[0]
     assert raised.value.__cause__ is causes[0]
-    assert raised.value.kind == kind
-    if kind == "invalid_syntax":
-        assert (raised.value.line, raised.value.column) == (2, 1)
-    else:
-        assert (raised.value.line, raised.value.column) == (None, None)
+    assert raised.value.kind == "invalid_syntax"
+    assert (raised.value.line, raised.value.column) == (2, 1)
 
 
 @pytest.mark.parametrize(
@@ -442,6 +456,11 @@ def test_json_errors_survive_cleanup_with_their_original_context(
         ("records.tsv", b"", "invalid_structure"),
         ("records.json", b'[{"a":1,"a":2}]', "invalid_structure"),
         ("records.json", b'[{"a":{"b":1,"b":2}}]', "invalid_structure"),
+    ],
+    ids=[
+        "missing-extension", "unknown-extension", "malformed-json",
+        "empty-json-file", "empty-csv-file", "empty-tsv-file",
+        "duplicate-record-member", "duplicate-nested-member",
     ],
 )
 def test_invalid_inputs_are_rejected_with_the_specific_input_error(

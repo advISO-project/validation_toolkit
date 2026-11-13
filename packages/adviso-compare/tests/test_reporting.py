@@ -282,6 +282,11 @@ def test_value_mismatch_is_readable_without_expanding_structured_evidence(
          {"absolute_tolerance": "0.00000000000000000000000000001"}, False,
          "0.00000000000000000000000000002", "0.00000000000000000000000000001"),
     ],
+    ids=[
+        "absolute-tolerance", "relative-negative-reference",
+        "relative-zero-reference", "post-quantisation",
+        "precision-beyond-default-context",
+    ],
 )
 def test_tolerance_finding_explains_exact_translated_difference_and_limit(
     tmp_path: Path, reference: str, query: str, parameters: dict[str, str],
@@ -349,6 +354,10 @@ def test_finding_source_field_names_are_escaped_in_headings_and_tables(
         ([1, None], {"x": [False, "<script>"]},
          ["array", "object", "[1, null]", '<script>']),
     ],
+    ids=[
+        "null-versus-empty-string", "integer-versus-string", "boolean-values",
+        "nested-array-versus-object",
+    ],
 )
 def test_untyped_finding_values_preserve_types_and_nested_content(
     tmp_path: Path, reference: object, query: object, expected: list[str]
@@ -382,61 +391,11 @@ def test_empty_report_retains_navigation_and_empty_finding_groups() -> None:
     assert "No field exclusions were reported." in report
 
 
-@pytest.mark.parametrize(
-    ("case", "expected"),
-    [
-        ("missing-record", ["Missing record", "Record absent"]),
-        ("dataset-field", ["Dataset-level finding", "observed_value",
-                           "required by the configuration but is absent"]),
-        ("collection", ["list of string", '["WT", "MUT"]',
-                        "Lists are compared by position"]),
-        ("typed-null", ["Null policy violation", "Null (present)", "decimal",
-                        "does not allow null values"]),
-        ("type-mismatch", ["Type mismatch", "source type", "decimal"]),
-        ("invalid-value", ["Invalid field value", "valid decimal"]),
-        ("mapping", ["Mapping failure", "no entry in the configured mapping"]),
-        ("null-mismatch", ["Value mismatch", "Both values are null",
-                           "does not treat two null values as equal"]),
-    ],
-)
-def test_finding_forms_show_only_the_available_record_and_value_evidence(
-    tmp_path: Path, case: str, expected: list[str]
-) -> None:
-    """Render record, dataset, collection and null findings directly."""
-    configuration = minimal_configuration()
-    reference_text = '[{"reference_id":"S1","expected_value":1}]'
-    query_text = '[{"query_id":"S1","observed_value":null}]'
-    suffix = "json"
-    if case == "missing-record":
-        query_text = "[]"
-    elif case == "dataset-field":
-        reference_text = "reference_id,expected_value\n"
-        query_text = "query_id\n"
-        suffix = "csv"
-    elif case == "type-mismatch":
-        query_text = '[{"query_id":"S1","observed_value":[]}]'
-    elif case == "invalid-value":
-        query_text = '[{"query_id":"S1","observed_value":"not a number"}]'
-    elif case == "mapping":
-        field = configuration["fields"]["definitions"]["measured_value"]
-        field["value_mapping"] = {"query": [
-            {"from": {"category": "integer", "value": "1"},
-             "to": {"category": "integer", "value": "1"}}
-        ]}
-        query_text = '[{"query_id":"S1","observed_value":2}]'
-    elif case == "null-mismatch":
-        field = configuration["fields"]["definitions"]["measured_value"]
-        field["null_policy"] = {"allowed": True, "nulls_equal": False}
-        reference_text = '[{"reference_id":"S1","expected_value":null}]'
-    elif case == "collection":
-        field = configuration["fields"]["definitions"]["measured_value"]
-        field["logical_type"] = {
-            "collection_type": "list", "element_type": "string",
-            "element_comparator": {"name": "typed_exact"},
-        }
-        field["comparator"] = {"name": "list_exact"}
-        reference_text = '[{"reference_id":"S1","expected_value":["WT"]}]'
-        query_text = '[{"query_id":"S1","observed_value":["WT","MUT"]}]'
+def _render_input_comparison(
+    tmp_path: Path, reference_text: str, query_text: str,
+    configuration: dict[str, Any], *, suffix: str = "json",
+) -> str:
+    """Run synthetic inputs and return their published HTML for finding checks."""
     reference = tmp_path / f"reference.{suffix}"
     query = tmp_path / f"query.{suffix}"
     reference.write_text(reference_text, encoding="utf-8")
@@ -447,18 +406,130 @@ def test_finding_forms_show_only_the_available_record_and_value_evidence(
         reference=reference, query=query, configuration=rules,
         output=tmp_path / "evidence",
     ))
-    report = (outcome.output / "comparison-report.html").read_text("utf-8")
+    return (outcome.output / "comparison-report.html").read_text("utf-8")
+
+
+def test_missing_record_finding_identifies_absent_query_record(
+    tmp_path: Path,
+) -> None:
+    """A missing counterpart is explained without invented value evidence."""
+    report = _render_input_comparison(
+        tmp_path, '[{"reference_id":"S1","expected_value":1}]', "[]",
+        minimal_configuration(),
+    )
+    text = " ".join(" ".join(_ReportView(report).findings).split())
+
+    assert "Missing record" in text
+    assert "Record absent" in text
+
+
+def test_dataset_field_finding_has_no_record_or_value_evidence(
+    tmp_path: Path,
+) -> None:
+    """A missing required header is reported without inventing a record."""
+    report = _render_input_comparison(
+        tmp_path, "reference_id,expected_value\n", "query_id\n",
+        minimal_configuration(), suffix="csv",
+    )
+    text = " ".join(" ".join(_ReportView(report).findings).split())
+
+    assert "Dataset-level finding" in text
+    assert "observed_value" in text
+    assert "required by the configuration but is absent" in text
+    assert "Record absent" not in text
+    assert "Source value" not in text
+
+
+def test_list_difference_explains_positional_comparison(tmp_path: Path) -> None:
+    """A list mismatch retains element types and explains positional comparison."""
+    configuration = minimal_configuration()
+    field = configuration["fields"]["definitions"]["measured_value"]
+    field["logical_type"] = {
+        "collection_type": "list", "element_type": "string",
+        "element_comparator": {"name": "typed_exact"},
+    }
+    field["comparator"] = {"name": "list_exact"}
+    report = _render_input_comparison(
+        tmp_path, '[{"reference_id":"S1","expected_value":["WT"]}]',
+        '[{"query_id":"S1","observed_value":["WT","MUT"]}]', configuration,
+    )
+    text = " ".join(" ".join(_ReportView(report).findings).split())
+
+    assert "list of string" in text
+    assert '["WT", "MUT"]' in text
+    assert "Lists are compared by position" in text
+
+
+@pytest.mark.parametrize(
+    ("query_value_json", "field_changes", "expected"),
+    [
+        pytest.param(
+            "null", {},
+            ["Null policy violation", "Null (present)", "decimal",
+             "does not allow null values"],
+            id="null-policy-violation",
+        ),
+        pytest.param(
+            "[]", {}, ["Type mismatch", "source type", "decimal"],
+            id="incompatible-source-type",
+        ),
+        pytest.param(
+            '\"not a number\"', {}, ["Invalid field value", "valid decimal"],
+            id="invalid-decimal-text",
+        ),
+        pytest.param(
+            "2", {"value_mapping": {"query": [
+                {"from": {"category": "integer", "value": "1"},
+                 "to": {"category": "integer", "value": "1"}}
+            ]}},
+            ["Mapping failure", "no entry in the configured mapping"],
+            id="unmapped-source-value",
+        ),
+    ],
+)
+def test_assessment_issues_explain_the_configured_field_failure(
+    tmp_path: Path, query_value_json: str,
+    field_changes: dict[str, Any], expected: list[str],
+) -> None:
+    """Field assessment issues explain the applicable rule and recorded evidence."""
+    configuration = minimal_configuration()
+    configuration["fields"]["definitions"]["measured_value"].update(field_changes)
+    report = _render_input_comparison(
+        tmp_path, '[{"reference_id":"S1","expected_value":1}]',
+        f'[{{"query_id":"S1","observed_value":{query_value_json}}}]',
+        configuration,
+    )
     text = " ".join(" ".join(_ReportView(report).findings).split())
 
     for value in expected:
         assert value in text
-    if case == "dataset-field":
-        assert "Record absent" not in text
-        assert "Source value" not in text
+
+
+def test_null_comparison_explains_why_two_nulls_do_not_match(
+    tmp_path: Path,
+) -> None:
+    """Allowed nulls can still differ under the configured equality policy."""
+    configuration = minimal_configuration()
+    field = configuration["fields"]["definitions"]["measured_value"]
+    field["null_policy"] = {"allowed": True, "nulls_equal": False}
+    report = _render_input_comparison(
+        tmp_path, '[{"reference_id":"S1","expected_value":null}]',
+        '[{"query_id":"S1","observed_value":null}]', configuration,
+    )
+    text = " ".join(" ".join(_ReportView(report).findings).split())
+
+    assert "Value mismatch" in text
+    assert "Both values are null" in text
+    assert "does not treat two null values as equal" in text
 
 
 @pytest.mark.parametrize("status", ["complete", "incomplete"])
-@pytest.mark.parametrize("parent_exists", [False, True])
+@pytest.mark.parametrize(
+    "parent_exists", [False, True],
+    ids=[
+        "new-parent", "existing-parent",
+    ],
+)
 def test_publication_creates_exact_private_three_file_package(
     tmp_path: Path,
     status: str,
@@ -806,7 +877,12 @@ def test_parent_creation_permission_failure_is_a_write_error(
     assert not list(tmp_path.glob(".evidence.*"))
 
 
-@pytest.mark.parametrize("parent_exists", [False, True])
+@pytest.mark.parametrize(
+    "parent_exists", [False, True],
+    ids=[
+        "new-parent", "existing-parent",
+    ],
+)
 def test_concurrent_runs_publish_independently_under_the_same_parent(
     tmp_path: Path,
     parent_exists: bool,

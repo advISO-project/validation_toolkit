@@ -154,6 +154,9 @@ def _invalid_key(document: JsonObject) -> None:
             TabularLocation(1, 2, "reference_batch"),
         ),
     ],
+    ids=[
+        "missing-key", "null-key", "invalid-key-component",
+    ],
 )
 def test_missing_null_and_invalid_custom_keys_are_attributable_input_errors(
     tmp_path: Path,
@@ -384,6 +387,10 @@ def test_automatic_discovery_selects_the_only_exact_shared_string_candidate(
             (),
         ),
     ],
+    ids=[
+        "no-shared-identity", "ambiguous-candidates",
+        "composite-only-identity",
+    ],
 )
 def test_automatic_discovery_rejects_zero_or_multiple_candidates_without_values(
     tmp_path: Path,
@@ -454,6 +461,10 @@ def test_invalid_automatic_candidates_are_ignored_without_coercion(
             ),
             "duplicate record key",
         ),
+    ],
+    ids=[
+        "missing-record-id", "null-record-id", "numeric-record-id",
+        "duplicate-record-id",
     ],
 )
 def test_invalid_shared_record_id_never_falls_back_to_another_candidate(
