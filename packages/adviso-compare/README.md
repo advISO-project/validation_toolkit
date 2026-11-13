@@ -40,11 +40,15 @@ versioned. Version 1 supports results schema `1.0` with configuration schema
 `1.0`. Keep the three files together; see the user guide's
 [package-validation procedure](docs/USER_GUIDE.md#73-structural-and-semantic-validation).
 
-The current normative artefacts are:
+The behavioural contract is defined by subject:
 
-- [Behaviour specification](docs/SPECIFICATION.md)
+- [User guide](docs/USER_GUIDE.md): observable behaviour and semantic rules.
 - [Comparison-configuration schema](src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json)
 - [Canonical-results schema](src/adviso_compare/schemas/comparison-results-v1.0.schema.json)
+
+The schemas define JSON structure and structural constraints. Disagreements
+between the schemas and the guide must be resolved explicitly; tests verify
+this contract rather than override it.
 
 The distribution and executable are named `adviso-compare`; the Python import
 package is `adviso_compare`.

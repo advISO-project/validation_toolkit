@@ -65,11 +65,19 @@ test, schema, example, build, and installed-product checks.
 
 ### Test conventions
 
-Tests use descriptive behavioural names and assertions that remain meaningful
-without the development specification. Test modules, names, markers, fixtures,
-and snapshots do not embed specification requirement identifiers or acceptance
-scenario identifiers. During development, any formal traceability is maintained
-in the specification and review records as a one-way reference to the tests.
+Tests use descriptive behavioural names and assertions. Test modules, names,
+markers, fixtures, and snapshots do not embed requirement or acceptance-scenario
+identifiers. Any formal traceability belongs in review records as a one-way
+reference to the tests.
+
+Maintain coverage of parsing, translation, comparators, result semantics,
+schemas, CLI errors and exit codes, deterministic output, and clean wheel and
+source-archive installations. Exercise malformed inputs, both directions of
+missing/extra content, composite and duplicate keys, and tolerance boundaries.
+Every corrected material defect needs suitable regression coverage; adapt an
+existing test when it expresses the rule clearly. Property-based and mutation
+testing are optional techniques to use where they add useful assurance, not
+release gates. No additional testing framework is required.
 
 Give parameterized cases descriptive IDs when their inputs include complex
 objects, mutations, or several expected values. Name the condition or boundary
@@ -85,6 +93,13 @@ return new objects on every call so tests can modify a document without leaking
 state into another test. Fixed values are intentional: generated fixtures must
 be deterministic and reviewable. A future generated on-disk fixture must record
 its generator and regeneration command alongside the fixture.
+
+Keep controlled fixtures under version control with their purpose, inputs,
+configuration, and expected outcome clear from the fixture or test. Use only
+synthetic, non-sensitive data. When fixtures form part of retained release
+verification evidence, identify their source revision or generation method and
+record any additional review performed; fixture digests can supplement the
+source revision. Do not imply independent review when none occurred.
 
 Schema loading and validator construction live in `tests/support/schemas.py`.
 Structural validators load each document's packaged schema independently and
@@ -124,14 +139,18 @@ with edits to their source files. Use the maintained source guide during
 development; the distribution test checks the guide installed from a fresh
 wheel against that source.
 
-The [specification](docs/SPECIFICATION.md) and packaged schemas define the
-current behavioural contract. The [verification report](docs/VERIFICATION_REPORT.md)
-contains dated verification records. Consult their dates and scope when
-assessing evidence for the current source revision.
+The [user guide](docs/USER_GUIDE.md) defines observable behaviour and semantic
+rules. The packaged [schemas](src/adviso_compare/schemas/) define permitted JSON
+structures and structural constraints. Tests verify this contract; the
+architecture guide explains its implementation. Resolve disagreements explicitly
+rather than allowing one document or a passing test to silently override another.
 
-Release verification still requires successful runs across the supported
-Python/OS matrix, CI enforcement, and applicable release review. A configured
-workflow or passing local suite alone does not establish those checks.
+The guide must remain usable offline and cover the complete CLI, supported
+inputs, automatic and custom configuration rules, output fields, validation,
+errors, limitations, and governance boundaries. Complete configuration and
+results examples must validate against their respective schemas, and worked
+commands must produce their documented outcomes. A material disagreement among
+the guide, schemas, examples, and implementation blocks release.
 
 ## Continuous integration
 
@@ -201,7 +220,7 @@ labels current through deliberate updates and rerun CI when changing them.
 
 ## Making a change
 
-Start with the [specification](docs/SPECIFICATION.md) and the relevant packaged
+Start with the [user guide](docs/USER_GUIDE.md) and the relevant packaged
 [schema definitions](src/adviso_compare/schemas/). Resolve any disagreement
 between those sources before changing behaviour. The architecture guide's
 [change map](docs/ARCHITECTURE.md#where-to-make-a-change) helps locate the
@@ -214,11 +233,85 @@ then run the complete suite and relevant schema and distribution checks.
 For documentation-only work, check links and examples; run the documentation
 and distribution tests when changing published instructions or installed files.
 
-Keep the specification, schemas, controlled examples, and user guide aligned
+Keep the schemas, controlled examples, and user guide aligned
 with the implemented behaviour. Update the architecture guide when module
 responsibilities or data flow change. These developer guides explain how to
-maintain the software; they do not add product requirements.
+maintain the software; the user guide and schemas define product behaviour.
 
 When submitting a change, describe its effect, tests and commands run, and any
 remaining verification limits. Distinguish a passing local suite from checks
 performed across the supported environments.
+
+## Compatibility and versioning
+
+Software releases, comparison-configuration schemas, and results schemas have
+independent version identifiers. Each release documents supported schema
+versions and combinations in the user guide and release notes. Unknown versions
+or unsupported combinations must be rejected clearly. A configuration change
+does not by itself require a results-schema revision; assess whether results
+structure or meaning needs a corresponding schema revision.
+
+Before changing either schema, publish the compatibility rules. For an
+incompatible change, provide a migration path or documented transition
+arrangements. Treat changes to the distribution, executable, or import-package
+name as compatibility changes too. Preserve existing schema identifiers unless
+a deliberate version change has been approved.
+
+## Preparing a release
+
+Release publication is manual; the CI workflow builds and verifies distributions
+but does not publish them. Each release needs:
+
+- a fixed semantic version and immutable source identification;
+- passing full-suite CI on all seven combinations in the verification matrix;
+- passing documentation/example, schema, build, and installed-product checks;
+- release notes stating changes, known limitations, supported runtimes, and
+  supported schema versions and combinations; and
+- retained verification evidence identifying the source commit, published
+  artefacts and SHA-256 checksums, checks and outcomes, environments, and resolved
+  dependencies.
+
+Additional independent review, signing or build attestation, property-based
+testing, and mutation testing are optional. Record them if performed. They are
+not release gates, and another person's approval is not a merge requirement.
+
+Use this sequence:
+
+1. Prepare release notes and assess the impact on comparison semantics, evidence
+   formats, compatibility, and existing users. Check the current documentation,
+   examples, runtime matrix, and schema compatibility statements. Identify any
+   known limitations explicitly.
+2. Merge the prepared changes through the protected branch and select the exact
+   release commit. Use a clean checkout. Choose the semantic version and create
+   its release tag at that commit. `setuptools-scm` derives the distribution
+   version from Git; check the resulting version rather than editing the
+   generated `_version.py`. Never move a published release tag or replace its
+   artefacts; corrections receive a new version.
+3. Run the CI workflow for the release tag and require all seven matrix jobs to
+   pass. Confirm the recorded source commit and built distribution versions are
+   those intended for release. Retain the JUnit results and environment and
+   dependency records before their 30-day CI retention expires. Matrix execution
+   includes the controlled Unicode-sensitive and determinism tests; do not infer
+   cross-platform verification from a local run alone.
+4. Select one matching wheel/source-archive pair from a successful matrix job.
+   The distribution tests exercise fresh installations of each of those exact
+   archives. Record which job supplied them and their SHA-256 checksums. Publish
+   these verified files rather than rebuilding them after verification. If a
+   rebuild is necessary, verify the replacement archives and record their new
+   checksums before publication.
+5. Create a concise release verification record identifying the tag, commit,
+   supplying CI run/job, all matrix outcomes, artefact filenames and checksums,
+   environments and dependency records, documentation/example checks, and any
+   limitations or additional review. Store it and the relevant CI evidence with
+   the release, for example as GitHub Release attachments. Keep these records
+   beyond routine CI retention; do not append them to a rolling source document.
+6. Publish the release notes and verified wheel/source archive through the
+   chosen release channel, such as a GitHub Release. Confirm that published
+   artefact checksums match the retained record. Installing from a package index
+   additionally requires publishing those same files to that index; a GitHub
+   Release alone does not make them available there.
+
+The build and installation commands above also support local preparation, but
+a passing local suite does not replace the required matrix evidence. The
+release procedure records dependency resolution for the tested artefacts; it
+does not claim that users will resolve identical dependencies in the future.

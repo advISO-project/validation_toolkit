@@ -2,17 +2,17 @@
 
 ## Purpose of this file
 
-This file governs how agents work in this monorepo. It does not define product behaviour. Product requirements belong in the applicable package specification and normative schemas; do not duplicate them here.
+This file governs how agents work in this monorepo. It does not define product behaviour. Product requirements belong in the applicable package's behavioural documentation and normative schemas; do not duplicate them here.
 
 ## Sources of truth
 
-For `adviso-compare`, use this order of authority:
+For `adviso-compare`, authority is assigned by subject:
 
-1. `packages/adviso-compare/docs/SPECIFICATION.md` — normative behaviour.
-2. `packages/adviso-compare/src/adviso_compare/schemas/comparison-configuration-v1.0.schema.json` — normative comparison-configuration structure.
-3. `packages/adviso-compare/src/adviso_compare/schemas/comparison-results-v1.0.schema.json` — normative canonical-results structure.
-4. Version 1 tests and controlled fixtures — executable verification of the normative sources.
-5. User documentation — explanatory material that must agree with the sources above.
+- The packaged schemas in `packages/adviso-compare/src/adviso_compare/schemas/` define the permitted JSON structures and structural constraints for their respective document families.
+- `packages/adviso-compare/docs/USER_GUIDE.md` defines observable behaviour and semantic rules that the schemas cannot express.
+- `packages/adviso-compare/CONTRIBUTING.md` defines package development, verification, compatibility, and release procedures.
+- `packages/adviso-compare/docs/ARCHITECTURE.md` explains the implementation; it does not define product behaviour.
+- Tests and controlled fixtures verify the documented contract; they do not override it or supply undocumented requirements.
 
 If these sources appear inconsistent, stop and report the exact conflict and its consequences. Do not silently choose an interpretation, weaken a requirement, or invent behaviour.
 
@@ -34,7 +34,7 @@ Do not create a package for a proposed tool until its scope and implementation w
 
 Before changing behaviour:
 
-1. Read the relevant specification sections in full, including referenced requirements elsewhere in the document.
+1. Read the relevant behavioural documentation in full, including referenced rules elsewhere in the document.
 2. Read the relevant schema definitions.
 3. Identify the specified behaviours affected by the work.
 4. Add or update the smallest coherent set of tests that verifies those behaviours.
@@ -42,11 +42,11 @@ Before changing behaviour:
 6. Run proportionate wider tests, static checks, schema checks, and packaging checks.
 7. Update affected documentation and controlled fixtures.
 
-Use test-driven development for the version 1 implementation. A failing test is useful only when it represents current specified behaviour. Do not create tests for discarded ideas, historical decisions that never entered version 1, or renamed and removed properties.
+Use test-driven development for behavioural changes. A failing test is useful only when it represents current documented behaviour. Do not create tests for discarded ideas, historical decisions, or renamed and removed properties.
 
 ## Change control
 
-- Do not change a package specification, its normative schemas, or established requirement semantics unless the task explicitly authorizes a specification change.
+- Do not change a package's behavioural contract, normative schemas, or established requirement semantics unless the task explicitly authorizes that change.
 - Preserve schema version identifiers and canonical `$id` values unless a deliberate version change has been approved.
 - When behaviour changes are authorized, update all affected normative text, schemas, tests, fixtures, and user documentation together.
 - Do not add speculative features, extension points, compatibility layers, dependencies, or abstractions.
@@ -77,17 +77,17 @@ Do not introduce or replace a formatter, linter, type checker, build backend, te
 
 ## Testing practice
 
-- Give tests descriptive behavioural names that remain meaningful without the specification.
-- Do not embed specification requirement identifiers or acceptance-scenario identifiers in code, tests, fixtures, snapshots, or package metadata. Development traceability belongs in the specification and review records, and must remain a one-way reference from those records to the software artefacts.
+- Give tests descriptive behavioural names that remain meaningful without a separate requirements catalogue.
+- Do not embed requirement identifiers or acceptance-scenario identifiers in code, tests, fixtures, snapshots, or package metadata. Any formal development traceability belongs in review records and must remain a one-way reference from those records to the software artefacts.
 - Prefer parameterization when it expresses one rule table clearly; do not merge unrelated behaviours merely to reduce test count.
 - Test public behaviour and stable internal contracts rather than private implementation details.
 - Use controlled, synthetic, non-sensitive fixtures.
 - Keep fixtures small enough for meaningful review unless scale is the subject of the test.
 - Document generated fixtures and make their regeneration deterministic.
-- Test both directions where the specification requires symmetry.
+- Test both directions where the documented behaviour requires symmetry.
 - Exercise boundary values, malformed inputs, and failure paths, not only successful examples.
 - Validate representative configuration and result documents against their packaged schemas.
-- Include installed-entry-point and built-distribution tests where required by the specification.
+- Include installed-entry-point and built-distribution tests as required by the package's verification policy.
 - Do not update expected outputs blindly; review semantic changes field by field.
 
 Not every implementation, documentation, release-process, or quality requirement needs a direct automated test. Add automated coverage where it provides a reliable and maintainable verification of observable behaviour.
@@ -98,7 +98,7 @@ Not every implementation, documentation, release-process, or quality requirement
 - Do not use destructive repository or filesystem operations unless the user has explicitly authorized them and the exact target has been verified.
 - Never overwrite unrelated user changes to make a check pass.
 
-Refer to the specification for the software's normative security and data-governance behaviour.
+Refer to the package's user guide for its security and data-governance behaviour.
 
 ## Documentation
 

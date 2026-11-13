@@ -50,6 +50,11 @@ The output is comparison evidence. Your laboratory decides how that evidence
 contributes to its validation and quality processes; the tool does not make an
 acceptance decision or establish ISO 15189 compliance.
 
+This guide defines observable behaviour and comparison semantics for the bundled
+tool. The packaged JSON schemas define permitted JSON structures and structural
+constraints. Examples illustrate the rules rather than prescribe laboratory
+comparison policies.
+
 ### 1.1 Records, fields, and comparison rules
 
 A dataset contains **records**, such as rows in a CSV file. Each record has
@@ -213,16 +218,23 @@ needed, or automatic key selection is ambiguous.
 
 #### 3.1.2 How automatic mode selects fields and keys
 
-`adviso-compare` first finds field names shared by both datasets. It selects
-the record key as follows:
+`adviso-compare` discovers fields from CSV/TSV headers and from the union of
+member names across all JSON records. It matches names exactly, including case
+and whitespace, without aliases or Unicode normalisation. It selects the record
+key as follows:
 
 1. If both sides contain `record_id`, that field is used. It must contain a
-   unique, non-null string in every record on both sides.
+   unique, non-null string in every record on both sides. An invalid shared
+   `record_id` causes an error; the tool does not fall back to another field.
 2. Otherwise, a candidate must be a shared field containing a unique,
    non-null string in every record on both sides, with at least one value shared
    between the datasets.
 3. Exactly one candidate must remain. No candidate or more than one candidate
    is an `input.invalid_record_key` error.
+
+Candidates use preserved strings without conversion or normalisation. The tool
+does not rank candidates by name, column position, or degree of overlap, and
+does not construct composite keys automatically.
 
 The selected key is compared as a typed string. All other shared fields are
 compared using strict parser-native equality: value types must match as well as
@@ -231,6 +243,14 @@ Fields found on only one side are reported as exclusions, not differences.
 
 The tool creates an effective configuration internally and saves it as
 `comparison-configuration.json` alongside the results and report.
+It uses `schema_version: "1.0"`, metadata ID
+`adviso-compare:automatic-strict-exact`, and metadata revision `"1.0"`.
+The key is required and non-nullable on both sides. Other shared fields are
+optional, allow null with null equal to null, and use `preserved_exact` without
+additional processing. Canonical names and source names are identical. The
+`record_key` contains only the selected key; `in_scope` lists that key first,
+then the other shared fields in Unicode code-point order. The generated
+configuration is validated before assessment begins.
 
 ### 3.2 Read and interpret the results
 
@@ -277,6 +297,10 @@ A problem in an earlier phase does not automatically stop all later work. The
 tool continues wherever the required information remains valid and
 unambiguous. The phase attached to a finding records where the finding arose;
 it is separate from the finding's classification.
+
+Contract checks cover every applicable record on each side, including records
+without a counterpart. Values are compared only for aligned records. All
+assessable differences are collected rather than stopping at the first finding.
 
 #### 3.2.3 Findings, classifications, and codes
 
@@ -341,6 +365,12 @@ The contract, records, and values phases each have a status of `complete` or
 complete. An errored run has no evidence package and therefore no reported
 phase statuses.
 
+Contract findings do not themselves make the contract phase incomplete: the
+check was performed and found a problem. Likewise, missing and extra records
+do not make the records phase incomplete. A blocked value opportunity makes
+the values phase incomplete. Issues confined to unaligned records can therefore
+coexist with a complete run, because those records create no value opportunities.
+
 #### 3.2.6 Exclusions and review priority
 
 An exclusion records a field that was outside the comparison:
@@ -396,7 +426,8 @@ creates its own directory there and preserves existing content. Section 6
 explains directory names, permissions, and publication errors.
 
 The command prints a short completion summary to standard output. An execution
-error is printed to standard error. The exit codes are:
+error is printed to standard error. Comparison attempts emit no progress stream.
+The exit codes are:
 
 | Code | Meaning |
 | ---: | --- |
@@ -419,6 +450,7 @@ case-insensitive filename extension selects the format: `.csv`, `.tsv`, or
 CSV uses commas; TSV uses tabs. Both use a double quote as the quote character.
 A double quote inside a quoted cell is written twice. Quoted cells may contain
 the delimiter or a line break. LF and CRLF line endings are accepted.
+There is no separate backslash escape mechanism.
 
 A header is required. Header names must be non-empty and unique. Every data row
 must contain the same number of cells as the header. All cells initially count
@@ -445,6 +477,13 @@ their natural JSON type. Decimal numbers are read exactly without first being
 converted to binary floating point, and their original spelling is retained as
 evidence. `NaN` and infinities are not valid JSON numbers.
 
+Numbers without a fraction or exponent are integers; numbers with either are
+decimals. Under `preserved_exact`, categories must agree: integer `1` and decimal
+`1.0` differ, while decimals `1.0`, `1.00`, and `1e0` match numerically. Arrays
+compare recursively in order; objects compare recursively by member name and
+value, regardless of member order. An empty member name is accepted inside an
+object-valued field, but not as a top-level record field name.
+
 #### 4.2.3 Empty datasets
 
 `[]` is a valid zero-record JSON dataset. A header with no data rows is a valid
@@ -453,6 +492,20 @@ zero-record CSV or TSV dataset. A zero-byte file is not a valid dataset.
 A custom configuration can compare empty datasets when it supplies the needed
 field and key information. Automatic mode cannot select a key from two empty
 JSON arrays because they expose no fields.
+
+Headers still expose structure without records. A missing required column in a
+header-only CSV/TSV produces one dataset-level `missing_required_field` finding
+for that field and side. An empty JSON array exposes no field structure, so it
+cannot produce that finding. Requirements on individual records have no
+opportunities when there are no records.
+
+With valid configuration and keys, two zero-record datasets have no record
+differences or value opportunities, and their records and values phases are
+complete. If only one dataset has records, each record is reported as missing
+or extra as appropriate; there are still no value opportunities. Header-derived
+contract findings do not change those phase statuses. In automatic mode, shared
+`record_id` headers permit selection even when both tabular datasets are empty;
+other automatic candidates require at least one shared value.
 
 ## 5. Custom comparison configurations
 
@@ -572,6 +625,7 @@ authority for approval and retention.
 
 ### 5.3 Configuration checks and conventions
 
+The configuration is one UTF-8 YAML mapping, using YAML 1.2 scalar resolution.
 The file is checked before either dataset is read. YAML aliases, anchors,
 merge keys, explicit tags, duplicate keys, and unsafe
 object constructors are rejected, as are unknown properties. Quoting textual
@@ -663,6 +717,19 @@ The tool accepts these source values for each declared type:
 | `date` | String containing a valid Gregorian `YYYY-MM-DD` date. |
 | `datetime` | String containing a full RFC 3339 date and time with `Z` or a numeric offset. A local time without an offset is not accepted. |
 
+Integer text accepts leading zeros, which have no numerical significance; use
+strings for identifiers whose leading zeros matter. Decimal text follows
+`[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`, using ASCII digits.
+Parsing retains all supplied numerical precision, without binary floating-point
+conversion or implicit rounding. Booleans are distinct from integers.
+
+Datetime input accepts uppercase or lowercase `T` and `Z`, but no space in place
+of `T`. Numeric offsets range from `+00:00` to `+23:59` and from `-00:01` to
+`-23:59`; `-00:00` is rejected because it denotes an unknown offset. Leap seconds
+are rejected. Equivalent instants compare equally; supplied fractional precision
+is retained unless explicit truncation is configured. Canonical output uses UTC
+with uppercase `T` and `Z` and removes only redundant fractional zeros.
+
 JSON objects cannot be converted to any of the logical types. They may be compared
 as complete, untyped JSON values using `preserved_exact`. More generally, the tool
 uses the declared logical type for parsing. Use `value_mapping` to describe
@@ -684,12 +751,29 @@ ignore order and reject duplicates, and multisets ignore order but retain how
 many times each value occurs. Sets and multisets require `typed_exact` elements.
 Lists allow `typed_exact`, or `numeric_tolerance` for integer or decimal
 elements.
+List elements compare positionally, and list lengths must match. Duplicate set
+elements are detected after element processing and typed parsing: integer
+strings `"01"` and `"1"` are duplicates. Elements cannot be null. An invalid or
+null element prevents construction of the canonical collection and makes the
+aligned field opportunity not assessable.
+A null element is reported as `invalid_field_value`.
 
 ### 5.7 Null policy and typed value descriptions
 
 `null_policy.allowed` and `null_policy.nulls_equal` are required booleans. If
 null is not allowed, `nulls_equal` must be false. JSON null is always recognised
 as null. A missing field is different from a present field containing null.
+
+Empty strings, whitespace-only strings, null, absent fields, and configured
+missing tokens remain distinct unless an explicit field policy transforms them.
+Two permitted nulls match only when `nulls_equal` is true; a valid null/non-null
+pair mismatches. A prohibited null produces a contract finding and blocks the
+affected value comparison.
+
+Two absent optional fields match. One absent optional field and one valid
+present field mismatch, including when the present value is a permitted null.
+Absence on a required side produces a contract finding and makes an aligned
+value opportunity not assessable; two absent required fields do not match.
 
 Within a field's `null_policy`, optional `missing_tokens` may contain a
 non-empty `reference` list, a non-empty `query` list, or both. Each item
@@ -715,6 +799,11 @@ integers, and decimals use a textual `value`; booleans use `true` or `false`. An
 actual JSON `null` does not need to be listed because the tool recognises it
 automatically.
 
+Descriptors match by parser-native category and value after source
+normalisation, rather than by numerical spelling. Decimal descriptors `"1.0"`
+and `"1.00"` describe the same decimal value, distinct from integer `"1"`.
+The same matching rule applies to mapping sources.
+
 ### 5.8 Source normalisation
 
 `source_normalisation` may have `reference`, `query`, or both. Each present
@@ -729,6 +818,7 @@ from that side. Non-strings pass through unchanged.
 
 Operations run in list order. Case folding does not silently perform Unicode
 normalisation; list both operations when both are needed.
+Unicode operations use the Unicode-data version recorded in `runtime.unicode_version`.
 
 ### 5.9 Value mapping
 
@@ -767,11 +857,21 @@ Each side requires `format`:
 - `delimited_text` means a parser-native string split on the required,
   non-empty `delimiter` string.
 
+Delimiters are literal strings, not regular expressions. Splitting proceeds
+left to right through non-overlapping occurrences. Empty text represents an
+empty collection; otherwise leading, trailing, or consecutive delimiters create
+empty-string elements. Whitespace is retained unless explicitly normalised.
+CSV/TSV quoting is resolved before splitting; collection text has no additional
+quoting or escaping, so delimiter text cannot be included inside an element.
+
 Optional `element_normalisation` is a non-empty ordered list of the text
 operations in Section 5.8. Optional `element_mapping` is a non-empty closed
 mapping whose `from` and `to` values must both be non-null. These act on each
 element, not the collection as a whole. Collection fields cannot also use the
 field-level `source_normalisation`, `value_mapping`, or `typed_normalisation`.
+Element processing uses the scalar parsing rules. Whole-field missing-token and
+null policies are not reapplied to individual elements. An unmapped element
+produces a `mapping_failure` and blocks that collection's value comparison.
 
 ### 5.11 Typed normalisation
 
@@ -963,6 +1063,19 @@ unless JSON escaping is needed. Fixed properties follow their schema order;
 dynamic names use Unicode code-point order. Identical effective configurations
 produce identical saved bytes, without run identifiers or timestamps.
 
+For identical input bytes and basenames, configuration selection, software
+version, and runtime identity, results are identical except for `run.id` and
+`run.completed_at`. Automatic configuration generation follows the same rule.
+
+Changing record order or accepted LF/CRLF line endings preserves the comparison
+outcome: run and phase statuses, summary counts, exclusions, and each finding's
+classification, code, phase, side, record and field identity, priority, and value
+evidence. Input byte provenance, source locations, location-dependent messages,
+and report-local finding IDs may change. Software/runtime provenance is also
+outside the comparison outcome. Identical inputs and configuration selection
+produce the same comparison outcome across the supported Python/OS matrix,
+including Unicode-sensitive processing; runtime provenance may differ.
+
 Keep the three files together. The results link to the saved configuration by
 its exact-byte SHA-256 digest, as explained in Section 7.2.2.
 `comparison-report.html` is a self-contained, offline view made solely from the
@@ -970,6 +1083,9 @@ validated results and saved configuration, with verified linkage. It adds fixed
 explanatory text and external review space, but no comparison facts. Rendering
 does not reread the original YAML. The report opens in an ordinary browser,
 works offline, and does not require scripting.
+Required styling is embedded; the report loads no external scripts, fonts,
+images, or other network resources. Its content remains available with scripting
+disabled.
 
 The report separates run completeness, comparison differences, and assessment
 issues. It does not apply acceptance thresholds or give a pass/fail verdict.
@@ -1068,6 +1184,14 @@ are rejected at the defined object levels.
 | `runtime.platform` | General operating-system family and architecture, such as `linux-x86_64`; no host identity. |
 | `runtime.unicode_version` | Unicode database version used by text operations. |
 
+Runtime names are lowercase. Python is recorded as
+`<implementation>-<major>.<minor>.<micro>`, with a prerelease suffix where
+applicable. Platforms use `<operating-system-family>-<architecture>`;
+`amd64` becomes `x86_64` and `arm64` becomes `aarch64`. Platform provenance
+omits distribution and kernel versions and host-specific details. The Unicode
+database version uses `<major>.<minor>.<patch>`. Start time and elapsed duration
+are not recorded.
+
 `inputs.reference` and `inputs.query` each contain:
 
 | Property | Meaning |
@@ -1130,6 +1254,12 @@ Each item in `exclusions` has one of two exact forms:
 
 Exclusions are not findings and do not affect run status.
 
+Configured-field exclusions come first, ordered by canonical field name using
+Unicode code-point order. Undeclared-field exclusions follow, ordered by side
+(`reference`, then `query`) and source field name. Their `record_count` is the
+number of records containing that field, including zero for a field exposed
+only by a header in a zero-record dataset.
+
 #### 7.2.4 Finding properties
 
 Every finding has `id`, `classification`, `code`, `phase`, `message`, and
@@ -1169,9 +1299,17 @@ An absent side has no `source` or `canonical` value. A present side may include:
   their uniquely rendered `value`, and collections also contain `element_type`.
 
 Source numbers retain their original lexical text. Canonical integers use
-ordinary base-10 text. Canonical decimals use one normal scientific rendering.
-Canonical datetimes are UTC. Lists retain order; sets and multisets use
-deterministic order, with multiset duplicates retained.
+ordinary base-10 text without a leading plus or redundant zeros. Canonical
+decimals use `"0"` for all zero values, including negative zero. Non-zero
+decimals use one non-zero digit before the decimal point, no trailing fractional
+zeros, lowercase `e`, and no redundant exponent sign or zeros; exponent zero is
+omitted. For example, `12.30`, `1000`, and `0.0010` become `"1.23e1"`, `"1e3"`,
+and `"1e-3"`. Canonical dates use `YYYY-MM-DD`; datetimes use UTC with redundant
+fractional zeros removed. Booleans remain JSON booleans, and strings retain
+their processed text. Lists retain order; sets and multisets use Unicode
+code-point order of the canonical element strings, with multiset duplicates
+retained. A typed null uses its declared logical type and a JSON null value.
+Untyped `preserved_exact` fields have no typed canonical value.
 
 The schema defines exact finding forms. In summary:
 
@@ -1185,6 +1323,45 @@ The schema defines exact finding forms. In summary:
   problem;
 - value mismatches have identity, locations, field, priority, and evidence for
   both sides.
+
+Independent contract violations on reference and query produce separate
+side-specific findings. A value mismatch is one finding with side `both`.
+Category incompatibility, invalid content within an accepted category, and two
+valid unequal values produce `type_mismatch`, `invalid_field_value`, and
+`value_mismatch`, respectively, rather than overlapping findings for the same
+affected value. Untyped category differences are value mismatches.
+
+Evidence is limited to what explains the finding. Missing-field findings show
+presence states without copying the other side's value. Type findings include
+affected source values, with canonical values only where parsing succeeded.
+Invalid-value and mapping findings include affected source values without a
+failed canonical value. Null-policy findings include the affected source null
+and, for a typed field, canonical null. Value mismatches include source values
+for present sides and canonical values for typed present sides. Missing or
+extra record findings carry no field values. There is no separate or duplicated
+`not_assessable` finding, and comparator parameters and processing declarations
+are obtained from the saved configuration rather than repeated in findings.
+
+Findings use the following total order, independent of locale:
+
+1. Classification: `comparison_difference`, then `assessment_issue`.
+2. Phase: `contract`, `records`, then `values`.
+3. Dataset-level findings before record-specific findings.
+4. Canonical record identity, component by component in Unicode code-point order.
+5. Canonical field name, omitted as a sorting component for record findings.
+6. Code: `missing_record`, `extra_record`, `missing_required_field`,
+   `type_mismatch`, `invalid_field_value`, `null_policy_violation`,
+   `mapping_failure`, then `value_mismatch`.
+7. Side: `reference`, `query`, then `both`.
+8. Source locations: reference before query, with null before present. Tabular
+   locations compare record number, starting line, then field name; JSON
+   locations compare JSON Pointer in Unicode code-point order.
+9. Canonical JSON serialization of remaining structured properties, excluding
+   `id` and `message`.
+
+Candidates identical under this ordering key are coalesced. IDs `F000001`,
+`F000002`, and so on are assigned after sorting and coalescence; they are local
+to the result rather than persistent identifiers between different comparisons.
 
 ### 7.3 Structural and semantic validation
 
@@ -1299,8 +1476,6 @@ bytes and suitable comparison context. The snippet checks the saved JSON
 pair and package membership; it does not regenerate or authenticate the HTML
 report.
 
-The normative details are in [Specification Section 9.1.4](SPECIFICATION.md#914-structural-and-semantic-package-validation).
-
 ## 8. Errors and corrective action
 
 The first error line has the form:
@@ -1330,6 +1505,15 @@ ERROR [category.code]: message
 
 An assessment issue inside an otherwise readable and alignable dataset is a
 finding, not an execution error. Review the evidence package for those issues.
+
+Errors are written to standard error with a non-empty, single-line message;
+additional non-sensitive context may follow. Record-key diagnostics identify
+the affected dataset, key field names, and available source locations, while
+withholding key values. Automatic discovery errors state that both inputs were
+considered and identify candidate field names where available. Error diagnostics
+do not include findings, comparison counts, phase statuses, or tracebacks.
+Unexpected generated-evidence validation failures use `internal.unexpected`
+and publish no package.
 
 ## 9. Security, governance, and limitations
 

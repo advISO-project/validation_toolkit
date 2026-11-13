@@ -28,8 +28,7 @@ code or tooling should follow a concrete need agreed for the affected packages.
 ## Working on a change
 
 1. Read the applicable `AGENTS.md` instructions and the selected package's
-   documentation, including its behaviour specification and schemas where
-   provided.
+   documentation, including its behavioural contract and schemas where provided.
 2. Run the relevant existing tests to establish a baseline.
 3. For an approved behavioural change or defect fix, adapt existing tests where
    possible and add focused regression cases for uncovered behaviour. Confirm

@@ -2,9 +2,10 @@
 
 This guide describes the current implementation for developers maintaining the
 tool. It explains responsibilities and boundaries rather than defining product
-behaviour. The [specification](SPECIFICATION.md) and packaged
-[schemas](../src/adviso_compare/schemas/) remain the normative sources; the
-[user guide](USER_GUIDE.md) explains the comparison concepts and terminology.
+behaviour. The packaged [schemas](../src/adviso_compare/schemas/) define JSON
+structures and structural constraints; the [user guide](USER_GUIDE.md) defines
+observable behaviour and semantic rules, including comparison concepts and
+terminology.
 For setup, commands, and the development workflow, see
 [Contributing](../CONTRIBUTING.md).
 
